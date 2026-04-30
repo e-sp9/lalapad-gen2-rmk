@@ -93,6 +93,15 @@ LaLaPad Gen2 uses `azoteq,iqs9151` in the upstream ZMK shield.
 
 RMK's current main documentation includes a TOML-configurable Azoteq IQS5xx trackpad driver for IQS550 / IQS572 / IQS525 style devices. That is not the same device as IQS9151, so the LaLaPad Gen2 trackpad behavior should be treated as a separate porting task.
 
+The upstream ZMK config pulls IQS9151 support from `ShiniNet/zmk-driver-iqs9151`. That driver reads the IQS9151 coordinate block at `0x1014..0x105b`, does gesture recognition in the firmware driver, and emits `INPUT_BTN_0..7` for click/gesture events. The ZMK input processor then consumes those button events and raises virtual key positions.
+
+RMK-side groundwork now lives in `src/iqs9151.rs`:
+
+- IQS9151 register constants for the product number, coordinate block, flags, and finger coordinates
+- a parser for the coordinate block layout used by the upstream driver
+- mapping from upstream `INPUT_BTN_0..7` semantics to RMK virtual rows `5..6`
+- an edge tracker that converts a button bitmask into press/release events for those virtual positions
+
 Likely next steps:
 
 - add or adapt an RMK input device driver for IQS9151
