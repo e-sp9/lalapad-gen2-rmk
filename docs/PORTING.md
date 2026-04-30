@@ -106,11 +106,12 @@ RMK-side groundwork now lives in `src/iqs9151.rs`:
 - a minimal coordinate-frame recognizer for one-finger tap, two-finger tap, three-finger tap, and three-finger swipe events
 - a generic RMK `InputDevice` wrapper that polls IQS9151 frames and emits virtual-key press/release events
 - optional RDY-pin waiting and axis transform settings for hardware tuning
-- central/peripheral controller adapters that instantiate the right and left IQS9151 devices on `TWISPI0`, `P0_04` SDA, `P0_05` SCL, and `P1_11` RDY
+- central/peripheral controller adapters that instantiate the right and left IQS9151 devices on `TWISPI0`, `P0_04` SDA, and `P0_05` SCL
 
 Likely next steps:
 
-- test the I2C/RDY path on hardware and confirm the IQS9151 product number on both halves
+- test the I2C path on hardware and confirm the IQS9151 product number on both halves
+- re-enable RDY-pin waiting after confirming the actual RDY polarity and timing
 - tune per-side axis inversion/swap settings and gesture thresholds
 - port the remaining upstream gesture behavior, especially deferred tap handling, pinch, hold, relative mouse movement, and scroll events
 

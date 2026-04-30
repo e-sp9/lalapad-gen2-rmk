@@ -40,8 +40,10 @@ cargo make uf2 --release
 
 The generated files are:
 
-- `lalapad-gen2-rmk-central.uf2` for the right half
-- `lalapad-gen2-rmk-peripheral.uf2` for the left half
+- `firmware/normal/lalapad-gen2-rmk-central.uf2` for the right half
+- `firmware/normal/lalapad-gen2-rmk-peripheral.uf2` for the left half
+
+Reset/storage-clear UF2 files, when generated for hardware testing, are kept under `firmware/reset/`.
 
 ## Sources Used For Porting
 

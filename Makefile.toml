@@ -9,6 +9,10 @@ command = "cargo"
 args = ["build", "--release"]
 dependencies = ["install-llvm-tools", "flip-link"]
 
+[tasks.firmware-dirs]
+command = "mkdir"
+args = ["-p", "firmware/normal", "firmware/reset", "firmware/hex"]
+
 [tasks.objcopy-central]
 install_crate = { crate_name = "cargo-binutils", binary = "cargo", test_arg = [
     "objcopy",
@@ -23,9 +27,9 @@ args = [
     "--",
     "-O",
     "ihex",
-    "lalapad-gen2-rmk-central.hex",
+    "firmware/hex/lalapad-gen2-rmk-central.hex",
 ]
-dependencies = ["build"]
+dependencies = ["firmware-dirs", "build"]
 
 [tasks.objcopy-peripheral]
 install_crate = { crate_name = "cargo-binutils", binary = "cargo", test_arg = [
@@ -41,9 +45,9 @@ args = [
     "--",
     "-O",
     "ihex",
-    "lalapad-gen2-rmk-peripheral.hex",
+    "firmware/hex/lalapad-gen2-rmk-peripheral.hex",
 ]
-dependencies = ["build"]
+dependencies = ["firmware-dirs", "build"]
 
 [tasks.uf2-central]
 install_crate = { crate_name = "cargo-hex-to-uf2", binary = "cargo", test_arg = [
@@ -54,9 +58,9 @@ command = "cargo"
 args = [
     "hex-to-uf2",
     "--input-path",
-    "lalapad-gen2-rmk-central.hex",
+    "firmware/hex/lalapad-gen2-rmk-central.hex",
     "--output-path",
-    "lalapad-gen2-rmk-central.uf2",
+    "firmware/normal/lalapad-gen2-rmk-central.uf2",
     "--family",
     "nrf52840",
 ]
@@ -71,9 +75,9 @@ command = "cargo"
 args = [
     "hex-to-uf2",
     "--input-path",
-    "lalapad-gen2-rmk-peripheral.hex",
+    "firmware/hex/lalapad-gen2-rmk-peripheral.hex",
     "--output-path",
-    "lalapad-gen2-rmk-peripheral.uf2",
+    "firmware/normal/lalapad-gen2-rmk-peripheral.uf2",
     "--family",
     "nrf52840",
 ]
