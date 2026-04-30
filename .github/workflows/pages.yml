@@ -1,0 +1,77 @@
+name: Deploy web flasher
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'tools/web-flasher/**'
+      - '.github/workflows/pages.yml'
+  # Release が公開されたら最新ファームウェアを取り込み直してデプロイする。
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # GitHub Release からの直接ダウンロードは release-assets.githubusercontent.com
+      # に CORS ヘッダが無いためブラウザからは失敗する。代わりに最新 Release の
+      # アセットを Pages 成果物へ同梱し、same-origin で fetch できるようにする。
+      - name: Bundle latest firmware into Pages artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          mkdir -p tools/web-flasher/firmware
+          tag="$(gh release list --repo "$GITHUB_REPOSITORY" --limit 1 --json tagName --jq '.[0].tagName' || true)"
+          if [ -n "${tag:-}" ]; then
+            echo "Bundling firmware from release: $tag"
+            gh release download "$tag" \
+              --repo "$GITHUB_REPOSITORY" \
+              --pattern 'lalapad-gen2-rmk-central-dfu.zip' \
+              --pattern 'lalapad-gen2-rmk-peripheral-dfu.zip' \
+              --dir tools/web-flasher/firmware
+            published_at="$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json publishedAt --jq '.publishedAt')"
+            central_size="$(stat -c '%s' tools/web-flasher/firmware/lalapad-gen2-rmk-central-dfu.zip)"
+            peripheral_size="$(stat -c '%s' tools/web-flasher/firmware/lalapad-gen2-rmk-peripheral-dfu.zip)"
+            cat > tools/web-flasher/firmware/version.json <<JSON
+          {
+            "tag": "$tag",
+            "publishedAt": "$published_at",
+            "central":    { "size": $central_size,    "file": "lalapad-gen2-rmk-central-dfu.zip" },
+            "peripheral": { "size": $peripheral_size, "file": "lalapad-gen2-rmk-peripheral-dfu.zip" }
+          }
+          JSON
+          else
+            echo "No releases yet; deploying without bundled firmware."
+            echo '{ "tag": null }' > tools/web-flasher/firmware/version.json
+          fi
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: tools/web-flasher
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

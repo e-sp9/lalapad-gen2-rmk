@@ -1,0 +1,80 @@
+name: Auto-tag firmware release
+
+on:
+  # main にマージ (または直接 push) された変更に
+  # ファーム本体が含まれているとき、直近の v* タグから patch を 1 上げてタグを切る。
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+      - 'memory.x'
+      - 'build.rs'
+      - 'keyboard.toml'
+      - 'vial.json'
+      - 'Makefile.toml'
+  # 任意のバンプ種別で手動実行できるようにする。
+  workflow_dispatch:
+    inputs:
+      bump:
+        type: choice
+        description: Version bump
+        options: [patch, minor, major]
+        default: patch
+
+permissions:
+  contents: write
+
+concurrency:
+  group: auto-tag
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history + tags)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Skip if HEAD is already tagged
+        id: check
+        run: |
+          if tag=$(git describe --exact-match --tags HEAD 2>/dev/null); then
+            echo "already=true" >> "$GITHUB_OUTPUT"
+            echo "HEAD is already tagged as $tag; skipping."
+          fi
+
+      - name: Compute next tag
+        id: ver
+        if: steps.check.outputs.already != 'true'
+        run: |
+          set -eu
+          bump="${{ github.event.inputs.bump || 'patch' }}"
+          latest="$(git tag --list 'v*' --sort=-v:refname | head -n1 || true)"
+          if [ -z "${latest:-}" ]; then
+            next="v0.1.0"
+          else
+            IFS='.' read -ra parts <<< "${latest#v}"
+            major="${parts[0]:-0}"
+            minor="${parts[1]:-0}"
+            patch="${parts[2]:-0}"
+            case "$bump" in
+              major) next="v$((major + 1)).0.0" ;;
+              minor) next="v${major}.$((minor + 1)).0" ;;
+              *)     next="v${major}.${minor}.$((patch + 1))" ;;
+            esac
+          fi
+          echo "next=$next" >> "$GITHUB_OUTPUT"
+          echo "Next tag: $next (previous: ${latest:-none}, bump: $bump)"
+
+      - name: Create and push tag
+        if: steps.check.outputs.already != 'true'
+        run: |
+          git tag "${{ steps.ver.outputs.next }}"
+          git push origin "${{ steps.ver.outputs.next }}"

@@ -45,6 +45,18 @@ The generated files are:
 
 Reset/storage-clear UF2 files, when generated for hardware testing, are kept under `firmware/reset/`.
 
+## Web Flasher
+
+ブラウザから直接ファームウェアを書き込めるツールを `tools/web-flasher/` に同梱しています。
+GitHub Actions で `main` への push とリリース公開のたびに GitHub Pages へデプロイされます。
+
+- 対応ブラウザ: Chrome / Edge / Opera (WebHID + WebSerial が必要)
+- 中身: Adafruit nRF52 UF2 ブートローダ (XIAO BLE 同梱) と直接話す Nordic Legacy DFU クライアント
+- 左右で別ファームのため、右半分 (Central) → 左半分 (Peripheral) の順に書き込みます
+- 右半分は WebHID 経由で自動で DFU モードに入れます。左半分は USB HID を持たないため、リセットボタンを素早く 2 回押して手動で DFU モードに入ってください
+
+リリース時には、`firmware/lalapad-gen2-rmk-{central,peripheral}-dfu.zip` が GitHub Release のアセットに自動添付され、Pages 側に同梱されます。手元の zip を読み込んで書き込むこともできます (UI 内 "ローカルファイルを使う")。
+
 ## Sources Used For Porting
 
 - RMK current documentation and `nrf52840_split` template

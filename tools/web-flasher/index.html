@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LaLaPad Gen2 RMK Firmware Flasher</title>
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>LaLaPad Gen2 RMK Firmware Flasher</h1>
+        <p class="sub">
+          ブラウザから直接 LaLaPad Gen2 (RMK) のファームウェアを書き込みます。Chrome / Edge / Opera の最新版で動作します。
+        </p>
+        <p class="sub">
+          このキーボードは分割キーボードで、左右で別のファームウェアが必要です。右半分 (Central) → 左半分 (Peripheral) の順に書き込んでください。
+        </p>
+      </header>
+
+      <section id="compat" class="card compat">
+        <h2>ブラウザ互換性</h2>
+        <ul>
+          <li>WebHID: <span id="compat-hid">…</span></li>
+          <li>WebSerial: <span id="compat-serial">…</span></li>
+        </ul>
+      </section>
+
+      <section class="card step" data-step="1">
+        <h2><span class="num">1</span> ファームウェアを取得</h2>
+        <p>
+          このページに同梱された最新の DFU パッケージ (左右両方) を読み込みます。
+          新しい Release が公開されると自動で更新されます。
+        </p>
+        <div class="row">
+          <button id="btn-fetch" class="primary">最新ファームを取得</button>
+          <span id="fetch-status" class="status">—</span>
+        </div>
+        <details>
+          <summary>ローカルファイルを使う</summary>
+          <p class="hint">
+            手元の DFU zip を選択すると、それを使って書き込みます。central / peripheral それぞれ別ファイルです。
+          </p>
+          <div class="row">
+            <label class="file-label">
+              <span>Central (右半分)</span>
+              <input id="file-central" type="file" accept=".zip" />
+            </label>
+          </div>
+          <div class="row">
+            <label class="file-label">
+              <span>Peripheral (左半分)</span>
+              <input id="file-peripheral" type="file" accept=".zip" />
+            </label>
+          </div>
+        </details>
+      </section>
+
+      <div class="halves">
+        <section class="card half" data-half="central">
+          <h2><span class="badge">右 / Central</span> 書き込み</h2>
+          <p>
+            右半分を USB ケーブルで PC に接続してください。
+            キーボードとして認識されている状態 (Vial が使える状態) なら、ボタンから DFU モードに入れます。
+          </p>
+
+          <div class="substep">
+            <h3><span class="num">2</span> ブートローダへ入る</h3>
+            <p class="hint">
+              下のボタンを押すとキーボード選択ダイアログが出ます。LaLaPad Gen2 RMK を選ぶと自動で DFU モードに入ります。
+            </p>
+            <div class="row">
+              <button id="btn-reset-central" class="primary" disabled>キーボードを選択して再起動</button>
+              <span id="reset-central-status" class="status">—</span>
+            </div>
+            <p class="hint">
+              うまくいかないときは、右半分のリセットボタンを<strong>素早く 2 回</strong>押して手動で DFU モードに入ってください。
+            </p>
+          </div>
+
+          <div class="substep">
+            <h3><span class="num">3</span> 書き込み</h3>
+            <p class="hint">
+              DFU モードに入るとシリアルポート (通常 <code>Adafruit</code> または <code>Seeed</code> で始まる名前) が現れます。
+            </p>
+            <div class="row">
+              <button id="btn-flash-central" class="primary" disabled>シリアルポートを選んで書き込み</button>
+              <span id="flash-central-status" class="status">—</span>
+            </div>
+            <div class="progress">
+              <div id="progress-central"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="card half" data-half="peripheral">
+          <h2><span class="badge alt">左 / Peripheral</span> 書き込み</h2>
+          <p>
+            左半分は USB HID を持たないため、リセットボタンで手動で DFU モードに入れる必要があります。
+          </p>
+
+          <div class="substep">
+            <h3><span class="num">2</span> ブートローダへ入る</h3>
+            <p class="hint">
+              左半分を USB ケーブルで PC に接続したあと、リセットボタンを<strong>素早く 2 回</strong>押してください。
+              シリアルポートとして列挙されれば DFU モードに入っています。
+            </p>
+          </div>
+
+          <div class="substep">
+            <h3><span class="num">3</span> 書き込み</h3>
+            <p class="hint">
+              下のボタンでシリアルポート (通常 <code>Adafruit</code> または <code>Seeed</code> で始まる名前) を選んでください。
+            </p>
+            <div class="row">
+              <button id="btn-flash-peripheral" class="primary" disabled>シリアルポートを選んで書き込み</button>
+              <span id="flash-peripheral-status" class="status">—</span>
+            </div>
+            <div class="progress">
+              <div id="progress-peripheral"></div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <section class="card logs">
+        <h2>ログ</h2>
+        <pre id="log"></pre>
+      </section>
+
+      <footer>
+        <p>
+          <a href="https://github.com/e-sp9/lalapad-gen2-rmk" target="_blank" rel="noopener">e-sp9/lalapad-gen2-rmk</a>
+          ・
+          <a href="https://github.com/e-sp9/lalapad-gen2-rmk/tree/main/tools/web-flasher" target="_blank" rel="noopener">このツールのソース</a>
+        </p>
+      </footer>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
