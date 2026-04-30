@@ -5,6 +5,13 @@
 //! the RMK-side mapping and frame layout explicit while the runtime I2C driver
 //! is being ported.
 
+use embassy_time::{Duration, Instant, Timer};
+use embedded_hal_async::i2c::I2c;
+use rmk::{
+    event::{Event, KeyboardEvent},
+    input_device::InputDevice,
+};
+
 pub const I2C_ADDRESS: u8 = 0x56;
 pub const PRODUCT_NUMBER: u16 = 0x09bc;
 
@@ -23,6 +30,7 @@ pub const ADDR_TOUCH_STATUS: u16 = 0x105c;
 
 pub const COORD_BLOCK_START: u16 = ADDR_RELATIVE_X;
 pub const COORD_BLOCK_LENGTH: usize = 0x48;
+pub const DEFAULT_POLL_INTERVAL_MS: u64 = 10;
 
 pub const INFO_SHOW_RESET: u16 = 1 << 7;
 pub const INFO_GLOBAL_TP_TOUCH: u16 = 1 << 9;
@@ -32,6 +40,153 @@ pub const TP_MOVEMENT_DETECTED: u16 = 1 << 4;
 pub const TP_FINGER_COUNT_MASK: u16 = 0x000f;
 pub const TP_FINGER1_CONFIDENCE: u16 = 1 << 8;
 pub const TP_FINGER2_CONFIDENCE: u16 = 1 << 9;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Iqs9151Error<E> {
+    Bus(E),
+    UnexpectedProductNumber(u16),
+}
+
+pub struct Iqs9151<I2C> {
+    i2c: I2C,
+    address: u8,
+}
+
+impl<I2C> Iqs9151<I2C>
+where
+    I2C: I2c,
+{
+    pub const fn new(i2c: I2C) -> Self {
+        Self {
+            i2c,
+            address: I2C_ADDRESS,
+        }
+    }
+
+    pub const fn with_address(i2c: I2C, address: u8) -> Self {
+        Self { i2c, address }
+    }
+
+    pub fn release(self) -> I2C {
+        self.i2c
+    }
+
+    pub async fn read_product_number(&mut self) -> Result<u16, Iqs9151Error<I2C::Error>> {
+        self.read_u16(ADDR_PRODUCT_NUMBER).await
+    }
+
+    pub async fn verify_product_number(&mut self) -> Result<(), Iqs9151Error<I2C::Error>> {
+        let product_number = self.read_product_number().await?;
+        if product_number != PRODUCT_NUMBER {
+            return Err(Iqs9151Error::UnexpectedProductNumber(product_number));
+        }
+        Ok(())
+    }
+
+    pub async fn read_coordinate_frame(
+        &mut self,
+    ) -> Result<CoordinateFrame, Iqs9151Error<I2C::Error>> {
+        let mut block = [0u8; COORD_BLOCK_LENGTH];
+        self.read_block(COORD_BLOCK_START, &mut block).await?;
+        Ok(CoordinateFrame::parse(&block))
+    }
+
+    pub async fn read_u16(&mut self, register: u16) -> Result<u16, Iqs9151Error<I2C::Error>> {
+        let mut bytes = [0u8; 2];
+        self.read_block(register, &mut bytes).await?;
+        Ok(u16::from_le_bytes(bytes))
+    }
+
+    pub async fn read_block(
+        &mut self,
+        register: u16,
+        bytes: &mut [u8],
+    ) -> Result<(), Iqs9151Error<I2C::Error>> {
+        let register = register.to_le_bytes();
+        self.i2c
+            .write_read(self.address, &register, bytes)
+            .await
+            .map_err(Iqs9151Error::Bus)
+    }
+}
+
+pub struct Iqs9151InputDevice<I2C> {
+    sensor: Iqs9151<I2C>,
+    side: TrackpadSide,
+    recognizer: TrackpadGestureRecognizer,
+    pending_click: Option<TrackpadClickEvents>,
+    poll_interval: Duration,
+}
+
+impl<I2C> Iqs9151InputDevice<I2C>
+where
+    I2C: I2c,
+{
+    pub fn new(i2c: I2C, side: TrackpadSide) -> Self {
+        Self::from_sensor(Iqs9151::new(i2c), side)
+    }
+
+    pub fn from_sensor(sensor: Iqs9151<I2C>, side: TrackpadSide) -> Self {
+        Self {
+            sensor,
+            side,
+            recognizer: TrackpadGestureRecognizer::with_defaults(),
+            pending_click: None,
+            poll_interval: Duration::from_millis(DEFAULT_POLL_INTERVAL_MS),
+        }
+    }
+
+    pub fn release(self) -> I2C {
+        self.sensor.release()
+    }
+
+    pub fn set_poll_interval(&mut self, poll_interval: Duration) {
+        self.poll_interval = poll_interval;
+    }
+
+    pub fn set_gesture_config(&mut self, config: TrackpadGestureConfig) {
+        self.recognizer = TrackpadGestureRecognizer::new(config);
+    }
+
+    pub async fn verify_product_number(&mut self) -> Result<(), Iqs9151Error<I2C::Error>> {
+        self.sensor.verify_product_number().await
+    }
+}
+
+impl<I2C> InputDevice for Iqs9151InputDevice<I2C>
+where
+    I2C: I2c,
+{
+    async fn read_event(&mut self) -> Event {
+        loop {
+            if let Some(events) = self.pending_click.as_mut() {
+                if let Some(event) = events.next() {
+                    return event.into_rmk_event();
+                }
+                self.pending_click = None;
+            }
+
+            match self.sensor.read_coordinate_frame().await {
+                Ok(frame) => {
+                    if frame.show_reset() {
+                        self.recognizer.reset();
+                    }
+
+                    let now_ms = Instant::now().as_millis() as u32;
+                    if let Some(gesture) = self.recognizer.update(frame, now_ms) {
+                        self.pending_click = Some(gesture.button_events(self.side));
+                        continue;
+                    }
+                }
+                Err(_) => {
+                    self.recognizer.reset();
+                }
+            }
+
+            Timer::after(self.poll_interval).await;
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TrackpadSide {
@@ -65,6 +220,23 @@ impl TrackpadButton {
             _ => None,
         }
     }
+
+    pub const fn input_btn_code(self) -> u8 {
+        match self {
+            Self::LeftClick => 0,
+            Self::RightClick => 1,
+            Self::MiddleClick => 2,
+            Self::GestureLeft => 3,
+            Self::GestureRight => 4,
+            Self::GestureUp => 5,
+            Self::GestureDown => 6,
+            Self::Pinch => 7,
+        }
+    }
+
+    pub const fn bit(self) -> u8 {
+        1 << self.input_btn_code()
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -78,6 +250,16 @@ pub struct TrackpadButtonEvent {
     pub button: TrackpadButton,
     pub position: VirtualKeyPosition,
     pub pressed: bool,
+}
+
+impl TrackpadButtonEvent {
+    pub fn into_rmk_event(self) -> Event {
+        Event::Key(KeyboardEvent::key(
+            self.position.row,
+            self.position.col,
+            self.pressed,
+        ))
+    }
 }
 
 pub const fn trackpad_button_position(
@@ -174,6 +356,239 @@ impl Iterator for TrackpadButtonEvents {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TrackpadGestureEvent {
+    Click(TrackpadButton),
+}
+
+impl TrackpadGestureEvent {
+    pub fn button_events(self, side: TrackpadSide) -> TrackpadClickEvents {
+        match self {
+            Self::Click(button) => TrackpadClickEvents::new(side, button),
+        }
+    }
+}
+
+pub struct TrackpadClickEvents {
+    side: TrackpadSide,
+    button: TrackpadButton,
+    next_pressed: u8,
+}
+
+impl TrackpadClickEvents {
+    pub const fn new(side: TrackpadSide, button: TrackpadButton) -> Self {
+        Self {
+            side,
+            button,
+            next_pressed: 0,
+        }
+    }
+}
+
+impl Iterator for TrackpadClickEvents {
+    type Item = TrackpadButtonEvent;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let pressed = match self.next_pressed {
+            0 => true,
+            1 => false,
+            _ => return None,
+        };
+        self.next_pressed += 1;
+
+        Some(TrackpadButtonEvent {
+            button: self.button,
+            position: trackpad_button_position(self.side, self.button),
+            pressed,
+        })
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TrackpadGestureConfig {
+    pub one_finger_tap_max_ms: u32,
+    pub one_finger_tap_move: u16,
+    pub two_finger_tap_max_ms: u32,
+    pub two_finger_tap_move: u16,
+    pub three_finger_tap_max_ms: u32,
+    pub three_finger_tap_move: u16,
+    pub three_finger_swipe_move: u16,
+}
+
+impl Default for TrackpadGestureConfig {
+    fn default() -> Self {
+        Self {
+            one_finger_tap_max_ms: 250,
+            one_finger_tap_move: 50,
+            two_finger_tap_max_ms: 250,
+            two_finger_tap_move: 50,
+            three_finger_tap_max_ms: 200,
+            three_finger_tap_move: 35,
+            three_finger_swipe_move: 200,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TrackpadGestureRecognizer {
+    config: TrackpadGestureConfig,
+    session: Option<GestureSession>,
+}
+
+impl TrackpadGestureRecognizer {
+    pub const fn new(config: TrackpadGestureConfig) -> Self {
+        Self {
+            config,
+            session: None,
+        }
+    }
+
+    pub fn with_defaults() -> Self {
+        Self::new(TrackpadGestureConfig::default())
+    }
+
+    pub const fn config(&self) -> TrackpadGestureConfig {
+        self.config
+    }
+
+    pub fn reset(&mut self) {
+        self.session = None;
+    }
+
+    pub fn update(&mut self, frame: CoordinateFrame, now_ms: u32) -> Option<TrackpadGestureEvent> {
+        let finger_count = frame.finger_count();
+
+        if finger_count == 0 {
+            return self.finish_session(now_ms);
+        }
+
+        if finger_count > 3 {
+            self.session = Some(GestureSession::start(finger_count, frame, now_ms));
+            return None;
+        }
+
+        match self.session.as_mut() {
+            Some(session) if session.fingers == finger_count => {
+                session.update_position(frame);
+
+                if finger_count == 3 && !session.swipe_sent {
+                    if let Some(button) = session.swipe_button(self.config.three_finger_swipe_move)
+                    {
+                        session.swipe_sent = true;
+                        return Some(TrackpadGestureEvent::Click(button));
+                    }
+                }
+            }
+            _ => {
+                self.session = Some(GestureSession::start(finger_count, frame, now_ms));
+            }
+        }
+
+        None
+    }
+
+    fn finish_session(&mut self, now_ms: u32) -> Option<TrackpadGestureEvent> {
+        let session = self.session.take()?;
+        if session.swipe_sent {
+            return None;
+        }
+
+        let elapsed_ms = now_ms.wrapping_sub(session.start_ms);
+        let button = match session.fingers {
+            1 if elapsed_ms <= self.config.one_finger_tap_max_ms
+                && session.max_movement() <= self.config.one_finger_tap_move =>
+            {
+                TrackpadButton::LeftClick
+            }
+            2 if elapsed_ms <= self.config.two_finger_tap_max_ms
+                && session.max_movement() <= self.config.two_finger_tap_move =>
+            {
+                TrackpadButton::RightClick
+            }
+            3 if elapsed_ms <= self.config.three_finger_tap_max_ms
+                && session.max_movement() <= self.config.three_finger_tap_move =>
+            {
+                TrackpadButton::MiddleClick
+            }
+            _ => return None,
+        };
+
+        Some(TrackpadGestureEvent::Click(button))
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct GestureSession {
+    fingers: u8,
+    start_ms: u32,
+    start_x: i32,
+    start_y: i32,
+    current_x: i32,
+    current_y: i32,
+    max_abs_dx: u16,
+    max_abs_dy: u16,
+    swipe_sent: bool,
+}
+
+impl GestureSession {
+    fn start(fingers: u8, frame: CoordinateFrame, start_ms: u32) -> Self {
+        let (start_x, start_y) = gesture_position(frame, fingers);
+        Self {
+            fingers,
+            start_ms,
+            start_x,
+            start_y,
+            current_x: start_x,
+            current_y: start_y,
+            max_abs_dx: 0,
+            max_abs_dy: 0,
+            swipe_sent: false,
+        }
+    }
+
+    fn update_position(&mut self, frame: CoordinateFrame) {
+        let (x, y) = gesture_position(frame, self.fingers);
+        self.current_x = x;
+        self.current_y = y;
+
+        let dx = abs_delta_u16(x, self.start_x);
+        let dy = abs_delta_u16(y, self.start_y);
+
+        if dx > self.max_abs_dx {
+            self.max_abs_dx = dx;
+        }
+        if dy > self.max_abs_dy {
+            self.max_abs_dy = dy;
+        }
+    }
+
+    const fn max_movement(self) -> u16 {
+        if self.max_abs_dx > self.max_abs_dy {
+            self.max_abs_dx
+        } else {
+            self.max_abs_dy
+        }
+    }
+
+    fn swipe_button(self, threshold: u16) -> Option<TrackpadButton> {
+        if self.max_abs_dx < threshold && self.max_abs_dy < threshold {
+            return None;
+        }
+
+        if self.max_abs_dx >= self.max_abs_dy {
+            if self.start_x <= self.current_x {
+                Some(TrackpadButton::GestureRight)
+            } else {
+                Some(TrackpadButton::GestureLeft)
+            }
+        } else if self.start_y <= self.current_y {
+            Some(TrackpadButton::GestureDown)
+        } else {
+            Some(TrackpadButton::GestureUp)
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct FingerPosition {
     pub x: u16,
@@ -227,6 +642,31 @@ const fn read_u16_le(bytes: &[u8; COORD_BLOCK_LENGTH], offset: usize) -> u16 {
 
 const fn read_i16_le(bytes: &[u8; COORD_BLOCK_LENGTH], offset: usize) -> i16 {
     i16::from_le_bytes([bytes[offset], bytes[offset + 1]])
+}
+
+fn gesture_position(frame: CoordinateFrame, fingers: u8) -> (i32, i32) {
+    if fingers == 2 {
+        (
+            (i32::from(frame.finger1.x) + i32::from(frame.finger2.x)) / 2,
+            (i32::from(frame.finger1.y) + i32::from(frame.finger2.y)) / 2,
+        )
+    } else {
+        (i32::from(frame.finger1.x), i32::from(frame.finger1.y))
+    }
+}
+
+fn abs_delta_u16(left: i32, right: i32) -> u16 {
+    let delta = if left >= right {
+        left - right
+    } else {
+        right - left
+    };
+
+    if delta > i32::from(u16::MAX) {
+        u16::MAX
+    } else {
+        delta as u16
+    }
 }
 
 #[cfg(test)]
@@ -338,5 +778,107 @@ mod tests {
                 },
             ]
         );
+    }
+
+    #[test]
+    fn emits_left_click_for_one_finger_tap() {
+        let mut recognizer = TrackpadGestureRecognizer::with_defaults();
+
+        assert_eq!(
+            recognizer.update(frame_with_fingers(1, 100, 200, 0, 0), 1000),
+            None
+        );
+        assert_eq!(
+            recognizer.update(frame_with_fingers(1, 115, 210, 0, 0), 1050),
+            None
+        );
+        assert_eq!(
+            recognizer.update(frame_with_fingers(0, 0, 0, 0, 0), 1100),
+            Some(TrackpadGestureEvent::Click(TrackpadButton::LeftClick))
+        );
+    }
+
+    #[test]
+    fn emits_right_click_for_two_finger_tap() {
+        let mut recognizer = TrackpadGestureRecognizer::with_defaults();
+
+        assert_eq!(
+            recognizer.update(frame_with_fingers(2, 100, 200, 300, 200), 1000),
+            None
+        );
+        assert_eq!(
+            recognizer.update(frame_with_fingers(2, 110, 205, 310, 205), 1050),
+            None
+        );
+        assert_eq!(
+            recognizer.update(frame_with_fingers(0, 0, 0, 0, 0), 1100),
+            Some(TrackpadGestureEvent::Click(TrackpadButton::RightClick))
+        );
+    }
+
+    #[test]
+    fn emits_three_finger_swipe_once() {
+        let mut recognizer = TrackpadGestureRecognizer::with_defaults();
+
+        assert_eq!(
+            recognizer.update(frame_with_fingers(3, 100, 200, 0, 0), 1000),
+            None
+        );
+        assert_eq!(
+            recognizer.update(frame_with_fingers(3, 350, 210, 0, 0), 1050),
+            Some(TrackpadGestureEvent::Click(TrackpadButton::GestureRight))
+        );
+        assert_eq!(
+            recognizer.update(frame_with_fingers(3, 420, 210, 0, 0), 1100),
+            None
+        );
+        assert_eq!(
+            recognizer.update(frame_with_fingers(0, 0, 0, 0, 0), 1150),
+            None
+        );
+    }
+
+    #[test]
+    fn turns_gesture_click_into_press_and_release_events() {
+        let events: std::vec::Vec<_> = TrackpadGestureEvent::Click(TrackpadButton::GestureUp)
+            .button_events(TrackpadSide::Left)
+            .collect();
+
+        assert_eq!(
+            events,
+            std::vec![
+                TrackpadButtonEvent {
+                    button: TrackpadButton::GestureUp,
+                    position: VirtualKeyPosition { row: 6, col: 2 },
+                    pressed: true,
+                },
+                TrackpadButtonEvent {
+                    button: TrackpadButton::GestureUp,
+                    position: VirtualKeyPosition { row: 6, col: 2 },
+                    pressed: false,
+                },
+            ]
+        );
+    }
+
+    fn frame_with_fingers(
+        fingers: u8,
+        finger1_x: u16,
+        finger1_y: u16,
+        finger2_x: u16,
+        finger2_y: u16,
+    ) -> CoordinateFrame {
+        CoordinateFrame {
+            trackpad_flags: u16::from(fingers),
+            finger1: FingerPosition {
+                x: finger1_x,
+                y: finger1_y,
+            },
+            finger2: FingerPosition {
+                x: finger2_x,
+                y: finger2_y,
+            },
+            ..CoordinateFrame::default()
+        }
     }
 }

@@ -98,13 +98,18 @@ The upstream ZMK config pulls IQS9151 support from `ShiniNet/zmk-driver-iqs9151`
 RMK-side groundwork now lives in `src/iqs9151.rs`:
 
 - IQS9151 register constants for the product number, coordinate block, flags, and finger coordinates
+- a generic `embedded-hal-async` I2C wrapper for reading the product number and coordinate block
 - a parser for the coordinate block layout used by the upstream driver
 - mapping from upstream `INPUT_BTN_0..7` semantics to RMK virtual rows `5..6`
 - an edge tracker that converts a button bitmask into press/release events for those virtual positions
+- conversion from those edge events into RMK `KeyboardEvent` values
+- a minimal coordinate-frame recognizer for one-finger tap, two-finger tap, three-finger tap, and three-finger swipe events
+- a generic RMK `InputDevice` wrapper that polls IQS9151 frames and emits virtual-key press/release events
 
 Likely next steps:
 
-- add or adapt an RMK input device driver for IQS9151
+- instantiate the IQS9151 `InputDevice` from the central/peripheral entrypoints after the I2C and RDY pin ownership is settled
+- port the remaining upstream gesture behavior, especially deferred tap handling, pinch, hold, relative mouse movement, and scroll events
 - wire the XIAO I2C pins `P0_04`/`P0_05` and RDY pin `P1_11`
 - run the pointing processor on the central side
 
@@ -115,4 +120,5 @@ The base keymap is translated from `config/lalapadgen2.keymap`, but some ZMK-spe
 - ZMK conditional layer `1 + 2 => 3` is mapped to RMK tri-layer.
 - ZMK Bluetooth controls are mapped to RMK `User0..User11` keys.
 - ZMK dynamic trackpad sensitivity controls are omitted until the IQS9151 path exists.
-- ZMK trackpad virtual positions `52..67` are represented in the RMK keymap as rows `5..6`, but no IQS9151 runtime input driver emits those positions yet.
+- ZMK trackpad virtual positions `52..67` are represented in the RMK keymap as rows `5..6`, and the helper recognizer plus RMK `InputDevice` wrapper can now produce matching click/gesture events, but no IQS9151 runtime instance is wired into the firmware entrypoint yet.
+- The current recognizer uses raw coordinate deltas for gesture direction. Direction inversion and thresholds may need hardware tuning after the I2C/RDY runtime path is enabled.

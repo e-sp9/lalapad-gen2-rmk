@@ -1327,6 +1327,7 @@ dependencies = [
  "embassy-executor",
  "embassy-nrf",
  "embassy-time",
+ "embedded-hal-async",
  "json",
  "nrf-mpsl",
  "nrf-sdc",
