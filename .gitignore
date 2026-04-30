@@ -1,0 +1,10 @@
+target
+.venv-libclang
+.bindgen-headers
+
+*.bin
+*.elf
+*.hex
+*.uf2
+
+.DS_Store

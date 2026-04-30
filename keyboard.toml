@@ -1,0 +1,96 @@
+[keyboard]
+name = "LaLaPad Gen2 RMK"
+product_name = "LaLaPad Gen2 RMK"
+vendor_id = 0x4c4b
+product_id = 0x4c32
+manufacturer = "ShiniNet"
+serial_number = "vial:f64c2b3c:000001"
+chip = "nrf52840"
+
+[layout]
+rows = 5
+cols = 12
+layers = 4
+keymap = [
+    [
+        ["Q",              "W",     "E",     "R",        "T",     "No",     "No",        "Y",     "U",        "I",         "O",         "P"],
+        ["A",              "S",     "D",     "F",        "G",     "No",     "No",        "H",     "J",        "K",         "L",         "TH(Minus, Equal)"],
+        ["MT(Z, LShift)",  "X",     "C",     "V",        "B",     "No",     "No",        "N",     "M",        "Comma",     "Dot",       "Slash"],
+        ["LCtrl",          "LGui",  "LAlt",  "MO(1)",    "Space", "LShift", "Backspace", "Enter", "MO(2)",    "Language2", "Language1", "Backslash"],
+        ["No",             "No",    "Right", "Down",     "Left",  "Up",     "Up",        "Left",  "Down",     "Right",     "No",        "No"],
+    ],
+    [
+        ["Kc1",                 "Kc2",                "Kc3",  "Kc4",  "Kc5",  "No",    "No",     "NumLock",              "Kp7",       "Kp8",    "Kp9",      "KpPlus"],
+        ["Kc6",                 "Kc7",                "Kc8",  "Kc9",  "Kc0",  "No",    "No",     "_",                    "Kp4",       "Kp5",    "Kp6",      "KpMinus"],
+        ["F6",                  "F7",                 "F8",   "F9",   "F10",  "No",    "No",     "_",                    "Kp1",       "Kp2",    "Kp3",      "KpAsterisk"],
+        ["_",                   "_",                  "_",    "_",    "_",    "_",     "Delete", "_",                    "_",         "Kp0",    "KpDot",    "KpSlash"],
+        ["No",                  "_",                  "_",    "_",    "_",    "_",     "_",      "_",                    "_",         "_",      "_",        "No"],
+    ],
+    [
+        ["SHIFTED(Kc1)",  "SHIFTED(Kc2)", "SHIFTED(Kc3)", "SHIFTED(Kc4)",        "SHIFTED(Kc5)",        "No", "No", "PageUp",   "Home",      "Up",        "End",    "PrintScreen"],
+        ["SHIFTED(Kc6)",  "SHIFTED(Kc7)", "SHIFTED(Kc8)", "SHIFTED(Kc9)",        "SHIFTED(Kc0)",        "No", "No", "PageDown", "Left",      "Down",      "Right",  "ScrollLock"],
+        ["Grave",         "Quote",        "Semicolon",    "LeftBracket",         "RightBracket",        "No", "No", "_",        "MouseBtn4", "_",         "MouseBtn5", "Pause"],
+        ["_",             "_",            "_",            "_",                   "_",                   "_",  "_",  "_",        "_",         "_",         "_",      "_"],
+        ["No",            "_",            "_",            "_",                   "_",                   "_",  "_",  "_",        "_",         "_",         "_",      "No"],
+    ],
+    [
+        ["F1",   "F2",   "F3",   "F4",   "F5",   "No", "No", "User11",     "User0",      "User1",      "User2",      "User3"],
+        ["F6",   "F7",   "F8",   "F9",   "F10",  "No", "No", "Reboot",     "Bootloader",  "User10",     "ClearEeprom", "_"],
+        ["F11",  "F12",  "F13",  "F14",  "F15",  "No", "No", "_",          "_",           "_",          "_",          "_"],
+        ["_",    "_",    "_",    "_",    "_",    "_",  "_",  "_",          "_",           "_",          "_",          "_"],
+        ["No",   "_",    "_",    "_",    "_",    "_",  "_",  "_",          "_",           "_",          "_",          "No"],
+    ],
+]
+
+[storage]
+
+[ble]
+enabled = true
+
+[behavior.tri_layer]
+upper = 1
+lower = 2
+adjust = 3
+
+[behavior.combo]
+timeout = "150ms"
+combos = [
+  { actions = ["Q", "W"], output = "Escape", layer = 0 },
+  { actions = ["A", "S"], output = "Tab", layer = 0 },
+]
+
+[host]
+unlock_keys = [[0, 0], [0, 1]]
+
+[split]
+connection = "ble"
+
+# Right half. This follows the upstream ZMK config where the right side is central.
+[split.central]
+rows = 5
+cols = 6
+row_offset = 0
+col_offset = 6
+
+[split.central.matrix]
+matrix_type = "normal"
+row_pins = ["P1_15", "P1_14", "P1_13", "P1_12", "P1_01"]
+col_pins = ["P0_02", "P0_03", "P0_28", "P0_29", "P0_15", "P0_19"]
+
+# Left half.
+[[split.peripheral]]
+rows = 5
+cols = 6
+row_offset = 0
+col_offset = 0
+
+[split.peripheral.matrix]
+matrix_type = "normal"
+row_pins = ["P1_15", "P1_14", "P1_13", "P1_12", "P1_01"]
+col_pins = ["P0_19", "P0_15", "P0_29", "P0_28", "P0_03", "P0_02"]
+
+[rmk]
+split_peripherals_num = 1
+combo_max_num = 2
+combo_max_length = 2
+ble_profiles_num = 4
