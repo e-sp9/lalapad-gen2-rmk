@@ -105,6 +105,7 @@ RMK-side groundwork now lives in `src/iqs9151.rs`:
 - conversion from those edge events into RMK `KeyboardEvent` values
 - a minimal coordinate-frame recognizer for one-finger tap, two-finger tap, three-finger tap, and three-finger swipe events
 - a generic RMK `InputDevice` wrapper that polls IQS9151 frames and emits virtual-key press/release events
+- optional RDY-pin waiting and axis transform settings for hardware tuning
 
 Likely next steps:
 
@@ -121,4 +122,4 @@ The base keymap is translated from `config/lalapadgen2.keymap`, but some ZMK-spe
 - ZMK Bluetooth controls are mapped to RMK `User0..User11` keys.
 - ZMK dynamic trackpad sensitivity controls are omitted until the IQS9151 path exists.
 - ZMK trackpad virtual positions `52..67` are represented in the RMK keymap as rows `5..6`, and the helper recognizer plus RMK `InputDevice` wrapper can now produce matching click/gesture events, but no IQS9151 runtime instance is wired into the firmware entrypoint yet.
-- The current recognizer uses raw coordinate deltas for gesture direction. Direction inversion and thresholds may need hardware tuning after the I2C/RDY runtime path is enabled.
+- The current recognizer supports axis inversion/swap settings, but the actual left/right hardware orientation and thresholds still need tuning after the I2C/RDY runtime path is enabled.

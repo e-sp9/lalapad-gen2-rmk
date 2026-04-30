@@ -5,8 +5,10 @@
 //! the RMK-side mapping and frame layout explicit while the runtime I2C driver
 //! is being ported.
 
+use core::future::Future;
+
 use embassy_time::{Duration, Instant, Timer};
-use embedded_hal_async::i2c::I2c;
+use embedded_hal_async::{digital::Wait, i2c::I2c};
 use rmk::{
     event::{Event, KeyboardEvent},
     input_device::InputDevice,
@@ -110,15 +112,72 @@ where
     }
 }
 
-pub struct Iqs9151InputDevice<I2C> {
+pub trait Iqs9151Ready {
+    fn wait_ready(&mut self) -> impl Future<Output = ()>;
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct NoReadyPin;
+
+impl Iqs9151Ready for NoReadyPin {
+    async fn wait_ready(&mut self) {}
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ReadyPinPolarity {
+    ActiveLow,
+    ActiveHigh,
+}
+
+pub struct Iqs9151ReadyPin<PIN> {
+    pin: PIN,
+    polarity: ReadyPinPolarity,
+}
+
+impl<PIN> Iqs9151ReadyPin<PIN> {
+    pub const fn new(pin: PIN, polarity: ReadyPinPolarity) -> Self {
+        Self { pin, polarity }
+    }
+
+    pub const fn active_low(pin: PIN) -> Self {
+        Self::new(pin, ReadyPinPolarity::ActiveLow)
+    }
+
+    pub const fn active_high(pin: PIN) -> Self {
+        Self::new(pin, ReadyPinPolarity::ActiveHigh)
+    }
+
+    pub fn release(self) -> PIN {
+        self.pin
+    }
+}
+
+impl<PIN> Iqs9151Ready for Iqs9151ReadyPin<PIN>
+where
+    PIN: Wait,
+{
+    async fn wait_ready(&mut self) {
+        match self.polarity {
+            ReadyPinPolarity::ActiveLow => {
+                let _ = self.pin.wait_for_low().await;
+            }
+            ReadyPinPolarity::ActiveHigh => {
+                let _ = self.pin.wait_for_high().await;
+            }
+        }
+    }
+}
+
+pub struct Iqs9151InputDevice<I2C, RDY = NoReadyPin> {
     sensor: Iqs9151<I2C>,
+    ready: RDY,
     side: TrackpadSide,
     recognizer: TrackpadGestureRecognizer,
     pending_click: Option<TrackpadClickEvents>,
     poll_interval: Duration,
 }
 
-impl<I2C> Iqs9151InputDevice<I2C>
+impl<I2C> Iqs9151InputDevice<I2C, NoReadyPin>
 where
     I2C: I2c,
 {
@@ -129,6 +188,7 @@ where
     pub fn from_sensor(sensor: Iqs9151<I2C>, side: TrackpadSide) -> Self {
         Self {
             sensor,
+            ready: NoReadyPin,
             side,
             recognizer: TrackpadGestureRecognizer::with_defaults(),
             pending_click: None,
@@ -136,8 +196,36 @@ where
         }
     }
 
-    pub fn release(self) -> I2C {
-        self.sensor.release()
+    pub fn with_ready_pin<PIN>(
+        i2c: I2C,
+        ready: Iqs9151ReadyPin<PIN>,
+        side: TrackpadSide,
+    ) -> Iqs9151InputDevice<I2C, Iqs9151ReadyPin<PIN>>
+    where
+        Iqs9151ReadyPin<PIN>: Iqs9151Ready,
+    {
+        Iqs9151InputDevice::from_sensor_and_ready(Iqs9151::new(i2c), ready, side)
+    }
+}
+
+impl<I2C, RDY> Iqs9151InputDevice<I2C, RDY>
+where
+    I2C: I2c,
+    RDY: Iqs9151Ready,
+{
+    pub fn from_sensor_and_ready(sensor: Iqs9151<I2C>, ready: RDY, side: TrackpadSide) -> Self {
+        Self {
+            sensor,
+            ready,
+            side,
+            recognizer: TrackpadGestureRecognizer::with_defaults(),
+            pending_click: None,
+            poll_interval: Duration::from_millis(DEFAULT_POLL_INTERVAL_MS),
+        }
+    }
+
+    pub fn release(self) -> (I2C, RDY) {
+        (self.sensor.release(), self.ready)
     }
 
     pub fn set_poll_interval(&mut self, poll_interval: Duration) {
@@ -153,9 +241,10 @@ where
     }
 }
 
-impl<I2C> InputDevice for Iqs9151InputDevice<I2C>
+impl<I2C, RDY> InputDevice for Iqs9151InputDevice<I2C, RDY>
 where
     I2C: I2c,
+    RDY: Iqs9151Ready,
 {
     async fn read_event(&mut self) -> Event {
         loop {
@@ -165,6 +254,8 @@ where
                 }
                 self.pending_click = None;
             }
+
+            self.ready.wait_ready().await;
 
             match self.sensor.read_coordinate_frame().await {
                 Ok(frame) => {
@@ -413,6 +504,7 @@ pub struct TrackpadGestureConfig {
     pub three_finger_tap_max_ms: u32,
     pub three_finger_tap_move: u16,
     pub three_finger_swipe_move: u16,
+    pub axis_transform: TrackpadAxisTransform,
 }
 
 impl Default for TrackpadGestureConfig {
@@ -425,7 +517,41 @@ impl Default for TrackpadGestureConfig {
             three_finger_tap_max_ms: 200,
             three_finger_tap_move: 35,
             three_finger_swipe_move: 200,
+            axis_transform: TrackpadAxisTransform::default(),
         }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct TrackpadAxisTransform {
+    pub invert_x: bool,
+    pub invert_y: bool,
+    pub swap_xy: bool,
+}
+
+impl TrackpadAxisTransform {
+    pub const fn new(invert_x: bool, invert_y: bool, swap_xy: bool) -> Self {
+        Self {
+            invert_x,
+            invert_y,
+            swap_xy,
+        }
+    }
+
+    fn apply(self, position: (i32, i32)) -> (i32, i32) {
+        let (mut x, mut y) = position;
+
+        if self.swap_xy {
+            core::mem::swap(&mut x, &mut y);
+        }
+        if self.invert_x {
+            x = -x;
+        }
+        if self.invert_y {
+            y = -y;
+        }
+
+        (x, y)
     }
 }
 
@@ -463,13 +589,18 @@ impl TrackpadGestureRecognizer {
         }
 
         if finger_count > 3 {
-            self.session = Some(GestureSession::start(finger_count, frame, now_ms));
+            self.session = Some(GestureSession::start(
+                finger_count,
+                frame,
+                now_ms,
+                self.config.axis_transform,
+            ));
             return None;
         }
 
         match self.session.as_mut() {
             Some(session) if session.fingers == finger_count => {
-                session.update_position(frame);
+                session.update_position(frame, self.config.axis_transform);
 
                 if finger_count == 3 && !session.swipe_sent {
                     if let Some(button) = session.swipe_button(self.config.three_finger_swipe_move)
@@ -480,7 +611,12 @@ impl TrackpadGestureRecognizer {
                 }
             }
             _ => {
-                self.session = Some(GestureSession::start(finger_count, frame, now_ms));
+                self.session = Some(GestureSession::start(
+                    finger_count,
+                    frame,
+                    now_ms,
+                    self.config.axis_transform,
+                ));
             }
         }
 
@@ -531,8 +667,13 @@ struct GestureSession {
 }
 
 impl GestureSession {
-    fn start(fingers: u8, frame: CoordinateFrame, start_ms: u32) -> Self {
-        let (start_x, start_y) = gesture_position(frame, fingers);
+    fn start(
+        fingers: u8,
+        frame: CoordinateFrame,
+        start_ms: u32,
+        axis_transform: TrackpadAxisTransform,
+    ) -> Self {
+        let (start_x, start_y) = axis_transform.apply(gesture_position(frame, fingers));
         Self {
             fingers,
             start_ms,
@@ -546,8 +687,8 @@ impl GestureSession {
         }
     }
 
-    fn update_position(&mut self, frame: CoordinateFrame) {
-        let (x, y) = gesture_position(frame, self.fingers);
+    fn update_position(&mut self, frame: CoordinateFrame, axis_transform: TrackpadAxisTransform) {
+        let (x, y) = axis_transform.apply(gesture_position(frame, self.fingers));
         self.current_x = x;
         self.current_y = y;
 
