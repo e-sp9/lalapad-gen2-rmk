@@ -10,6 +10,8 @@ use core::future::Future;
 use embassy_time::{Duration, Instant, Timer};
 use embedded_hal_async::{digital::Wait, i2c::I2c};
 use rmk::{
+    channel::KEY_EVENT_CHANNEL,
+    controller::Controller,
     event::{Event, KeyboardEvent},
     input_device::InputDevice,
 };
@@ -276,6 +278,37 @@ where
 
             Timer::after(self.poll_interval).await;
         }
+    }
+}
+
+pub struct Iqs9151KeyboardController<DEVICE> {
+    device: DEVICE,
+}
+
+impl<DEVICE> Iqs9151KeyboardController<DEVICE> {
+    pub const fn new(device: DEVICE) -> Self {
+        Self { device }
+    }
+
+    pub fn release(self) -> DEVICE {
+        self.device
+    }
+}
+
+impl<DEVICE> Controller for Iqs9151KeyboardController<DEVICE>
+where
+    DEVICE: InputDevice,
+{
+    type Event = Event;
+
+    async fn process_event(&mut self, event: Self::Event) {
+        if let Event::Key(key_event) = event {
+            KEY_EVENT_CHANNEL.send(key_event).await;
+        }
+    }
+
+    async fn next_message(&mut self) -> Self::Event {
+        self.device.read_event().await
     }
 }
 

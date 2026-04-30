@@ -106,13 +106,13 @@ RMK-side groundwork now lives in `src/iqs9151.rs`:
 - a minimal coordinate-frame recognizer for one-finger tap, two-finger tap, three-finger tap, and three-finger swipe events
 - a generic RMK `InputDevice` wrapper that polls IQS9151 frames and emits virtual-key press/release events
 - optional RDY-pin waiting and axis transform settings for hardware tuning
+- central/peripheral controller adapters that instantiate the right and left IQS9151 devices on `TWISPI0`, `P0_04` SDA, `P0_05` SCL, and `P1_11` RDY
 
 Likely next steps:
 
-- instantiate the IQS9151 `InputDevice` from the central/peripheral entrypoints after the I2C and RDY pin ownership is settled
+- test the I2C/RDY path on hardware and confirm the IQS9151 product number on both halves
+- tune per-side axis inversion/swap settings and gesture thresholds
 - port the remaining upstream gesture behavior, especially deferred tap handling, pinch, hold, relative mouse movement, and scroll events
-- wire the XIAO I2C pins `P0_04`/`P0_05` and RDY pin `P1_11`
-- run the pointing processor on the central side
 
 ## Behavior Differences
 
@@ -121,5 +121,5 @@ The base keymap is translated from `config/lalapadgen2.keymap`, but some ZMK-spe
 - ZMK conditional layer `1 + 2 => 3` is mapped to RMK tri-layer.
 - ZMK Bluetooth controls are mapped to RMK `User0..User11` keys.
 - ZMK dynamic trackpad sensitivity controls are omitted until the IQS9151 path exists.
-- ZMK trackpad virtual positions `52..67` are represented in the RMK keymap as rows `5..6`, and the helper recognizer plus RMK `InputDevice` wrapper can now produce matching click/gesture events, but no IQS9151 runtime instance is wired into the firmware entrypoint yet.
+- ZMK trackpad virtual positions `52..67` are represented in the RMK keymap as rows `5..6`, and IQS9151 runtime instances are wired into the central and peripheral firmware entrypoints.
 - The current recognizer supports axis inversion/swap settings, but the actual left/right hardware orientation and thresholds still need tuning after the I2C/RDY runtime path is enabled.
