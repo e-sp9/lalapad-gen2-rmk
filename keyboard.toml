@@ -8,7 +8,8 @@ serial_number = "vial:f64c2b3c:000001"
 chip = "nrf52840"
 
 [layout]
-rows = 5
+# Rows 5..6 are non-scanned virtual positions for IQS9151 trackpad events.
+rows = 7
 cols = 12
 layers = 4
 keymap = [
@@ -18,6 +19,8 @@ keymap = [
         ["MT(Z, LShift)",  "X",     "C",     "V",        "B",     "No",     "No",        "N",     "M",        "Comma",     "Dot",       "Slash"],
         ["LCtrl",          "LGui",  "LAlt",  "MO(1)",    "Space", "LShift", "Backspace", "Enter", "MO(2)",    "Language2", "Language1", "Backslash"],
         ["No",             "No",    "Right", "Down",     "Left",  "Up",     "Up",        "Left",  "Down",     "Right",     "No",        "No"],
+        ["MouseBtn1",      "MouseBtn2", "MouseBtn3", "No", "No", "No", "No", "No", "No", "MouseBtn1", "MouseBtn2", "MouseBtn3"],
+        ["MouseBtn4",      "MouseBtn5", "WM(Tab, LGui)", "WM(D, LGui)", "LCtrl", "No", "No", "MouseBtn4", "MouseBtn5", "WM(Tab, LGui)", "WM(D, LGui)", "LCtrl"],
     ],
     [
         ["Kc1",                 "Kc2",                "Kc3",  "Kc4",  "Kc5",  "No",    "No",     "NumLock",              "Kp7",       "Kp8",    "Kp9",      "KpPlus"],
@@ -25,6 +28,8 @@ keymap = [
         ["F6",                  "F7",                 "F8",   "F9",   "F10",  "No",    "No",     "_",                    "Kp1",       "Kp2",    "Kp3",      "KpAsterisk"],
         ["_",                   "_",                  "_",    "_",    "_",    "_",     "Delete", "_",                    "_",         "Kp0",    "KpDot",    "KpSlash"],
         ["No",                  "_",                  "_",    "_",    "_",    "_",     "_",      "_",                    "_",         "_",      "_",        "No"],
+        ["_",                   "_",                  "_",    "No",   "No",   "No",    "No",     "No",                   "No",        "_",      "_",        "_"],
+        ["WM(Left, LCtrl|LGui)", "WM(Right, LCtrl|LGui)", "_", "_",    "_",    "No",    "No",     "WM(Left, LCtrl|LGui)", "WM(Right, LCtrl|LGui)", "_", "_", "_"],
     ],
     [
         ["SHIFTED(Kc1)",  "SHIFTED(Kc2)", "SHIFTED(Kc3)", "SHIFTED(Kc4)",        "SHIFTED(Kc5)",        "No", "No", "PageUp",   "Home",      "Up",        "End",    "PrintScreen"],
@@ -32,6 +37,8 @@ keymap = [
         ["Grave",         "Quote",        "Semicolon",    "LeftBracket",         "RightBracket",        "No", "No", "_",        "MouseBtn4", "_",         "MouseBtn5", "Pause"],
         ["_",             "_",            "_",            "_",                   "_",                   "_",  "_",  "_",        "_",         "_",         "_",      "_"],
         ["No",            "_",            "_",            "_",                   "_",                   "_",  "_",  "_",        "_",         "_",         "_",      "No"],
+        ["_",             "_",            "_",            "No",                  "No",                  "No", "No", "No",       "No",        "_",         "_",      "_"],
+        ["_",             "_",            "_",            "_",                   "_",                   "No", "No", "_",        "_",         "_",         "_",      "_"],
     ],
     [
         ["F1",   "F2",   "F3",   "F4",   "F5",   "No", "No", "User11",     "User0",      "User1",      "User2",      "User3"],
@@ -39,6 +46,8 @@ keymap = [
         ["F11",  "F12",  "F13",  "F14",  "F15",  "No", "No", "_",          "_",           "_",          "_",          "_"],
         ["_",    "_",    "_",    "_",    "_",    "_",  "_",  "_",          "_",           "_",          "_",          "_"],
         ["No",   "_",    "_",    "_",    "_",    "_",  "_",  "_",          "_",           "_",          "_",          "No"],
+        ["_",    "_",    "_",    "No",   "No",   "No", "No", "No",         "No",          "_",          "_",          "_"],
+        ["_",    "_",    "_",    "_",    "_",    "No", "No", "_",          "_",           "_",          "_",          "_"],
     ],
 ]
 

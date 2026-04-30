@@ -8,11 +8,13 @@ Current scope:
 - BLE split keyboard
 - Right half as central, left half as peripheral
 - 42 keyboard keys plus the two 5-way switches
-- Vial definition for the physical key matrix
+- Vial definition for the physical key matrix and trackpad virtual positions
+- Keymap positions for the upstream trackpad button/gesture bindings
 
 Not yet ported:
 
-- LaLaPad Gen2's Azoteq IQS9151 trackpads and gesture-to-key behavior
+- LaLaPad Gen2's Azoteq IQS9151 runtime input driver
+- Dynamic trackpad scaling controls from the upstream ZMK firmware
 - LED/battery widgets from the upstream ZMK firmware
 
 ## Build

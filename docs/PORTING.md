@@ -57,14 +57,35 @@ Left half / peripheral columns:
 col_pins = ["P0_19", "P0_15", "P0_29", "P0_28", "P0_03", "P0_02"]
 ```
 
-## Matrix Scope
+## Matrix And Virtual Position Scope
 
-The RMK matrix currently covers rows `0..4` from the ZMK transform:
+The physical RMK split matrix currently scans rows `0..4` from the ZMK transform:
 
 - rows `0..3`: main 42-key layout
 - row `4`: left and right 5-way switches
 
-The upstream ZMK transform also defines rows `5..6` for trackpad-generated virtual button positions. Those are not included in the RMK matrix yet because they are produced by the IQS9151 input processor path, not by GPIO scanning.
+The RMK keymap and Vial definition also include rows `5..6` as non-scanned virtual positions for the upstream trackpad button/gesture events:
+
+| ZMK position | RMK row/col | Meaning |
+| --- | --- | --- |
+| 52 | `5,0` | left trackpad left click |
+| 53 | `5,1` | left trackpad right click |
+| 54 | `5,2` | left trackpad middle click |
+| 55 | `5,9` | right trackpad left click |
+| 56 | `5,10` | right trackpad right click |
+| 57 | `5,11` | right trackpad middle click |
+| 58 | `6,0` | left trackpad left gesture |
+| 59 | `6,1` | left trackpad right gesture |
+| 60 | `6,2` | left trackpad up gesture |
+| 61 | `6,3` | left trackpad down gesture |
+| 62 | `6,4` | left trackpad pinch gesture |
+| 63 | `6,7` | right trackpad left gesture |
+| 64 | `6,8` | right trackpad right gesture |
+| 65 | `6,9` | right trackpad up gesture |
+| 66 | `6,10` | right trackpad down gesture |
+| 67 | `6,11` | right trackpad pinch gesture |
+
+These positions are not GPIO rows. The future IQS9151 path should emit `KeyboardEvent::key(row, col, pressed)` for the mapped virtual positions after decoding Azoteq button events.
 
 ## Trackpad Gap
 
@@ -76,7 +97,6 @@ Likely next steps:
 
 - add or adapt an RMK input device driver for IQS9151
 - wire the XIAO I2C pins `P0_04`/`P0_05` and RDY pin `P1_11`
-- reproduce the ZMK gesture/button mapping for virtual positions `52..67`
 - run the pointing processor on the central side
 
 ## Behavior Differences
@@ -86,3 +106,4 @@ The base keymap is translated from `config/lalapadgen2.keymap`, but some ZMK-spe
 - ZMK conditional layer `1 + 2 => 3` is mapped to RMK tri-layer.
 - ZMK Bluetooth controls are mapped to RMK `User0..User11` keys.
 - ZMK dynamic trackpad sensitivity controls are omitted until the IQS9151 path exists.
+- ZMK trackpad virtual positions `52..67` are represented in the RMK keymap as rows `5..6`, but no IQS9151 runtime input driver emits those positions yet.
