@@ -10,11 +10,13 @@ use core::future::Future;
 use embassy_time::{Duration, Instant, Timer};
 use embedded_hal_async::{digital::Wait, i2c::I2c};
 use rmk::{
-    channel::KEY_EVENT_CHANNEL,
+    channel::{EVENT_CHANNEL, KEY_EVENT_CHANNEL, KEYBOARD_REPORT_CHANNEL},
     controller::Controller,
     event::{Event, KeyboardEvent},
+    hid::Report,
     input_device::InputDevice,
 };
+use usbd_hid::descriptor::MouseReport;
 
 pub const I2C_ADDRESS: u8 = 0x56;
 pub const PRODUCT_NUMBER: u16 = 0x09bc;
@@ -44,6 +46,9 @@ pub const TP_MOVEMENT_DETECTED: u16 = 1 << 4;
 pub const TP_FINGER_COUNT_MASK: u16 = 0x000f;
 pub const TP_FINGER1_CONFIDENCE: u16 = 1 << 8;
 pub const TP_FINGER2_CONFIDENCE: u16 = 1 << 9;
+
+const CUSTOM_EVENT_PREFIX: [u8; 4] = *b"IQSP";
+const CUSTOM_EVENT_POINTER_MOTION: u8 = 1;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Iqs9151Error<E> {
@@ -175,6 +180,7 @@ pub struct Iqs9151InputDevice<I2C, RDY = NoReadyPin> {
     ready: RDY,
     side: TrackpadSide,
     recognizer: TrackpadGestureRecognizer,
+    motion_config: TrackpadMotionConfig,
     pending_click: Option<TrackpadClickEvents>,
     poll_interval: Duration,
 }
@@ -193,6 +199,7 @@ where
             ready: NoReadyPin,
             side,
             recognizer: TrackpadGestureRecognizer::with_defaults(),
+            motion_config: TrackpadMotionConfig::default(),
             pending_click: None,
             poll_interval: Duration::from_millis(DEFAULT_POLL_INTERVAL_MS),
         }
@@ -221,6 +228,7 @@ where
             ready,
             side,
             recognizer: TrackpadGestureRecognizer::with_defaults(),
+            motion_config: TrackpadMotionConfig::default(),
             pending_click: None,
             poll_interval: Duration::from_millis(DEFAULT_POLL_INTERVAL_MS),
         }
@@ -238,8 +246,19 @@ where
         self.recognizer = TrackpadGestureRecognizer::new(config);
     }
 
+    pub fn set_motion_config(&mut self, config: TrackpadMotionConfig) {
+        self.motion_config = config;
+    }
+
     pub async fn verify_product_number(&mut self) -> Result<(), Iqs9151Error<I2C::Error>> {
         self.sensor.verify_product_number().await
+    }
+
+    fn motion_event(&self, frame: CoordinateFrame) -> Option<Event> {
+        let motion =
+            self.motion_config
+                .motion_event(self.side, frame.relative_x, frame.relative_y)?;
+        Some(motion.into_rmk_event())
     }
 }
 
@@ -270,6 +289,10 @@ where
                         self.pending_click = Some(gesture.button_events(self.side));
                         continue;
                     }
+
+                    if let Some(event) = self.motion_event(frame) {
+                        return event;
+                    }
                 }
                 Err(_) => {
                     self.recognizer.reset();
@@ -283,11 +306,22 @@ where
 
 pub struct Iqs9151KeyboardController<DEVICE> {
     device: DEVICE,
+    target: Iqs9151ControllerTarget,
 }
 
 impl<DEVICE> Iqs9151KeyboardController<DEVICE> {
-    pub const fn new(device: DEVICE) -> Self {
-        Self { device }
+    pub const fn new_central(device: DEVICE) -> Self {
+        Self {
+            device,
+            target: Iqs9151ControllerTarget::HidReport,
+        }
+    }
+
+    pub const fn new_peripheral(device: DEVICE) -> Self {
+        Self {
+            device,
+            target: Iqs9151ControllerTarget::SplitEvent,
+        }
     }
 
     pub fn release(self) -> DEVICE {
@@ -302,14 +336,68 @@ where
     type Event = Event;
 
     async fn process_event(&mut self, event: Self::Event) {
-        if let Event::Key(key_event) = event {
-            KEY_EVENT_CHANNEL.send(key_event).await;
+        match event {
+            Event::Key(key_event) => KEY_EVENT_CHANNEL.send(key_event).await,
+            Event::Custom(payload) => match self.target {
+                Iqs9151ControllerTarget::HidReport => {
+                    if let Some(motion) = TrackpadMotionEvent::decode(payload) {
+                        send_mouse_motion_report(motion).await;
+                    }
+                }
+                Iqs9151ControllerTarget::SplitEvent => {
+                    EVENT_CHANNEL.send(Event::Custom(payload)).await;
+                }
+            },
+            _ => {}
         }
     }
 
     async fn next_message(&mut self) -> Self::Event {
         self.device.read_event().await
     }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Iqs9151ControllerTarget {
+    HidReport,
+    SplitEvent,
+}
+
+pub struct Iqs9151SplitEventController;
+
+impl Iqs9151SplitEventController {
+    pub const fn new() -> Self {
+        Self
+    }
+}
+
+impl Controller for Iqs9151SplitEventController {
+    type Event = Event;
+
+    async fn process_event(&mut self, event: Self::Event) {
+        if let Event::Custom(payload) = event
+            && let Some(motion) = TrackpadMotionEvent::decode(payload)
+        {
+            send_mouse_motion_report(motion).await;
+        }
+    }
+
+    async fn next_message(&mut self) -> Self::Event {
+        EVENT_CHANNEL.receive().await
+    }
+}
+
+async fn send_mouse_motion_report(motion: TrackpadMotionEvent) {
+    let report = MouseReport {
+        buttons: 0,
+        x: clamp_i16_to_i8(motion.x),
+        y: clamp_i16_to_i8(motion.y),
+        wheel: 0,
+        pan: 0,
+    };
+    KEYBOARD_REPORT_CHANNEL
+        .send(Report::MouseReport(report))
+        .await;
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -477,6 +565,96 @@ impl Iterator for TrackpadButtonEvents {
         }
 
         None
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TrackpadMotionConfig {
+    pub axis_transform: TrackpadAxisTransform,
+    pub divisor: u16,
+}
+
+impl Default for TrackpadMotionConfig {
+    fn default() -> Self {
+        Self {
+            axis_transform: TrackpadAxisTransform::default(),
+            divisor: 1,
+        }
+    }
+}
+
+impl TrackpadMotionConfig {
+    pub const fn new(axis_transform: TrackpadAxisTransform, divisor: u16) -> Self {
+        Self {
+            axis_transform,
+            divisor,
+        }
+    }
+
+    pub fn motion_event(
+        self,
+        side: TrackpadSide,
+        relative_x: i16,
+        relative_y: i16,
+    ) -> Option<TrackpadMotionEvent> {
+        if relative_x == 0 && relative_y == 0 {
+            return None;
+        }
+
+        let (x, y) = self
+            .axis_transform
+            .apply((i32::from(relative_x), i32::from(relative_y)));
+        let divisor = i32::from(if self.divisor == 0 { 1 } else { self.divisor });
+        let x = clamp_i32_to_i16(x / divisor);
+        let y = clamp_i32_to_i16(y / divisor);
+
+        if x == 0 && y == 0 {
+            None
+        } else {
+            Some(TrackpadMotionEvent { side, x, y })
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TrackpadMotionEvent {
+    pub side: TrackpadSide,
+    pub x: i16,
+    pub y: i16,
+}
+
+impl TrackpadMotionEvent {
+    pub fn into_rmk_event(self) -> Event {
+        Event::Custom(self.encode())
+    }
+
+    pub fn encode(self) -> [u8; 16] {
+        let mut payload = [0u8; 16];
+        payload[0..4].copy_from_slice(&CUSTOM_EVENT_PREFIX);
+        payload[4] = CUSTOM_EVENT_POINTER_MOTION;
+        payload[5] = match self.side {
+            TrackpadSide::Left => 0,
+            TrackpadSide::Right => 1,
+        };
+        payload[6..8].copy_from_slice(&self.x.to_le_bytes());
+        payload[8..10].copy_from_slice(&self.y.to_le_bytes());
+        payload
+    }
+
+    pub fn decode(payload: [u8; 16]) -> Option<Self> {
+        if payload[0..4] != CUSTOM_EVENT_PREFIX || payload[4] != CUSTOM_EVENT_POINTER_MOTION {
+            return None;
+        }
+
+        let side = match payload[5] {
+            0 => TrackpadSide::Left,
+            1 => TrackpadSide::Right,
+            _ => return None,
+        };
+        let x = i16::from_le_bytes([payload[6], payload[7]]);
+        let y = i16::from_le_bytes([payload[8], payload[9]]);
+
+        Some(Self { side, x, y })
     }
 }
 
@@ -843,6 +1021,14 @@ fn abs_delta_u16(left: i32, right: i32) -> u16 {
     }
 }
 
+fn clamp_i32_to_i16(value: i32) -> i16 {
+    value.clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as i16
+}
+
+fn clamp_i16_to_i8(value: i16) -> i8 {
+    value.clamp(i16::from(i8::MIN), i16::from(i8::MAX)) as i8
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1032,6 +1218,32 @@ mod tests {
                     pressed: false,
                 },
             ]
+        );
+    }
+
+    #[test]
+    fn encodes_pointer_motion_as_custom_event() {
+        let motion = TrackpadMotionEvent {
+            side: TrackpadSide::Left,
+            x: -12,
+            y: 34,
+        };
+
+        assert_eq!(TrackpadMotionEvent::decode(motion.encode()), Some(motion));
+        assert_eq!(TrackpadMotionEvent::decode([0; 16]), None);
+    }
+
+    #[test]
+    fn applies_motion_transform_and_divisor() {
+        let config = TrackpadMotionConfig::new(TrackpadAxisTransform::new(true, false, true), 2);
+
+        assert_eq!(
+            config.motion_event(TrackpadSide::Right, 20, -8),
+            Some(TrackpadMotionEvent {
+                side: TrackpadSide::Right,
+                x: 4,
+                y: 10,
+            })
         );
     }
 

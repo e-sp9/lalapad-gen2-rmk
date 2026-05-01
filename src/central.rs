@@ -5,8 +5,15 @@ use rmk::macros::rmk_central;
 
 #[rmk_central]
 mod keyboard_central {
-    use lalapad_gen2_rmk::iqs9151::{Iqs9151InputDevice, Iqs9151KeyboardController, TrackpadSide};
+    use lalapad_gen2_rmk::iqs9151::{
+        Iqs9151InputDevice, Iqs9151KeyboardController, Iqs9151SplitEventController, TrackpadSide,
+    };
     use static_cell::StaticCell;
+
+    #[controller(event)]
+    fn split_trackpad_events() {
+        Iqs9151SplitEventController::new()
+    }
 
     #[controller(event)]
     fn right_trackpad() {
@@ -29,6 +36,6 @@ mod keyboard_central {
         );
         let device = Iqs9151InputDevice::new(i2c, TrackpadSide::Right);
 
-        Iqs9151KeyboardController::new(device)
+        Iqs9151KeyboardController::new_central(device)
     }
 }

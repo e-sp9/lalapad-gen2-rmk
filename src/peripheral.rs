@@ -29,6 +29,6 @@ mod keyboard_peripheral {
         );
         let device = Iqs9151InputDevice::new(i2c, TrackpadSide::Left);
 
-        Iqs9151KeyboardController::new(device)
+        Iqs9151KeyboardController::new_peripheral(device)
     }
 }

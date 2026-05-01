@@ -10,11 +10,12 @@ Current scope:
 - 42 keyboard keys plus the two 5-way switches
 - Vial definition for the physical key matrix and trackpad virtual positions
 - Keymap positions for the upstream trackpad button/gesture bindings
+- Experimental IQS9151 tap/gesture clicks and relative cursor movement
 
 Not yet ported:
 
-- LaLaPad Gen2's Azoteq IQS9151 runtime input driver
 - Dynamic trackpad scaling controls from the upstream ZMK firmware
+- Full LaLaPad Gen2 IQS9151 gesture behavior beyond the current tap/swipe subset
 - LED/battery widgets from the upstream ZMK firmware
 
 ## Build
@@ -52,7 +53,7 @@ GitHub Actions で `main` への push とリリース公開のたびに GitHub P
 
 - 対応ブラウザ: Chrome / Edge / Opera (WebHID + WebSerial が必要)
 - 中身: Adafruit nRF52 UF2 ブートローダ (XIAO BLE 同梱) と直接話す Nordic Legacy DFU クライアント
-- 左右で別ファームのため、右半分 (Central) → 左半分 (Peripheral) の順に書き込みます
+- 左右で別ファームのため、左半分 (Peripheral) と右半分 (Central) の両方に書き込みます (UI も左→右の順に並べてあります)
 - 右半分は WebHID 経由で自動で DFU モードに入れます。左半分は USB HID を持たないため、リセットボタンを素早く 2 回押して手動で DFU モードに入ってください
 
 リリース時には、`firmware/lalapad-gen2-rmk-{central,peripheral}-dfu.zip` が GitHub Release のアセットに自動添付され、Pages 側に同梱されます。手元の zip を読み込んで書き込むこともできます (UI 内 "ローカルファイルを使う")。

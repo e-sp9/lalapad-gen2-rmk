@@ -104,6 +104,8 @@ RMK-side groundwork now lives in `src/iqs9151.rs`:
 - an edge tracker that converts a button bitmask into press/release events for those virtual positions
 - conversion from those edge events into RMK `KeyboardEvent` values
 - a minimal coordinate-frame recognizer for one-finger tap, two-finger tap, three-finger tap, and three-finger swipe events
+- relative cursor movement from the IQS9151 `relative_x` / `relative_y` fields through HID mouse reports
+- a split transport shim for left-half cursor movement, using RMK custom events from peripheral to central
 - a generic RMK `InputDevice` wrapper that polls IQS9151 frames and emits virtual-key press/release events
 - optional RDY-pin waiting and axis transform settings for hardware tuning
 - central/peripheral controller adapters that instantiate the right and left IQS9151 devices on `TWISPI0`, `P0_04` SDA, and `P0_05` SCL
@@ -112,8 +114,8 @@ Likely next steps:
 
 - test the I2C path on hardware and confirm the IQS9151 product number on both halves
 - re-enable RDY-pin waiting after confirming the actual RDY polarity and timing
-- tune per-side axis inversion/swap settings and gesture thresholds
-- port the remaining upstream gesture behavior, especially deferred tap handling, pinch, hold, relative mouse movement, and scroll events
+- tune per-side cursor axis inversion/swap, pointer speed divisor, and gesture thresholds
+- port the remaining upstream gesture behavior, especially deferred tap handling, pinch, hold, and scroll events
 
 ## Behavior Differences
 
@@ -123,4 +125,4 @@ The base keymap is translated from `config/lalapadgen2.keymap`, but some ZMK-spe
 - ZMK Bluetooth controls are mapped to RMK `User0..User11` keys.
 - ZMK dynamic trackpad sensitivity controls are omitted until the IQS9151 path exists.
 - ZMK trackpad virtual positions `52..67` are represented in the RMK keymap as rows `5..6`, and IQS9151 runtime instances are wired into the central and peripheral firmware entrypoints.
-- The current recognizer supports axis inversion/swap settings, but the actual left/right hardware orientation and thresholds still need tuning after the I2C/RDY runtime path is enabled.
+- The current recognizer and pointer path support axis inversion/swap settings, but the actual left/right hardware orientation, pointer speed, and thresholds still need tuning after hardware testing.
