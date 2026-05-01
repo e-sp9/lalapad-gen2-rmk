@@ -27,6 +27,8 @@ on:
 
 permissions:
   contents: write
+  # firmware.yml を新規タグに対して dispatch するために必要。
+  actions: write
 
 concurrency:
   group: auto-tag
@@ -78,3 +80,13 @@ jobs:
         run: |
           git tag "${{ steps.ver.outputs.next }}"
           git push origin "${{ steps.ver.outputs.next }}"
+
+      # GITHUB_TOKEN で push した tag は firmware.yml の `tags: 'v*'` トリガを
+      # 発火させない (cascading workflow trigger 抑止) ため、明示的に
+      # firmware.yml を新タグの ref で dispatch する。これにより Release が
+      # 作成され、後段で pages.yml も自動再走する。
+      - name: Trigger firmware build on new tag
+        if: steps.check.outputs.already != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run firmware.yml --ref "${{ steps.ver.outputs.next }}"
