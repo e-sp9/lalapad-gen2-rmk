@@ -15,7 +15,7 @@
           ブラウザから直接 LaLaPad Gen2 (RMK) のファームウェアを書き込みます。Chrome / Edge / Opera の最新版で動作します。
         </p>
         <p class="sub">
-          このキーボードは分割キーボードで、左右で別のファームウェアが必要です。右半分 (Central) → 左半分 (Peripheral) の順に書き込んでください。
+          このキーボードは分割キーボードで、左右で別のファームウェアが必要です。左半分 (Peripheral) と右半分 (Central) の両方に書き込んでください。
         </p>
       </header>
 
@@ -44,20 +44,49 @@
           </p>
           <div class="row">
             <label class="file-label">
-              <span>Central (右半分)</span>
-              <input id="file-central" type="file" accept=".zip" />
+              <span>Peripheral (左半分)</span>
+              <input id="file-peripheral" type="file" accept=".zip" />
             </label>
           </div>
           <div class="row">
             <label class="file-label">
-              <span>Peripheral (左半分)</span>
-              <input id="file-peripheral" type="file" accept=".zip" />
+              <span>Central (右半分)</span>
+              <input id="file-central" type="file" accept=".zip" />
             </label>
           </div>
         </details>
       </section>
 
       <div class="halves">
+        <section class="card half" data-half="peripheral">
+          <h2><span class="badge alt">左 / Peripheral</span> 書き込み</h2>
+          <p>
+            左半分は USB HID を持たないため、リセットボタンで手動で DFU モードに入れる必要があります。
+          </p>
+
+          <div class="substep">
+            <h3><span class="num">2</span> ブートローダへ入る</h3>
+            <p class="hint">
+              左半分を USB ケーブルで PC に接続したあと、リセットボタンを<strong>素早く 2 回</strong>押してください。
+              シリアルポートとして列挙されれば DFU モードに入っています。
+            </p>
+          </div>
+
+          <div class="substep">
+            <h3><span class="num">3</span> 書き込み</h3>
+            <p class="hint">
+              下のボタンでシリアルポート (通常 <code>Adafruit</code> または <code>Seeed</code> で始まる名前) を選んでください。
+            </p>
+            <div class="row">
+              <button id="btn-flash-peripheral" class="primary" disabled>シリアルポートを選んで書き込み</button>
+              <span id="flash-peripheral-status" class="status">—</span>
+            </div>
+            <div class="progress">
+              <div id="progress-peripheral"></div>
+            </div>
+          </div>
+        </section>
+
         <section class="card half" data-half="central">
           <h2><span class="badge">右 / Central</span> 書き込み</h2>
           <p>
@@ -90,35 +119,6 @@
             </div>
             <div class="progress">
               <div id="progress-central"></div>
-            </div>
-          </div>
-        </section>
-
-        <section class="card half" data-half="peripheral">
-          <h2><span class="badge alt">左 / Peripheral</span> 書き込み</h2>
-          <p>
-            左半分は USB HID を持たないため、リセットボタンで手動で DFU モードに入れる必要があります。
-          </p>
-
-          <div class="substep">
-            <h3><span class="num">2</span> ブートローダへ入る</h3>
-            <p class="hint">
-              左半分を USB ケーブルで PC に接続したあと、リセットボタンを<strong>素早く 2 回</strong>押してください。
-              シリアルポートとして列挙されれば DFU モードに入っています。
-            </p>
-          </div>
-
-          <div class="substep">
-            <h3><span class="num">3</span> 書き込み</h3>
-            <p class="hint">
-              下のボタンでシリアルポート (通常 <code>Adafruit</code> または <code>Seeed</code> で始まる名前) を選んでください。
-            </p>
-            <div class="row">
-              <button id="btn-flash-peripheral" class="primary" disabled>シリアルポートを選んで書き込み</button>
-              <span id="flash-peripheral-status" class="status">—</span>
-            </div>
-            <div class="progress">
-              <div id="progress-peripheral"></div>
             </div>
           </div>
         </section>
