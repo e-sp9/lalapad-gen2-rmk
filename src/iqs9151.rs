@@ -37,6 +37,7 @@ pub const ADDR_TOUCH_STATUS: u16 = 0x105c;
 pub const COORD_BLOCK_START: u16 = ADDR_RELATIVE_X;
 pub const COORD_BLOCK_LENGTH: usize = 0x48;
 pub const DEFAULT_POLL_INTERVAL_MS: u64 = 10;
+pub const DEFAULT_CURSOR_DIVISOR: u16 = 5;
 
 pub const INFO_SHOW_RESET: u16 = 1 << 7;
 pub const INFO_GLOBAL_TP_TOUCH: u16 = 1 << 9;
@@ -181,6 +182,8 @@ pub struct Iqs9151InputDevice<I2C, RDY = NoReadyPin> {
     side: TrackpadSide,
     recognizer: TrackpadGestureRecognizer,
     motion_config: TrackpadMotionConfig,
+    motion_remainder_x: i32,
+    motion_remainder_y: i32,
     pending_click: Option<TrackpadClickEvents>,
     poll_interval: Duration,
 }
@@ -200,6 +203,8 @@ where
             side,
             recognizer: TrackpadGestureRecognizer::with_defaults(),
             motion_config: TrackpadMotionConfig::default(),
+            motion_remainder_x: 0,
+            motion_remainder_y: 0,
             pending_click: None,
             poll_interval: Duration::from_millis(DEFAULT_POLL_INTERVAL_MS),
         }
@@ -229,6 +234,8 @@ where
             side,
             recognizer: TrackpadGestureRecognizer::with_defaults(),
             motion_config: TrackpadMotionConfig::default(),
+            motion_remainder_x: 0,
+            motion_remainder_y: 0,
             pending_click: None,
             poll_interval: Duration::from_millis(DEFAULT_POLL_INTERVAL_MS),
         }
@@ -248,20 +255,26 @@ where
 
     pub fn set_motion_config(&mut self, config: TrackpadMotionConfig) {
         self.motion_config = config;
+        self.motion_remainder_x = 0;
+        self.motion_remainder_y = 0;
     }
 
     pub async fn verify_product_number(&mut self) -> Result<(), Iqs9151Error<I2C::Error>> {
         self.sensor.verify_product_number().await
     }
 
-    fn motion_event(&self, frame: CoordinateFrame) -> Option<Event> {
-        if frame.finger_count() == 0 {
+    fn motion_event(&mut self, frame: CoordinateFrame) -> Option<Event> {
+        if frame.finger_count() != 1 || !frame.movement_detected() {
             return None;
         }
 
-        let motion =
-            self.motion_config
-                .motion_event(self.side, frame.relative_x, frame.relative_y)?;
+        let motion = self.motion_config.motion_event(
+            self.side,
+            frame.relative_x,
+            frame.relative_y,
+            &mut self.motion_remainder_x,
+            &mut self.motion_remainder_y,
+        )?;
         Some(motion.into_rmk_event())
     }
 }
@@ -581,7 +594,7 @@ impl Default for TrackpadMotionConfig {
     fn default() -> Self {
         Self {
             axis_transform: TrackpadAxisTransform::default(),
-            divisor: 1,
+            divisor: DEFAULT_CURSOR_DIVISOR,
         }
     }
 }
@@ -599,6 +612,8 @@ impl TrackpadMotionConfig {
         side: TrackpadSide,
         relative_x: i16,
         relative_y: i16,
+        remainder_x: &mut i32,
+        remainder_y: &mut i32,
     ) -> Option<TrackpadMotionEvent> {
         if relative_x == 0 && relative_y == 0 {
             return None;
@@ -607,9 +622,8 @@ impl TrackpadMotionConfig {
         let (x, y) = self
             .axis_transform
             .apply((i32::from(relative_x), i32::from(relative_y)));
-        let divisor = i32::from(if self.divisor == 0 { 1 } else { self.divisor });
-        let x = clamp_i32_to_i16(x / divisor);
-        let y = clamp_i32_to_i16(y / divisor);
+        let x = clamp_i32_to_i16(scale_with_remainder(x, self.divisor, remainder_x));
+        let y = clamp_i32_to_i16(scale_with_remainder(y, self.divisor, remainder_y));
 
         if x == 0 && y == 0 {
             None
@@ -989,6 +1003,10 @@ impl CoordinateFrame {
     pub const fn show_reset(self) -> bool {
         self.info_flags & INFO_SHOW_RESET != 0
     }
+
+    pub const fn movement_detected(self) -> bool {
+        self.trackpad_flags & TP_MOVEMENT_DETECTED != 0
+    }
 }
 
 const fn read_u16_le(bytes: &[u8; COORD_BLOCK_LENGTH], offset: usize) -> u16 {
@@ -1030,6 +1048,14 @@ fn clamp_i32_to_i16(value: i32) -> i16 {
 
 fn clamp_i16_to_i8(value: i16) -> i8 {
     value.clamp(i16::from(i8::MIN), i16::from(i8::MAX)) as i8
+}
+
+fn scale_with_remainder(value: i32, divisor: u16, remainder: &mut i32) -> i32 {
+    let divisor = i32::from(if divisor == 0 { 1 } else { divisor });
+    let total = value.saturating_add(*remainder);
+    let scaled = total / divisor;
+    *remainder = total - scaled * divisor;
+    scaled
 }
 
 #[cfg(test)]
@@ -1239,13 +1265,53 @@ mod tests {
     #[test]
     fn applies_motion_transform_and_divisor() {
         let config = TrackpadMotionConfig::new(TrackpadAxisTransform::new(true, false, true), 2);
+        let mut remainder_x = 0;
+        let mut remainder_y = 0;
 
         assert_eq!(
-            config.motion_event(TrackpadSide::Right, 20, -8),
+            config.motion_event(
+                TrackpadSide::Right,
+                20,
+                -8,
+                &mut remainder_x,
+                &mut remainder_y
+            ),
             Some(TrackpadMotionEvent {
                 side: TrackpadSide::Right,
                 x: 4,
                 y: 10,
+            })
+        );
+    }
+
+    #[test]
+    fn accumulates_scaled_motion_remainders() {
+        let config = TrackpadMotionConfig::default();
+        let mut remainder_x = 0;
+        let mut remainder_y = 0;
+
+        assert_eq!(
+            config.motion_event(
+                TrackpadSide::Left,
+                2,
+                -2,
+                &mut remainder_x,
+                &mut remainder_y
+            ),
+            None
+        );
+        assert_eq!(
+            config.motion_event(
+                TrackpadSide::Left,
+                3,
+                -3,
+                &mut remainder_x,
+                &mut remainder_y
+            ),
+            Some(TrackpadMotionEvent {
+                side: TrackpadSide::Left,
+                x: 1,
+                y: -1,
             })
         );
     }

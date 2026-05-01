@@ -106,6 +106,8 @@ RMK-side groundwork now lives in `src/iqs9151.rs`:
 - a minimal coordinate-frame recognizer for one-finger tap, two-finger tap, three-finger tap, and three-finger swipe events
 - relative cursor movement from the IQS9151 `relative_x` / `relative_y` fields through HID mouse reports
 - a split transport shim for left-half cursor movement, using RMK custom events from peripheral to central
+- ZMK-derived cursor gating: relative cursor reports are emitted only for one-finger frames with `TP_MOVEMENT_DETECTED`
+- ZMK-derived cursor scaling: the default cursor divisor is `5`, matching `zip_xy_scaler 1 5`, with remainder accumulation so small deltas are not dropped
 - a generic RMK `InputDevice` wrapper that polls IQS9151 frames and emits virtual-key press/release events
 - optional RDY-pin waiting and axis transform settings for hardware tuning
 - central/peripheral controller adapters that instantiate the right and left IQS9151 devices on `TWISPI0`, `P0_04` SDA, and `P0_05` SCL
@@ -115,7 +117,7 @@ Likely next steps:
 - test the I2C path on hardware and confirm the IQS9151 product number on both halves
 - re-enable RDY-pin waiting after confirming the actual RDY polarity and timing
 - tune per-side cursor axis inversion/swap, pointer speed divisor, and gesture thresholds
-- port the remaining upstream gesture behavior, especially deferred tap handling, pinch, hold, and scroll events
+- port the remaining upstream gesture behavior, especially deferred tap handling, tap-drag hold, two-finger scroll/pinch, and inertia
 
 ## Behavior Differences
 
