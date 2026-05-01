@@ -255,6 +255,10 @@ where
     }
 
     fn motion_event(&self, frame: CoordinateFrame) -> Option<Event> {
+        if frame.finger_count() == 0 {
+            return None;
+        }
+
         let motion =
             self.motion_config
                 .motion_event(self.side, frame.relative_x, frame.relative_y)?;
@@ -291,6 +295,7 @@ where
                     }
 
                     if let Some(event) = self.motion_event(frame) {
+                        Timer::after(self.poll_interval).await;
                         return event;
                     }
                 }
@@ -345,7 +350,7 @@ where
                     }
                 }
                 Iqs9151ControllerTarget::SplitEvent => {
-                    EVENT_CHANNEL.send(Event::Custom(payload)).await;
+                    let _ = EVENT_CHANNEL.try_send(Event::Custom(payload));
                 }
             },
             _ => {}
@@ -395,9 +400,7 @@ async fn send_mouse_motion_report(motion: TrackpadMotionEvent) {
         wheel: 0,
         pan: 0,
     };
-    KEYBOARD_REPORT_CHANNEL
-        .send(Report::MouseReport(report))
-        .await;
+    let _ = KEYBOARD_REPORT_CHANNEL.try_send(Report::MouseReport(report));
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
