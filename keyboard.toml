@@ -61,6 +61,10 @@ upper = 1
 lower = 2
 adjust = 3
 
+[behavior.morse]
+hold_timeout = "180ms"
+hold_on_other_press = true
+
 [behavior.combo]
 timeout = "150ms"
 combos = [
@@ -105,3 +109,6 @@ split_peripherals_num = 1
 combo_max_num = 4
 combo_max_length = 2
 ble_profiles_num = 4
+event_channel_size = 64
+controller_channel_size = 64
+report_channel_size = 64
