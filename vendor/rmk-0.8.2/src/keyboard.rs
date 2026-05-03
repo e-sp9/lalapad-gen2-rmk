@@ -19,11 +19,11 @@ use {
     crate::event::ControllerEvent,
 };
 
-use crate::channel::{KEY_EVENT_CHANNEL, KEYBOARD_REPORT_CHANNEL};
+use crate::channel::{EVENT_CHANNEL, KEY_EVENT_CHANNEL, KEYBOARD_REPORT_CHANNEL};
 use crate::combo::Combo;
 use crate::config::Hand;
 use crate::descriptor::KeyboardReport;
-use crate::event::{KeyPos, KeyboardEvent, KeyboardEventPos};
+use crate::event::{Event, KeyPos, KeyboardEvent, KeyboardEventPos};
 use crate::fork::{ActiveFork, StateBits};
 use crate::hid::Report;
 use crate::input_device::Runnable;
@@ -43,6 +43,27 @@ pub(crate) mod mouse;
 pub(crate) mod oneshot;
 
 const HOLD_BUFFER_SIZE: usize = 16;
+const LALAPAD_DYNAMIC_SCALE_EVENT_PREFIX: [u8; 4] = *b"IQSP";
+const LALAPAD_DYNAMIC_SCALE_EVENT_TYPE: u8 = 2;
+const LALAPAD_ZDS_INC: u8 = 1;
+const LALAPAD_ZDS_DEC: u8 = 2;
+const LALAPAD_ZDS_RST: u8 = 3;
+const LALAPAD_ZDS_XY: u8 = 0;
+const LALAPAD_ZDS_SC: u8 = 1;
+const LALAPAD_ZDS_ALL: u8 = 2;
+
+fn queue_lalapad_dynamic_scale_event(group: u8, action: u8) {
+    let mut payload = [0u8; 16];
+    payload[0..4].copy_from_slice(&LALAPAD_DYNAMIC_SCALE_EVENT_PREFIX);
+    payload[4] = LALAPAD_DYNAMIC_SCALE_EVENT_TYPE;
+    payload[5] = group;
+    payload[6] = action;
+
+    if EVENT_CHANNEL.is_full() {
+        let _ = EVENT_CHANNEL.try_receive();
+    }
+    let _ = EVENT_CHANNEL.try_send(Event::Custom(payload));
+}
 
 // Timestamp of the last key action, the value is the number of seconds since the boot
 #[cfg(feature = "_ble")]
@@ -1794,20 +1815,30 @@ impl<'a, const ROW: usize, const COL: usize, const NUM_LAYER: usize, const NUM_E
                 // Other user keys are processed when released
                 if id < NUM_BLE_PROFILE as u8 {
                     info!("Switch to profile: {}", id);
-                    // User0~7: Swtich to the specific profile
+                    // User0..NUM_BLE_PROFILE-1: Switch to the specific profile
                     BLE_PROFILE_CHANNEL.send(BleProfileAction::SwitchProfile(id)).await;
                 } else if id == NUM_BLE_PROFILE as u8 {
-                    // User8: Next profile
+                    // Next profile
                     BLE_PROFILE_CHANNEL.send(BleProfileAction::NextProfile).await;
                 } else if id == NUM_BLE_PROFILE as u8 + 1 {
-                    // User9: Previous profile
+                    // Previous profile
                     BLE_PROFILE_CHANNEL.send(BleProfileAction::PreviousProfile).await;
                 } else if id == NUM_BLE_PROFILE as u8 + 2 {
-                    // User10: Clear profile
+                    // Clear profile
                     BLE_PROFILE_CHANNEL.send(BleProfileAction::ClearProfile).await;
                 } else if id == NUM_BLE_PROFILE as u8 + 3 {
-                    // User11:
+                    // Toggle default output mode
                     BLE_PROFILE_CHANNEL.send(BleProfileAction::ToggleConnection).await;
+                } else if id == NUM_BLE_PROFILE as u8 + 5 {
+                    queue_lalapad_dynamic_scale_event(LALAPAD_ZDS_XY, LALAPAD_ZDS_INC);
+                } else if id == NUM_BLE_PROFILE as u8 + 6 {
+                    queue_lalapad_dynamic_scale_event(LALAPAD_ZDS_XY, LALAPAD_ZDS_DEC);
+                } else if id == NUM_BLE_PROFILE as u8 + 7 {
+                    queue_lalapad_dynamic_scale_event(LALAPAD_ZDS_SC, LALAPAD_ZDS_INC);
+                } else if id == NUM_BLE_PROFILE as u8 + 8 {
+                    queue_lalapad_dynamic_scale_event(LALAPAD_ZDS_SC, LALAPAD_ZDS_DEC);
+                } else if id == NUM_BLE_PROFILE as u8 + 9 {
+                    queue_lalapad_dynamic_scale_event(LALAPAD_ZDS_ALL, LALAPAD_ZDS_RST);
                 }
             }
         }

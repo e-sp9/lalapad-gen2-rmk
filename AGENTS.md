@@ -10,8 +10,8 @@ Current target:
 - Firmware framework: RMK
 - Topology: BLE split keyboard
 - Orientation: right half is central, left half is peripheral
-- Implemented scope: GPIO key matrix and 5-way switches
-- Not yet implemented: IQS9151 trackpads, gesture mapping, LED/battery widgets
+- Implemented scope: GPIO key matrix, 5-way switches, and experimental IQS9151 cursor/scroll/tap/swipe/pinch support
+- Not yet fully implemented: exact ZMK deferred tap-drag press-hold timing, RGBLED battery/layer widgets, and final hardware tuning for IQS9151 axes/speed/thresholds/battery behavior
 
 ## Source Of Truth
 

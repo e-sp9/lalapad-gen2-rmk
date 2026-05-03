@@ -41,9 +41,9 @@ keymap = [
         ["_",             "_",            "_",            "_",                   "_",                   "No", "No", "_",        "_",         "_",         "_",      "_"],
     ],
     [
-        ["F1",   "F2",   "F3",   "F4",   "F5",   "No", "No", "User11",     "User0",      "User1",      "User2",      "User3"],
-        ["F6",   "F7",   "F8",   "F9",   "F10",  "No", "No", "Reboot",     "Bootloader",  "User10",     "ClearEeprom", "_"],
-        ["F11",  "F12",  "F13",  "F14",  "F15",  "No", "No", "_",          "_",           "_",          "_",          "_"],
+        ["F1",   "F2",   "F3",   "F4",   "F5",   "No", "No", "User7",      "User0",      "User1",      "User2",      "User3"],
+        ["F6",   "F7",   "F8",   "F9",   "F10",  "No", "No", "Reboot",     "Bootloader",  "User6",      "ClearEeprom", "_"],
+        ["F11",  "F12",  "F13",  "F14",  "F15",  "No", "No", "User9",      "User10",     "User11",     "User12",     "User13"],
         ["_",    "_",    "_",    "_",    "_",    "_",  "_",  "_",          "_",           "_",          "_",          "_"],
         ["No",   "_",    "_",    "_",    "_",    "_",  "_",  "_",          "_",           "_",          "_",          "No"],
         ["_",    "_",    "_",    "No",   "No",   "No", "No", "No",         "No",          "_",          "_",          "_"],
@@ -55,6 +55,15 @@ keymap = [
 
 [ble]
 enabled = true
+default_tx_power = 8
+
+[ble.charge_state]
+pin = "P0_17"
+low_active = true
+
+[ble.charge_led]
+pin = "P0_10"
+low_active = true
 
 [behavior.tri_layer]
 upper = 1

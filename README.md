@@ -10,13 +10,14 @@ Current scope:
 - 42 keyboard keys plus the two 5-way switches
 - Vial definition for the physical key matrix and trackpad virtual positions
 - Keymap positions for the upstream trackpad button/gesture bindings
-- Experimental IQS9151 tap/gesture clicks and relative cursor movement
+- Experimental IQS9151 cursor, scroll, tap/swipe, pinch, inertia, and dynamic scaling support
+- Upstream BLE TX power and charge-indicator pin configuration
 
 Not yet ported:
 
-- Dynamic trackpad scaling controls from the upstream ZMK firmware
-- Full LaLaPad Gen2 IQS9151 gesture behavior beyond the current tap/swipe subset
-- LED/battery widgets from the upstream ZMK firmware
+- Exact ZMK deferred tap-drag press-hold timing for IQS9151 taps
+- RGBLED battery/layer widgets from the upstream ZMK firmware
+- Hardware tuning for final IQS9151 axes, speed, thresholds, and battery behavior
 
 ## Build
 
@@ -64,4 +65,4 @@ GitHub Actions で `main` への push とリリース公開のたびに GitHub P
 - `ShiniNet/LaLaPadGen2`
 - `ShiniNet/zmk-config-LalaPadGen2`
 
-See `docs/PORTING.md` for pin mapping and remaining firmware gaps.
+See `docs/PORTING.md` for pin mapping, upstream parity notes, and remaining firmware gaps.

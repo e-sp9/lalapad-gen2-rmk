@@ -52,6 +52,31 @@
       "name": "CLR_PEER",
       "title": "Forget the current bonded split peer",
       "shortName": "Clear\nPeer"
+    },
+    {
+      "name": "TP_XY_INC",
+      "title": "Increase trackpad cursor scale",
+      "shortName": "XY\n+"
+    },
+    {
+      "name": "TP_XY_DEC",
+      "title": "Decrease trackpad cursor scale",
+      "shortName": "XY\n-"
+    },
+    {
+      "name": "TP_SC_INC",
+      "title": "Increase trackpad scroll scale",
+      "shortName": "Scroll\n+"
+    },
+    {
+      "name": "TP_SC_DEC",
+      "title": "Decrease trackpad scroll scale",
+      "shortName": "Scroll\n-"
+    },
+    {
+      "name": "TP_SCALE_RST",
+      "title": "Reset trackpad cursor and scroll scale",
+      "shortName": "Scale\nReset"
     }
   ],
   "layouts": {
