@@ -6,7 +6,8 @@ use rmk::macros::rmk_central;
 #[rmk_central]
 mod keyboard_central {
     use lalapad_gen2_rmk::iqs9151::{
-        Iqs9151InputDevice, Iqs9151KeyboardController, Iqs9151SplitEventController, TrackpadSide,
+        Iqs9151InputDevice, Iqs9151KeyboardController, Iqs9151MotionOutput, Iqs9151ReadyPin,
+        Iqs9151SplitEventController, TrackpadSide,
     };
     use static_cell::StaticCell;
 
@@ -34,7 +35,12 @@ mod keyboard_central {
             i2c_config,
             tx_buffer,
         );
-        let device = Iqs9151InputDevice::new(i2c, TrackpadSide::Right);
+        let ready = Iqs9151ReadyPin::active_low(::embassy_nrf::gpio::Input::new(
+            p.P1_11,
+            ::embassy_nrf::gpio::Pull::Up,
+        ));
+        let mut device = Iqs9151InputDevice::with_ready_pin(i2c, ready, TrackpadSide::Right);
+        device.set_motion_output(Iqs9151MotionOutput::HidReport);
 
         Iqs9151KeyboardController::new_central(device)
     }

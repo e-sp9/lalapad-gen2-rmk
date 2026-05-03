@@ -5,7 +5,10 @@ use rmk::macros::rmk_peripheral;
 
 #[rmk_peripheral(id = 0)]
 mod keyboard_peripheral {
-    use lalapad_gen2_rmk::iqs9151::{Iqs9151InputDevice, Iqs9151KeyboardController, TrackpadSide};
+    use lalapad_gen2_rmk::iqs9151::{
+        Iqs9151InputDevice, Iqs9151KeyboardController, Iqs9151MotionOutput, Iqs9151ReadyPin,
+        TrackpadSide,
+    };
     use static_cell::StaticCell;
 
     #[controller(event)]
@@ -27,7 +30,12 @@ mod keyboard_peripheral {
             i2c_config,
             tx_buffer,
         );
-        let device = Iqs9151InputDevice::new(i2c, TrackpadSide::Left);
+        let ready = Iqs9151ReadyPin::active_low(::embassy_nrf::gpio::Input::new(
+            p.P1_11,
+            ::embassy_nrf::gpio::Pull::Up,
+        ));
+        let mut device = Iqs9151InputDevice::with_ready_pin(i2c, ready, TrackpadSide::Left);
+        device.set_motion_output(Iqs9151MotionOutput::SplitEvent);
 
         Iqs9151KeyboardController::new_peripheral(device)
     }

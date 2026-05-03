@@ -107,15 +107,26 @@ RMK-side groundwork now lives in `src/iqs9151.rs`:
 - relative cursor movement from the IQS9151 `relative_x` / `relative_y` fields through HID mouse reports
 - a split transport shim for left-half cursor movement, using RMK custom events from peripheral to central
 - ZMK-derived cursor gating: relative cursor reports are emitted only for one-finger frames with `TP_MOVEMENT_DETECTED`
-- ZMK-derived cursor scaling: the default cursor divisor is `5`, matching `zip_xy_scaler 1 5`, with remainder accumulation so small deltas are not dropped
-- a generic RMK `InputDevice` wrapper that polls IQS9151 frames and emits virtual-key press/release events
-- optional RDY-pin waiting and axis transform settings for hardware tuning
-- central/peripheral controller adapters that instantiate the right and left IQS9151 devices on `TWISPI0`, `P0_04` SDA, and `P0_05` SCL
+- ZMK-derived cursor scaling with remainder accumulation so small deltas are not dropped. The upstream ZMK config uses `zip_xy_scaler 1 5`; the current RMK default divisor is `3`, after IQS9151 initialization made divisor `1` too aggressive while divisor `5` was previously too slow before the startup sequence existed.
+- hardware-tested cursor orientation: X and Y are left unchanged by default. The earlier X inversion was reversed on hardware.
+- a generic RMK `InputDevice` wrapper that waits for the IQS9151 active-low RDY pin, reads the ZMK-matched 28-byte coordinate frame, and emits virtual-key press/release events
+- a ZMK-derived IQS9151 startup sequence before frame reads: product-number check, software reset, show-reset wait, reset ACK, Azoteq configuration block writes, resolution / ATI target / dynamic-filter overrides, ATI request, and event-mode enable. The RMK port treats show-reset timeout as non-fatal because this firmware currently has no always-visible logging path and must avoid remaining permanently silent on hardware whose RDY/show-reset timing differs from the ZMK driver.
+- RDY waiting follows the upstream ZMK driver's bounded-wait model: startup/configuration and runtime reads wait for the active-low RDY level, but continue after a short timeout instead of blocking forever. This keeps the IQS9151 task alive even if RDY polarity, wiring, or sensor state is wrong.
+- transient runtime coordinate-read failures do not immediately restart the full sensor initialization. The driver resets gesture state after a read failure and only falls back to full initialization after repeated consecutive failures.
+- after repeated init failures, the driver enters a degraded polling mode that tries coordinate reads even though the startup sequence failed. While init/degraded polling is failing, it sends a small left/right diagnostic pointer nudge about every two seconds. Seeing that nudge means the RMK controller and HID/split reporting path are alive, and the remaining failure is likely IQS9151 I2C/product/config/RDY related.
+- cursor reports and split motion events use non-blocking channel sends. This matches the upstream ZMK driver's non-blocking reporting model more closely and prevents a full HID/split queue from stopping future IQS9151 reads. If a motion send fails because the channel is full, the IQS9151 input device coalesces that motion into a pending delta and retries it on later read-loop iterations.
+- continuous cursor motion is not fixed-rate throttled by default. After a motion frame is read, the driver returns to the bounded runtime RDY wait; an explicit motion interval remains available only as a tuning override.
+- tap recognition now follows the upstream driver's per-finger state model more closely: one-finger, two-finger, and three-finger sessions keep separate tap candidates, previous-frame coordinates, finger-count history, tap re-entry windows, and two-finger release-pending suppression.
+- tap movement tracking follows the upstream driver's coordinate-validity checks and previous-frame fallback: finger coordinates are used only when the corresponding confidence bit is set and the coordinate is not `0xffff`; otherwise the last valid coordinate is retained while the touch remains active.
+- IQS9151 built-in gesture bits are parsed for diagnostics but are not used as direct clicks. Tap clicks are emitted from the ZMK-style coordinate/movement recognizer, because direct use of the hardware gesture bits produced false taps during cursor motion on the tested hardware.
+- right-half cursor reports and left-half split cursor events are emitted directly from the IQS9151 read loop, so pointer traffic no longer round-trips through the RMK controller event loop before the next sensor frame is read
+- RMK event/controller/report channel sizes are raised from the defaults to give split trackpad bursts more buffer headroom
+- optional axis transform settings for hardware tuning
+- central/peripheral controller adapters that instantiate the right and left IQS9151 devices on `TWISPI0`, `P0_04` SDA, `P0_05` SCL, and `P1_11` RDY
 
 Likely next steps:
 
 - test the I2C path on hardware and confirm the IQS9151 product number on both halves
-- re-enable RDY-pin waiting after confirming the actual RDY polarity and timing
 - tune per-side cursor axis inversion/swap, pointer speed divisor, and gesture thresholds
 - port the remaining upstream gesture behavior, especially deferred tap handling, tap-drag hold, two-finger scroll/pinch, and inertia
 
