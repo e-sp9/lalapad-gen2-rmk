@@ -63,6 +63,9 @@ xz2 = "0.1.7"
 json = "0.12"
 const-gen = "1.6"
 
+[patch.crates-io]
+rmk = { path = "vendor/rmk-0.8.2" }
+
 # Split keyboard example
 [[bin]]
 name = "central"

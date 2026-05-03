@@ -8,8 +8,11 @@ Use this checklist when the IQS9151 trackpad does not move the cursor or when lo
    - `firmware/normal/lalapad-gen2-rmk-central.uf2` to the right half.
    - `firmware/normal/lalapad-gen2-rmk-peripheral.uf2` to the left half.
 2. Reconnect the right half first, then the left half.
-3. Confirm ordinary key matrix input works on both halves before testing the trackpads.
-4. Test the right trackpad alone, then the left trackpad alone, then both trackpads together.
+3. Remove the old Bluetooth pairing on the host and pair again before testing over BLE. The scroll firmware changes the HID report map, and hosts can keep using the cached old map until re-pairing.
+4. Confirm ordinary key matrix input works on both halves before testing the trackpads.
+5. Test the right trackpad alone, then the left trackpad alone, then both trackpads together.
+6. Test two-finger vertical scroll, then two-finger horizontal scroll. Confirm that scroll does not also move the cursor or emit right-click taps during continuous movement. Flick once and release to confirm inertia continues briefly, then stops when a finger touches the pad again.
+7. Hold one finger still on either trackpad until left mouse button hold starts, then move the other trackpad. Confirm the host performs drag/select and releases the selection when the held finger is lifted.
 
 The current diagnostic firmware intentionally sends a tiny left/right cursor nudge about every two seconds while IQS9151 initialization or degraded coordinate polling is failing. Use that as the first split:
 

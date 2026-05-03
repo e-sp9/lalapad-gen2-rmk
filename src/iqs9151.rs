@@ -5,7 +5,10 @@
 //! the RMK-side mapping and frame layout explicit while the runtime I2C driver
 //! is being ported.
 
-use core::future::Future;
+use core::{
+    future::Future,
+    sync::atomic::{AtomicU8, Ordering},
+};
 
 use embassy_time::{Duration, Instant, Timer, with_timeout};
 use embedded_hal_async::{digital::Wait, i2c::I2c};
@@ -57,6 +60,28 @@ pub const I2C_WRITE_CHUNK_SIZE: usize = 30;
 pub const DEFAULT_POLL_INTERVAL_MS: u64 = 10;
 pub const DEFAULT_MOTION_INTERVAL_MS: u64 = 0;
 pub const DEFAULT_CURSOR_DIVISOR: u16 = 3;
+pub const DEFAULT_SCROLL_DIVISOR: u16 = 8;
+pub const DEFAULT_SCROLL_LOW_SPEED_DIVISOR: u16 = 24;
+pub const DEFAULT_SCROLL_LOW_SPEED_THRESHOLD: i16 = 48;
+pub const DEFAULT_SCROLL_INERTIA_DIVISOR: u16 = 16;
+pub const DEFAULT_SCROLL_MAX_STEP: i16 = 3;
+pub const DEFAULT_SCROLL_INERTIA_MAX_STEP: i16 = 2;
+pub const DEFAULT_ONE_FINGER_DRAG_HOLD_MS: u32 = 220;
+const SCROLL_SMOOTHING_FP_SHIFT: u8 = 8;
+const SCROLL_SMOOTHING_PREVIOUS_WEIGHT: i32 = 1;
+const SCROLL_SMOOTHING_CURRENT_WEIGHT: i32 = 1;
+const SCROLL_INERTIA_HISTORY_SIZE: usize = 12;
+const SCROLL_INERTIA_INTERVAL_MS: u32 = 10;
+const SCROLL_INERTIA_MAX_DURATION_MS: u32 = 700;
+const SCROLL_INERTIA_DECAY_NUM: i32 = 900;
+const SCROLL_INERTIA_DECAY_DEN: i32 = 1000;
+const SCROLL_INERTIA_FP_SHIFT: u8 = 8;
+const SCROLL_INERTIA_START_THRESHOLD: i32 = 1;
+const SCROLL_INERTIA_MIN_VELOCITY: i32 = 1;
+const SCROLL_INERTIA_RECENT_WINDOW_MS: u32 = 60;
+const SCROLL_INERTIA_STALE_GAP_MS: u32 = 35;
+const SCROLL_INERTIA_MIN_SAMPLES: usize = 2;
+const SCROLL_INERTIA_MIN_AVG_SPEED: i32 = 4;
 
 pub const INFO_SHOW_RESET: u16 = 1 << 7;
 pub const INFO_GLOBAL_TP_TOUCH: u16 = 1 << 9;
@@ -347,8 +372,16 @@ pub struct Iqs9151InputDevice<I2C, RDY = NoReadyPin> {
     initialized: bool,
     recognizer: TrackpadGestureRecognizer,
     motion_config: TrackpadMotionConfig,
+    scroll_config: TrackpadScrollConfig,
     motion_remainder_x: i32,
     motion_remainder_y: i32,
+    scroll_remainder_x: i32,
+    scroll_remainder_y: i32,
+    scroll_smooth_x_fp: i32,
+    scroll_smooth_y_fp: i32,
+    scroll_history: ScrollMotionHistory,
+    scroll_inertia: ScrollInertiaState,
+    pointer_buttons: u8,
     pending_click: Option<TrackpadClickEvents>,
     pending_motion: Option<TrackpadMotionEvent>,
     poll_interval: Duration,
@@ -377,8 +410,16 @@ where
             initialized: false,
             recognizer: TrackpadGestureRecognizer::with_defaults(),
             motion_config: TrackpadMotionConfig::default(),
+            scroll_config: TrackpadScrollConfig::default(),
             motion_remainder_x: 0,
             motion_remainder_y: 0,
+            scroll_remainder_x: 0,
+            scroll_remainder_y: 0,
+            scroll_smooth_x_fp: 0,
+            scroll_smooth_y_fp: 0,
+            scroll_history: ScrollMotionHistory::new(),
+            scroll_inertia: ScrollInertiaState::new(),
+            pointer_buttons: 0,
             pending_click: None,
             pending_motion: None,
             poll_interval: Duration::from_millis(DEFAULT_POLL_INTERVAL_MS),
@@ -417,8 +458,16 @@ where
             initialized: false,
             recognizer: TrackpadGestureRecognizer::with_defaults(),
             motion_config: TrackpadMotionConfig::default(),
+            scroll_config: TrackpadScrollConfig::default(),
             motion_remainder_x: 0,
             motion_remainder_y: 0,
+            scroll_remainder_x: 0,
+            scroll_remainder_y: 0,
+            scroll_smooth_x_fp: 0,
+            scroll_smooth_y_fp: 0,
+            scroll_history: ScrollMotionHistory::new(),
+            scroll_inertia: ScrollInertiaState::new(),
+            pointer_buttons: 0,
             pending_click: None,
             pending_motion: None,
             poll_interval: Duration::from_millis(DEFAULT_POLL_INTERVAL_MS),
@@ -455,6 +504,13 @@ where
         self.motion_config = config;
         self.motion_remainder_x = 0;
         self.motion_remainder_y = 0;
+    }
+
+    pub fn set_scroll_config(&mut self, config: TrackpadScrollConfig) {
+        self.scroll_config = config;
+        self.scroll_remainder_x = 0;
+        self.scroll_remainder_y = 0;
+        self.reset_scroll_smoothing();
     }
 
     pub fn set_motion_output(&mut self, output: Iqs9151MotionOutput) {
@@ -647,8 +703,128 @@ where
         )
     }
 
+    fn scroll_from_delta(&mut self, delta: TrackpadScrollDelta) -> Option<TrackpadMotionEvent> {
+        self.scroll_config.scroll_event(
+            self.side,
+            delta.x,
+            delta.y,
+            &mut self.scroll_remainder_x,
+            &mut self.scroll_remainder_y,
+        )
+    }
+
+    fn handle_scroll_delta(&mut self, delta: TrackpadScrollDelta) -> Option<Event> {
+        self.scroll_from_delta(delta)
+            .and_then(|scroll| self.handle_motion(scroll))
+    }
+
+    fn handle_inertia_scroll_delta(&mut self, delta: TrackpadScrollDelta) -> Option<Event> {
+        self.scroll_config
+            .inertia_scroll_event(
+                self.side,
+                delta.x,
+                delta.y,
+                &mut self.scroll_remainder_x,
+                &mut self.scroll_remainder_y,
+            )
+            .and_then(|scroll| self.handle_motion(scroll))
+    }
+
+    fn record_active_scroll(&mut self, delta: TrackpadScrollDelta, now_ms: u32) -> Option<Event> {
+        self.scroll_inertia.reset();
+        if delta.x == 0 && delta.y == 0 {
+            self.reset_scroll_smoothing();
+            return None;
+        }
+
+        let delta = self.smooth_scroll_delta(delta);
+        self.scroll_history.push(delta, now_ms);
+        self.handle_scroll_delta(delta)
+    }
+
+    fn start_scroll_inertia(&mut self, now_ms: u32) {
+        self.scroll_remainder_x = 0;
+        self.scroll_remainder_y = 0;
+        self.reset_scroll_smoothing();
+        if let Some(seed) = self.scroll_history.seed(now_ms) {
+            self.scroll_inertia.start(seed, now_ms);
+        }
+        self.scroll_history.reset();
+    }
+
+    fn flush_scroll_inertia(&mut self) -> Option<Event> {
+        let now_ms = Instant::now().as_millis() as u32;
+        self.scroll_inertia
+            .step(now_ms)
+            .and_then(|delta| self.handle_inertia_scroll_delta(delta))
+    }
+
+    fn reset_scroll_runtime(&mut self) {
+        self.scroll_remainder_x = 0;
+        self.scroll_remainder_y = 0;
+        self.reset_scroll_smoothing();
+        self.scroll_history.reset();
+        self.scroll_inertia.reset();
+    }
+
+    fn smooth_scroll_delta(&mut self, delta: TrackpadScrollDelta) -> TrackpadScrollDelta {
+        self.scroll_smooth_x_fp = smooth_scroll_axis(self.scroll_smooth_x_fp, delta.x);
+        self.scroll_smooth_y_fp = smooth_scroll_axis(self.scroll_smooth_y_fp, delta.y);
+
+        TrackpadScrollDelta {
+            x: clamp_i32_to_i16(self.scroll_smooth_x_fp >> SCROLL_SMOOTHING_FP_SHIFT),
+            y: clamp_i32_to_i16(self.scroll_smooth_y_fp >> SCROLL_SMOOTHING_FP_SHIFT),
+        }
+    }
+
+    fn reset_scroll_smoothing(&mut self) {
+        self.scroll_smooth_x_fp = 0;
+        self.scroll_smooth_y_fp = 0;
+    }
+
+    fn handle_pointer_button(&mut self, button: TrackpadButton, pressed: bool) -> Option<Event> {
+        let Some(mask) = button.mouse_button_mask() else {
+            return None;
+        };
+
+        if pressed {
+            self.pointer_buttons |= mask;
+        } else {
+            self.pointer_buttons &= !mask;
+        }
+
+        self.handle_motion(TrackpadMotionEvent::button_state(
+            self.side,
+            self.pointer_buttons,
+        ))
+    }
+
+    fn release_pointer_buttons(&mut self) {
+        if self.pointer_buttons == 0 {
+            return;
+        }
+
+        self.pointer_buttons = 0;
+        let motion = TrackpadMotionEvent::button_state(self.side, 0);
+        match self.motion_output {
+            Iqs9151MotionOutput::RmkEvent => {
+                self.pending_motion = Some(motion);
+            }
+            Iqs9151MotionOutput::HidReport => {
+                if !send_mouse_motion_reports(motion) {
+                    self.queue_pending_motion(motion);
+                }
+            }
+            Iqs9151MotionOutput::SplitEvent => {
+                if !send_split_motion_event(motion) {
+                    self.queue_pending_motion(motion);
+                }
+            }
+        }
+    }
+
     fn handle_motion(&mut self, motion: TrackpadMotionEvent) -> Option<Event> {
-        let motion = motion.capped();
+        let motion = motion.with_button_state(self.pointer_buttons).capped();
         match self.motion_output {
             Iqs9151MotionOutput::RmkEvent => Some(motion.into_rmk_event()),
             Iqs9151MotionOutput::HidReport => {
@@ -699,6 +875,10 @@ where
             side: self.side,
             x: DIAGNOSTIC_NUDGE_DELTA.saturating_mul(self.diagnostic_motion_sign),
             y: 0,
+            wheel: 0,
+            pan: 0,
+            buttons: 0,
+            button_state_valid: false,
         };
         self.diagnostic_motion_sign = -self.diagnostic_motion_sign;
         let _ = self.handle_motion(motion);
@@ -725,8 +905,10 @@ where
                     }
                     Err(_) => {
                         self.init_failure_count = self.init_failure_count.saturating_add(1);
-                        self.recognizer.reset();
                         self.pending_motion = None;
+                        self.release_pointer_buttons();
+                        self.recognizer.reset();
+                        self.reset_scroll_runtime();
                         self.send_diagnostic_nudge();
                         if self.init_failure_count >= MAX_INIT_FAILURES_BEFORE_DEGRADED {
                             self.initialized = true;
@@ -748,24 +930,48 @@ where
             }
 
             self.flush_pending_motion();
+            if let Some(event) = self.flush_scroll_inertia() {
+                return event;
+            }
             self.wait_ready_for(READY_RUNTIME_TIMEOUT_MS).await;
 
             match self.sensor.read_coordinate_frame().await {
                 Ok(frame) => {
                     self.read_error_count = 0;
                     if frame.show_reset() {
-                        self.recognizer.reset();
                         self.pending_motion = None;
+                        self.release_pointer_buttons();
+                        self.recognizer.reset();
                         self.motion_remainder_x = 0;
                         self.motion_remainder_y = 0;
+                        self.reset_scroll_runtime();
                         self.initialized = false;
                         self.degraded_mode = false;
                         continue;
                     }
 
                     let now_ms = Instant::now().as_millis() as u32;
+                    if frame.finger_count() > 0 {
+                        self.scroll_inertia.reset();
+                    }
                     if let Some(gesture) = self.recognizer.update(frame, now_ms) {
-                        self.pending_click = Some(gesture.button_events(self.side));
+                        match gesture {
+                            TrackpadGestureEvent::Button { button, pressed } => {
+                                if let Some(event) = self.handle_pointer_button(button, pressed) {
+                                    return event;
+                                }
+                            }
+                            TrackpadGestureEvent::Click(button) => {
+                                self.pending_click =
+                                    Some(TrackpadClickEvents::new(self.side, button));
+                            }
+                            TrackpadGestureEvent::Scroll(delta) => {
+                                if let Some(event) = self.record_active_scroll(delta, now_ms) {
+                                    return event;
+                                }
+                            }
+                            TrackpadGestureEvent::ScrollEnded => self.start_scroll_inertia(now_ms),
+                        }
                         continue;
                     }
 
@@ -784,13 +990,19 @@ where
                     if frame.finger_count() == 0 {
                         self.motion_remainder_x = 0;
                         self.motion_remainder_y = 0;
+                        if !self.scroll_inertia.active {
+                            self.scroll_remainder_x = 0;
+                            self.scroll_remainder_y = 0;
+                        }
                     }
                 }
                 Err(_) => {
                     self.read_error_count = self.read_error_count.saturating_add(1);
+                    self.release_pointer_buttons();
                     self.recognizer.reset();
                     self.motion_remainder_x = 0;
                     self.motion_remainder_y = 0;
+                    self.reset_scroll_runtime();
                     if self.read_error_count >= MAX_RUNTIME_READ_ERRORS {
                         self.initialized = false;
                         self.degraded_mode = false;
@@ -898,18 +1110,34 @@ impl Controller for Iqs9151SplitEventController {
     }
 }
 
+static LEFT_TRACKPAD_MOUSE_BUTTONS: AtomicU8 = AtomicU8::new(0);
+static RIGHT_TRACKPAD_MOUSE_BUTTONS: AtomicU8 = AtomicU8::new(0);
+
 fn send_mouse_motion_reports(mut motion: TrackpadMotionEvent) -> bool {
     motion = motion.capped();
-    if motion.x == 0 && motion.y == 0 {
+    if motion.is_empty() {
         return true;
     }
 
+    if motion.button_state_valid {
+        match motion.side {
+            TrackpadSide::Left => {
+                LEFT_TRACKPAD_MOUSE_BUTTONS.store(motion.buttons, Ordering::Relaxed);
+            }
+            TrackpadSide::Right => {
+                RIGHT_TRACKPAD_MOUSE_BUTTONS.store(motion.buttons, Ordering::Relaxed);
+            }
+        }
+    }
+    let buttons = LEFT_TRACKPAD_MOUSE_BUTTONS.load(Ordering::Relaxed)
+        | RIGHT_TRACKPAD_MOUSE_BUTTONS.load(Ordering::Relaxed);
+
     let report = MouseReport {
-        buttons: 0,
+        buttons,
         x: clamp_i16_to_i8(motion.x),
         y: clamp_i16_to_i8(motion.y),
-        wheel: 0,
-        pan: 0,
+        wheel: clamp_i16_to_i8(motion.wheel),
+        pan: clamp_i16_to_i8(motion.pan),
     };
 
     KEYBOARD_REPORT_CHANNEL
@@ -919,7 +1147,7 @@ fn send_mouse_motion_reports(mut motion: TrackpadMotionEvent) -> bool {
 
 fn send_split_motion_event(motion: TrackpadMotionEvent) -> bool {
     let motion = motion.capped();
-    if motion.x == 0 && motion.y == 0 {
+    if motion.is_empty() {
         return true;
     }
     if EVENT_CHANNEL.is_full() {
@@ -978,6 +1206,19 @@ impl TrackpadButton {
 
     pub const fn bit(self) -> u8 {
         1 << self.input_btn_code()
+    }
+
+    pub const fn mouse_button_mask(self) -> Option<u8> {
+        match self {
+            Self::LeftClick => Some(1 << 0),
+            Self::RightClick => Some(1 << 1),
+            Self::MiddleClick => Some(1 << 2),
+            Self::GestureLeft
+            | Self::GestureRight
+            | Self::GestureUp
+            | Self::GestureDown
+            | Self::Pinch => None,
+        }
     }
 }
 
@@ -1142,7 +1383,127 @@ impl TrackpadMotionConfig {
         if x == 0 && y == 0 {
             None
         } else {
-            Some(TrackpadMotionEvent { side, x, y })
+            Some(TrackpadMotionEvent::cursor(side, x, y))
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TrackpadScrollConfig {
+    pub divisor: u16,
+    pub low_speed_divisor: u16,
+    pub low_speed_threshold: i16,
+    pub inertia_divisor: u16,
+    pub max_step: i16,
+    pub inertia_max_step: i16,
+}
+
+impl Default for TrackpadScrollConfig {
+    fn default() -> Self {
+        Self {
+            divisor: DEFAULT_SCROLL_DIVISOR,
+            low_speed_divisor: DEFAULT_SCROLL_LOW_SPEED_DIVISOR,
+            low_speed_threshold: DEFAULT_SCROLL_LOW_SPEED_THRESHOLD,
+            inertia_divisor: DEFAULT_SCROLL_INERTIA_DIVISOR,
+            max_step: DEFAULT_SCROLL_MAX_STEP,
+            inertia_max_step: DEFAULT_SCROLL_INERTIA_MAX_STEP,
+        }
+    }
+}
+
+impl TrackpadScrollConfig {
+    pub const fn new(divisor: u16) -> Self {
+        Self {
+            divisor,
+            low_speed_divisor: DEFAULT_SCROLL_LOW_SPEED_DIVISOR,
+            low_speed_threshold: DEFAULT_SCROLL_LOW_SPEED_THRESHOLD,
+            inertia_divisor: DEFAULT_SCROLL_INERTIA_DIVISOR,
+            max_step: DEFAULT_SCROLL_MAX_STEP,
+            inertia_max_step: DEFAULT_SCROLL_INERTIA_MAX_STEP,
+        }
+    }
+
+    pub fn scroll_event(
+        self,
+        side: TrackpadSide,
+        relative_x: i16,
+        relative_y: i16,
+        remainder_x: &mut i32,
+        remainder_y: &mut i32,
+    ) -> Option<TrackpadMotionEvent> {
+        self.scroll_event_with_limits(
+            side,
+            relative_x,
+            relative_y,
+            remainder_x,
+            remainder_y,
+            self.divisor,
+            self.low_speed_divisor,
+            self.low_speed_threshold,
+            self.max_step,
+        )
+    }
+
+    pub fn inertia_scroll_event(
+        self,
+        side: TrackpadSide,
+        relative_x: i16,
+        relative_y: i16,
+        remainder_x: &mut i32,
+        remainder_y: &mut i32,
+    ) -> Option<TrackpadMotionEvent> {
+        self.scroll_event_with_limits(
+            side,
+            relative_x,
+            relative_y,
+            remainder_x,
+            remainder_y,
+            self.inertia_divisor,
+            self.inertia_divisor,
+            0,
+            self.inertia_max_step,
+        )
+    }
+
+    fn scroll_event_with_limits(
+        self,
+        side: TrackpadSide,
+        relative_x: i16,
+        relative_y: i16,
+        remainder_x: &mut i32,
+        remainder_y: &mut i32,
+        divisor: u16,
+        low_speed_divisor: u16,
+        low_speed_threshold: i16,
+        max_step: i16,
+    ) -> Option<TrackpadMotionEvent> {
+        let divisor_x =
+            effective_scroll_divisor(relative_x, divisor, low_speed_divisor, low_speed_threshold);
+        let divisor_y =
+            effective_scroll_divisor(relative_y, divisor, low_speed_divisor, low_speed_threshold);
+        let pan = clamp_scroll_step(
+            clamp_i32_to_i16(scale_scroll_axis_with_remainder(
+                i32::from(relative_x),
+                divisor_x,
+                remainder_x,
+                max_step,
+            )),
+            max_step,
+        );
+        let wheel = clamp_scroll_step(
+            clamp_i32_to_i16(-scale_scroll_axis_with_remainder(
+                i32::from(relative_y),
+                divisor_y,
+                remainder_y,
+                max_step,
+            )),
+            max_step,
+        );
+
+        if pan == 0 && wheel == 0 {
+            None
+        } else {
+            Some(TrackpadMotionEvent::scroll(side, wheel, pan))
         }
     }
 }
@@ -1152,9 +1513,57 @@ pub struct TrackpadMotionEvent {
     pub side: TrackpadSide,
     pub x: i16,
     pub y: i16,
+    pub wheel: i16,
+    pub pan: i16,
+    pub buttons: u8,
+    pub button_state_valid: bool,
 }
 
 impl TrackpadMotionEvent {
+    pub const fn cursor(side: TrackpadSide, x: i16, y: i16) -> Self {
+        Self {
+            side,
+            x,
+            y,
+            wheel: 0,
+            pan: 0,
+            buttons: 0,
+            button_state_valid: false,
+        }
+    }
+
+    pub const fn scroll(side: TrackpadSide, wheel: i16, pan: i16) -> Self {
+        Self {
+            side,
+            x: 0,
+            y: 0,
+            wheel,
+            pan,
+            buttons: 0,
+            button_state_valid: false,
+        }
+    }
+
+    pub const fn button_state(side: TrackpadSide, buttons: u8) -> Self {
+        Self {
+            side,
+            x: 0,
+            y: 0,
+            wheel: 0,
+            pan: 0,
+            buttons,
+            button_state_valid: true,
+        }
+    }
+
+    pub const fn with_button_state(self, buttons: u8) -> Self {
+        Self {
+            buttons,
+            button_state_valid: true,
+            ..self
+        }
+    }
+
     pub fn into_rmk_event(self) -> Event {
         Event::Custom(self.encode())
     }
@@ -1169,6 +1578,10 @@ impl TrackpadMotionEvent {
         };
         payload[6..8].copy_from_slice(&self.x.to_le_bytes());
         payload[8..10].copy_from_slice(&self.y.to_le_bytes());
+        payload[10..12].copy_from_slice(&self.wheel.to_le_bytes());
+        payload[12..14].copy_from_slice(&self.pan.to_le_bytes());
+        payload[14] = self.buttons;
+        payload[15] = u8::from(self.button_state_valid);
         payload
     }
 
@@ -1184,8 +1597,20 @@ impl TrackpadMotionEvent {
         };
         let x = i16::from_le_bytes([payload[6], payload[7]]);
         let y = i16::from_le_bytes([payload[8], payload[9]]);
+        let wheel = i16::from_le_bytes([payload[10], payload[11]]);
+        let pan = i16::from_le_bytes([payload[12], payload[13]]);
+        let buttons = payload[14];
+        let button_state_valid = payload[15] & 1 != 0;
 
-        Some(Self { side, x, y })
+        Some(Self {
+            side,
+            x,
+            y,
+            wheel,
+            pan,
+            buttons,
+            button_state_valid,
+        })
     }
 
     pub fn merge(self, next: Self) -> Self {
@@ -1197,6 +1622,14 @@ impl TrackpadMotionEvent {
             side: self.side,
             x: clamp_pending_motion(self.x.saturating_add(next.x)),
             y: clamp_pending_motion(self.y.saturating_add(next.y)),
+            wheel: clamp_pending_scroll(self.wheel.saturating_add(next.wheel)),
+            pan: clamp_pending_scroll(self.pan.saturating_add(next.pan)),
+            buttons: if next.button_state_valid {
+                next.buttons
+            } else {
+                self.buttons
+            },
+            button_state_valid: self.button_state_valid || next.button_state_valid,
         }
     }
 
@@ -1205,19 +1638,266 @@ impl TrackpadMotionEvent {
             side: self.side,
             x: clamp_pending_motion(self.x),
             y: clamp_pending_motion(self.y),
+            wheel: clamp_pending_scroll(self.wheel),
+            pan: clamp_pending_scroll(self.pan),
+            buttons: self.buttons,
+            button_state_valid: self.button_state_valid,
         }
+    }
+
+    pub const fn is_empty(self) -> bool {
+        self.x == 0 && self.y == 0 && self.wheel == 0 && self.pan == 0 && !self.button_state_valid
     }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TrackpadGestureEvent {
+    Button {
+        button: TrackpadButton,
+        pressed: bool,
+    },
     Click(TrackpadButton),
+    Scroll(TrackpadScrollDelta),
+    ScrollEnded,
 }
 
 impl TrackpadGestureEvent {
     pub fn button_events(self, side: TrackpadSide) -> TrackpadClickEvents {
         match self {
+            Self::Button { .. } => TrackpadClickEvents::empty(side),
             Self::Click(button) => TrackpadClickEvents::new(side, button),
+            Self::Scroll(_) | Self::ScrollEnded => TrackpadClickEvents::empty(side),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TrackpadScrollDelta {
+    pub x: i16,
+    pub y: i16,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ScrollMotionSample {
+    x: i16,
+    y: i16,
+    ms: u32,
+}
+
+impl ScrollMotionSample {
+    const EMPTY: Self = Self { x: 0, y: 0, ms: 0 };
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ScrollMotionHistory {
+    samples: [ScrollMotionSample; SCROLL_INERTIA_HISTORY_SIZE],
+    head: usize,
+    count: usize,
+}
+
+impl ScrollMotionHistory {
+    pub const fn new() -> Self {
+        Self {
+            samples: [ScrollMotionSample::EMPTY; SCROLL_INERTIA_HISTORY_SIZE],
+            head: 0,
+            count: 0,
+        }
+    }
+
+    fn reset(&mut self) {
+        *self = Self::new();
+    }
+
+    fn push(&mut self, delta: TrackpadScrollDelta, now_ms: u32) {
+        if delta.x == 0 && delta.y == 0 {
+            return;
+        }
+
+        self.samples[self.head] = ScrollMotionSample {
+            x: delta.x,
+            y: delta.y,
+            ms: now_ms,
+        };
+        self.head = (self.head + 1) % SCROLL_INERTIA_HISTORY_SIZE;
+        if self.count < SCROLL_INERTIA_HISTORY_SIZE {
+            self.count += 1;
+        }
+    }
+
+    fn seed(self, now_ms: u32) -> Option<ScrollInertiaSeed> {
+        let mut recent = [ScrollMotionSample::EMPTY; SCROLL_INERTIA_HISTORY_SIZE];
+        let mut recent_count = 0usize;
+
+        let mut i = 0usize;
+        while i < self.count {
+            let idx =
+                (self.head + SCROLL_INERTIA_HISTORY_SIZE - 1 - i) % SCROLL_INERTIA_HISTORY_SIZE;
+            let sample = self.samples[idx];
+            if now_ms.wrapping_sub(sample.ms) > SCROLL_INERTIA_RECENT_WINDOW_MS {
+                break;
+            }
+            recent[recent_count] = sample;
+            recent_count += 1;
+            i += 1;
+        }
+
+        if recent_count < SCROLL_INERTIA_MIN_SAMPLES {
+            return None;
+        }
+
+        let latest = recent[0];
+        if now_ms.wrapping_sub(latest.ms) > SCROLL_INERTIA_STALE_GAP_MS {
+            return None;
+        }
+
+        let mut total_x = 0i32;
+        let mut total_y = 0i32;
+        let mut j = 0usize;
+        while j < recent_count {
+            total_x = total_x.saturating_add(i32::from(recent[j].x));
+            total_y = total_y.saturating_add(i32::from(recent[j].y));
+            j += 1;
+        }
+
+        if total_x == 0 && total_y == 0 {
+            return None;
+        }
+
+        let dominant_total = if abs_i32(total_x) >= abs_i32(total_y) {
+            total_x
+        } else {
+            total_y
+        };
+        let dominant_is_x = abs_i32(total_x) >= abs_i32(total_y);
+        let mut consistent_count = 0usize;
+        let mut k = 0usize;
+        while k < recent_count {
+            let sample = if dominant_is_x {
+                i32::from(recent[k].x)
+            } else {
+                i32::from(recent[k].y)
+            };
+            if (sample > 0 && dominant_total > 0) || (sample < 0 && dominant_total < 0) {
+                consistent_count += 1;
+            }
+            k += 1;
+        }
+
+        if consistent_count < SCROLL_INERTIA_MIN_SAMPLES {
+            return None;
+        }
+
+        let earliest = recent[recent_count - 1];
+        let mut span_ms = latest.ms.wrapping_sub(earliest.ms);
+        if span_ms < SCROLL_INERTIA_INTERVAL_MS {
+            span_ms = SCROLL_INERTIA_INTERVAL_MS;
+        }
+
+        let avg_speed = ((abs_i32(total_x) + abs_i32(total_y))
+            .saturating_mul(SCROLL_INERTIA_INTERVAL_MS as i32))
+            / span_ms as i32;
+        if avg_speed < SCROLL_INERTIA_MIN_AVG_SPEED {
+            return None;
+        }
+
+        let interval = i64::from(SCROLL_INERTIA_INTERVAL_MS);
+        let span = i64::from(span_ms);
+        let shift = u32::from(SCROLL_INERTIA_FP_SHIFT);
+        Some(ScrollInertiaSeed {
+            vx_fp: clamp_i64_to_i32(((i64::from(total_x) * interval) << shift) / span),
+            vy_fp: clamp_i64_to_i32(((i64::from(total_y) * interval) << shift) / span),
+        })
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ScrollInertiaSeed {
+    vx_fp: i32,
+    vy_fp: i32,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ScrollInertiaState {
+    active: bool,
+    vx_fp: i32,
+    vy_fp: i32,
+    accum_x_fp: i32,
+    accum_y_fp: i32,
+    elapsed_ms: u32,
+    last_ms: u32,
+}
+
+impl ScrollInertiaState {
+    pub const fn new() -> Self {
+        Self {
+            active: false,
+            vx_fp: 0,
+            vy_fp: 0,
+            accum_x_fp: 0,
+            accum_y_fp: 0,
+            elapsed_ms: 0,
+            last_ms: 0,
+        }
+    }
+
+    fn reset(&mut self) {
+        *self = Self::new();
+    }
+
+    fn start(&mut self, seed: ScrollInertiaSeed, now_ms: u32) {
+        let start_threshold_fp = SCROLL_INERTIA_START_THRESHOLD << SCROLL_INERTIA_FP_SHIFT;
+        if abs_i32(seed.vx_fp) < start_threshold_fp && abs_i32(seed.vy_fp) < start_threshold_fp {
+            self.reset();
+            return;
+        }
+
+        self.active = true;
+        self.vx_fp = seed.vx_fp;
+        self.vy_fp = seed.vy_fp;
+        self.accum_x_fp = 0;
+        self.accum_y_fp = 0;
+        self.elapsed_ms = 0;
+        self.last_ms = now_ms;
+    }
+
+    fn step(&mut self, now_ms: u32) -> Option<TrackpadScrollDelta> {
+        if !self.active {
+            return None;
+        }
+
+        let dt_ms = now_ms.wrapping_sub(self.last_ms);
+        if dt_ms < SCROLL_INERTIA_INTERVAL_MS {
+            return None;
+        }
+
+        self.accum_x_fp = self.accum_x_fp.saturating_add(self.vx_fp);
+        self.accum_y_fp = self.accum_y_fp.saturating_add(self.vy_fp);
+        self.vx_fp =
+            (self.vx_fp.saturating_mul(SCROLL_INERTIA_DECAY_NUM)) / SCROLL_INERTIA_DECAY_DEN;
+        self.vy_fp =
+            (self.vy_fp.saturating_mul(SCROLL_INERTIA_DECAY_NUM)) / SCROLL_INERTIA_DECAY_DEN;
+        self.last_ms = now_ms;
+        self.elapsed_ms = self.elapsed_ms.saturating_add(SCROLL_INERTIA_INTERVAL_MS);
+
+        let out_x = self.accum_x_fp >> SCROLL_INERTIA_FP_SHIFT;
+        let out_y = self.accum_y_fp >> SCROLL_INERTIA_FP_SHIFT;
+        self.accum_x_fp -= out_x << SCROLL_INERTIA_FP_SHIFT;
+        self.accum_y_fp -= out_y << SCROLL_INERTIA_FP_SHIFT;
+
+        let min_v_fp = SCROLL_INERTIA_MIN_VELOCITY << SCROLL_INERTIA_FP_SHIFT;
+        if self.elapsed_ms >= SCROLL_INERTIA_MAX_DURATION_MS
+            || (abs_i32(self.vx_fp) < min_v_fp && abs_i32(self.vy_fp) < min_v_fp)
+        {
+            self.active = false;
+        }
+
+        if out_x == 0 && out_y == 0 {
+            None
+        } else {
+            Some(TrackpadScrollDelta {
+                x: clamp_i32_to_i16(out_x),
+                y: clamp_i32_to_i16(out_y),
+            })
         }
     }
 }
@@ -1234,6 +1914,14 @@ impl TrackpadClickEvents {
             side,
             button,
             next_pressed: 0,
+        }
+    }
+
+    pub const fn empty(side: TrackpadSide) -> Self {
+        Self {
+            side,
+            button: TrackpadButton::LeftClick,
+            next_pressed: 2,
         }
     }
 }
@@ -1260,6 +1948,7 @@ impl Iterator for TrackpadClickEvents {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TrackpadGestureConfig {
     pub one_finger_tap_max_ms: u32,
+    pub one_finger_drag_hold_ms: u32,
     pub one_finger_tap_move: u16,
     pub two_finger_tap_max_ms: u32,
     pub two_finger_tap_move: u16,
@@ -1273,6 +1962,7 @@ impl Default for TrackpadGestureConfig {
     fn default() -> Self {
         Self {
             one_finger_tap_max_ms: 250,
+            one_finger_drag_hold_ms: DEFAULT_ONE_FINGER_DRAG_HOLD_MS,
             one_finger_tap_move: 50,
             two_finger_tap_max_ms: 250,
             two_finger_tap_move: 50,
@@ -1399,6 +2089,15 @@ impl TrackpadGestureRecognizer {
             self.suppress_cursor_tail = false;
         }
 
+        if self.one_finger.drag_active && finger_count != 1 {
+            self.one_finger.reset();
+            self.suppress_cursor_tail = true;
+            return Some(TrackpadGestureEvent::Button {
+                button: TrackpadButton::LeftClick,
+                pressed: false,
+            });
+        }
+
         if finger_count == 3 && self.one_finger.active {
             self.three_finger_one_lead_valid = self.one_finger.tap_lead_valid(
                 now_ms,
@@ -1491,6 +2190,19 @@ impl TrackpadGestureRecognizer {
             if let Some((x, y)) = have_xy {
                 self.one_finger.update_position(x, y);
             }
+            if self.one_finger.drag_hold_ready(
+                now_ms,
+                self.config.one_finger_drag_hold_ms,
+                self.config.one_finger_tap_move,
+            ) {
+                self.one_finger.drag_active = true;
+                self.one_finger.tap_candidate = false;
+                self.suppress_cursor_tail = false;
+                return Some(TrackpadGestureEvent::Button {
+                    button: TrackpadButton::LeftClick,
+                    pressed: true,
+                });
+            }
             self.one_finger.cancel_tap_if_needed(
                 now_ms,
                 self.config.one_finger_tap_max_ms,
@@ -1550,8 +2262,9 @@ impl TrackpadGestureRecognizer {
         self.two_finger_one_lead_valid = false;
 
         if two_now {
+            let mut step = TwoFingerStep::default();
             if let Some(metrics) = have_xy {
-                self.two_finger.update_metrics(metrics);
+                step = self.two_finger.update_metrics(metrics);
             }
             self.two_finger.cancel_tap_if_needed(
                 now_ms,
@@ -1560,6 +2273,12 @@ impl TrackpadGestureRecognizer {
             );
             self.two_finger.classify_mode();
             self.two_finger.release_pending = false;
+            if self.two_finger.mode == TwoFingerMode::Scroll {
+                return Some(TrackpadGestureEvent::Scroll(TrackpadScrollDelta {
+                    x: clamp_i32_to_i16(step.x),
+                    y: clamp_i32_to_i16(step.y),
+                }));
+            }
             return None;
         }
 
@@ -1583,6 +2302,12 @@ impl TrackpadGestureRecognizer {
             };
             self.two_finger.reset();
             return event;
+        }
+
+        if self.two_finger.mode == TwoFingerMode::Scroll {
+            self.suppress_cursor_tail = true;
+            self.two_finger.reset();
+            return Some(TrackpadGestureEvent::ScrollEnded);
         }
 
         if self.two_finger.tap_valid(
@@ -1719,6 +2444,7 @@ impl TrackpadGestureRecognizer {
 struct OneFingerState {
     active: bool,
     tap_candidate: bool,
+    drag_active: bool,
     down_ms: u32,
     dx: i32,
     dy: i32,
@@ -1731,6 +2457,7 @@ impl OneFingerState {
         Self {
             active: false,
             tap_candidate: false,
+            drag_active: false,
             down_ms: 0,
             dx: 0,
             dy: 0,
@@ -1746,6 +2473,7 @@ impl OneFingerState {
     fn start(&mut self, now_ms: u32, x: i32, y: i32, tap_candidate: bool) {
         self.active = true;
         self.tap_candidate = tap_candidate;
+        self.drag_active = false;
         self.down_ms = now_ms;
         self.dx = 0;
         self.dy = 0;
@@ -1766,6 +2494,14 @@ impl OneFingerState {
         }
     }
 
+    fn drag_hold_ready(self, now_ms: u32, hold_ms: u32, move_threshold: u16) -> bool {
+        self.tap_candidate
+            && !self.drag_active
+            && now_ms.wrapping_sub(self.down_ms) >= hold_ms
+            && abs_i32(self.dx) <= i32::from(move_threshold)
+            && abs_i32(self.dy) <= i32::from(move_threshold)
+    }
+
     fn tap_valid(self, now_ms: u32, max_ms: u32, move_threshold: u16) -> bool {
         self.tap_candidate
             && now_ms.wrapping_sub(self.down_ms) <= max_ms
@@ -1784,6 +2520,12 @@ enum TwoFingerMode {
     None,
     Scroll,
     Pinch,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+struct TwoFingerStep {
+    x: i32,
+    y: i32,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1839,7 +2581,7 @@ impl TwoFingerState {
         self.mode = TwoFingerMode::None;
     }
 
-    fn update_metrics(&mut self, metrics: TwoFingerMetrics) {
+    fn update_metrics(&mut self, metrics: TwoFingerMetrics) -> TwoFingerStep {
         let step_x = metrics.centroid_x.saturating_sub(self.centroid_last_x);
         let step_y = metrics.centroid_y.saturating_sub(self.centroid_last_y);
         let step_distance = metrics.distance.saturating_sub(self.distance_last);
@@ -1850,6 +2592,11 @@ impl TwoFingerState {
         self.centroid_dx = self.centroid_dx.saturating_add(step_x);
         self.centroid_dy = self.centroid_dy.saturating_add(step_y);
         self.distance_delta = self.distance_delta.saturating_add(step_distance);
+
+        TwoFingerStep {
+            x: step_x,
+            y: step_y,
+        }
     }
 
     fn cancel_tap_if_needed(&mut self, now_ms: u32, max_ms: u32, move_threshold: u16) {
@@ -2235,6 +2982,10 @@ fn clamp_i32_to_i16(value: i32) -> i16 {
     value.clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as i16
 }
 
+fn clamp_i64_to_i32(value: i64) -> i32 {
+    value.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32
+}
+
 fn clamp_i16_to_i8(value: i16) -> i8 {
     value.clamp(i16::from(i8::MIN), i16::from(i8::MAX)) as i8
 }
@@ -2243,12 +2994,79 @@ fn clamp_pending_motion(value: i16) -> i16 {
     value.clamp(-MAX_PENDING_MOTION, MAX_PENDING_MOTION)
 }
 
+fn clamp_pending_scroll(value: i16) -> i16 {
+    value.clamp(-DEFAULT_SCROLL_MAX_STEP, DEFAULT_SCROLL_MAX_STEP)
+}
+
+fn clamp_scroll_step(value: i16, max_step: i16) -> i16 {
+    let max_step = if max_step <= 0 { 1 } else { max_step };
+    value.clamp(-max_step, max_step)
+}
+
+fn effective_scroll_divisor(
+    delta: i16,
+    divisor: u16,
+    low_speed_divisor: u16,
+    low_speed_threshold: i16,
+) -> u16 {
+    let threshold = low_speed_threshold.max(0);
+    if threshold > 0 && delta != 0 && delta.saturating_abs() <= threshold {
+        low_speed_divisor
+    } else {
+        divisor
+    }
+}
+
+fn smooth_scroll_axis(previous_fp: i32, sample: i16) -> i32 {
+    if sample == 0 {
+        return 0;
+    }
+
+    let sample_fp = i32::from(sample) << SCROLL_SMOOTHING_FP_SHIFT;
+    let total_weight = SCROLL_SMOOTHING_PREVIOUS_WEIGHT + SCROLL_SMOOTHING_CURRENT_WEIGHT;
+    if total_weight <= 0 {
+        return sample_fp;
+    }
+
+    (previous_fp
+        .saturating_mul(SCROLL_SMOOTHING_PREVIOUS_WEIGHT)
+        .saturating_add(sample_fp.saturating_mul(SCROLL_SMOOTHING_CURRENT_WEIGHT)))
+        / total_weight
+}
+
 fn scale_with_remainder(value: i32, divisor: u16, remainder: &mut i32) -> i32 {
     let divisor = i32::from(if divisor == 0 { 1 } else { divisor });
     let total = value.saturating_add(*remainder);
     let scaled = total / divisor;
     *remainder = total - scaled * divisor;
     scaled
+}
+
+fn scale_scroll_axis_with_remainder(
+    value: i32,
+    divisor: u16,
+    remainder: &mut i32,
+    max_step: i16,
+) -> i32 {
+    if value == 0 {
+        return 0;
+    }
+
+    scale_with_remainder_limited(value, divisor, remainder, max_step)
+}
+
+fn scale_with_remainder_limited(
+    value: i32,
+    divisor: u16,
+    remainder: &mut i32,
+    max_step: i16,
+) -> i32 {
+    let divisor = i32::from(if divisor == 0 { 1 } else { divisor });
+    let max_step = i32::from(if max_step <= 0 { 1 } else { max_step });
+    let total = value.saturating_add(*remainder);
+    let scaled = total / divisor;
+    *remainder = total - scaled * divisor;
+    scaled.clamp(-max_step, max_step)
 }
 
 fn cursor_motion_detected(frame: CoordinateFrame) -> bool {
@@ -2393,6 +3211,34 @@ mod tests {
     }
 
     #[test]
+    fn holds_left_button_for_stationary_one_finger_long_press() {
+        let mut recognizer = TrackpadGestureRecognizer::with_defaults();
+
+        assert_eq!(
+            recognizer.update(frame_with_fingers(1, 100, 200, 0, 0), 1000),
+            None
+        );
+        assert_eq!(
+            recognizer.update(frame_with_fingers(1, 102, 201, 0, 0), 1220),
+            Some(TrackpadGestureEvent::Button {
+                button: TrackpadButton::LeftClick,
+                pressed: true,
+            })
+        );
+        assert_eq!(
+            recognizer.update(frame_with_fingers(1, 104, 203, 0, 0), 1230),
+            None
+        );
+        assert_eq!(
+            recognizer.update(frame_with_fingers(0, 0, 0, 0, 0), 1240),
+            Some(TrackpadGestureEvent::Button {
+                button: TrackpadButton::LeftClick,
+                pressed: false,
+            })
+        );
+    }
+
+    #[test]
     fn emits_right_click_for_two_finger_tap() {
         let mut recognizer = TrackpadGestureRecognizer::with_defaults();
 
@@ -2461,10 +3307,20 @@ mod tests {
             side: TrackpadSide::Left,
             x: -12,
             y: 34,
+            wheel: 3,
+            pan: -4,
+            buttons: 0,
+            button_state_valid: false,
         };
 
         assert_eq!(TrackpadMotionEvent::decode(motion.encode()), Some(motion));
         assert_eq!(TrackpadMotionEvent::decode([0; 16]), None);
+
+        let button_state = TrackpadMotionEvent::button_state(TrackpadSide::Right, 1);
+        assert_eq!(
+            TrackpadMotionEvent::decode(button_state.encode()),
+            Some(button_state)
+        );
     }
 
     #[test]
@@ -2485,6 +3341,10 @@ mod tests {
                 side: TrackpadSide::Right,
                 x: 4,
                 y: 10,
+                wheel: 0,
+                pan: 0,
+                buttons: 0,
+                button_state_valid: false,
             })
         );
     }
@@ -2517,7 +3377,166 @@ mod tests {
                 side: TrackpadSide::Left,
                 x: 1,
                 y: -1,
+                wheel: 0,
+                pan: 0,
+                buttons: 0,
+                button_state_valid: false,
             })
+        );
+    }
+
+    #[test]
+    fn scales_fast_two_finger_scroll_to_unit_wheel_and_pan() {
+        let config = TrackpadScrollConfig::default();
+        let mut remainder_x = 0;
+        let mut remainder_y = 0;
+
+        assert_eq!(
+            config.scroll_event(
+                TrackpadSide::Right,
+                64,
+                -96,
+                &mut remainder_x,
+                &mut remainder_y
+            ),
+            Some(TrackpadMotionEvent {
+                side: TrackpadSide::Right,
+                x: 0,
+                y: 0,
+                wheel: 3,
+                pan: 3,
+                buttons: 0,
+                button_state_valid: false,
+            })
+        );
+    }
+
+    #[test]
+    fn low_speed_scroll_uses_larger_divisor() {
+        let config = TrackpadScrollConfig::default();
+        let mut remainder_x = 0;
+        let mut remainder_y = 0;
+
+        assert_eq!(
+            config.scroll_event(
+                TrackpadSide::Right,
+                0,
+                -6,
+                &mut remainder_x,
+                &mut remainder_y
+            ),
+            None
+        );
+        assert_eq!(
+            config.scroll_event(
+                TrackpadSide::Right,
+                0,
+                -8,
+                &mut remainder_x,
+                &mut remainder_y
+            ),
+            None
+        );
+        assert_eq!(
+            config.scroll_event(
+                TrackpadSide::Right,
+                0,
+                -10,
+                &mut remainder_x,
+                &mut remainder_y
+            ),
+            Some(TrackpadMotionEvent {
+                side: TrackpadSide::Right,
+                x: 0,
+                y: 0,
+                wheel: 1,
+                pan: 0,
+                buttons: 0,
+                button_state_valid: false,
+            })
+        );
+    }
+
+    #[test]
+    fn smooths_scroll_delta_spikes() {
+        assert_eq!(smooth_scroll_axis(0, 80) >> SCROLL_SMOOTHING_FP_SHIFT, 40);
+        assert_eq!(
+            smooth_scroll_axis(40 << SCROLL_SMOOTHING_FP_SHIFT, 0) >> SCROLL_SMOOTHING_FP_SHIFT,
+            0
+        );
+    }
+
+    #[test]
+    fn drops_excess_large_scroll_delta_after_capped_report() {
+        let config = TrackpadScrollConfig::default();
+        let mut remainder_x = 0;
+        let mut remainder_y = 0;
+
+        assert_eq!(
+            config.scroll_event(
+                TrackpadSide::Right,
+                0,
+                -120,
+                &mut remainder_x,
+                &mut remainder_y
+            ),
+            Some(TrackpadMotionEvent {
+                side: TrackpadSide::Right,
+                x: 0,
+                y: 0,
+                wheel: 3,
+                pan: 0,
+                buttons: 0,
+                button_state_valid: false,
+            })
+        );
+        assert_eq!(
+            config.scroll_event(
+                TrackpadSide::Right,
+                0,
+                0,
+                &mut remainder_x,
+                &mut remainder_y
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn stationary_scroll_frame_does_not_drain_low_speed_remainder() {
+        let config = TrackpadScrollConfig::default();
+        let mut remainder_x = 0;
+        let mut remainder_y = 0;
+
+        assert_eq!(
+            config.scroll_event(
+                TrackpadSide::Right,
+                0,
+                -10,
+                &mut remainder_x,
+                &mut remainder_y
+            ),
+            None
+        );
+        assert_eq!(
+            config.scroll_event(
+                TrackpadSide::Right,
+                0,
+                -10,
+                &mut remainder_x,
+                &mut remainder_y
+            ),
+            None
+        );
+        assert_eq!(
+            config.scroll_event(
+                TrackpadSide::Right,
+                0,
+                0,
+                &mut remainder_x,
+                &mut remainder_y
+            ),
+            None
         );
     }
 
@@ -2539,6 +3558,109 @@ mod tests {
                 side: TrackpadSide::Right,
                 x: 12,
                 y: -7,
+                wheel: 0,
+                pan: 0,
+                buttons: 0,
+                button_state_valid: false,
+            })
+        );
+    }
+
+    #[test]
+    fn emits_scroll_for_two_finger_centroid_motion() {
+        let mut recognizer = TrackpadGestureRecognizer::with_defaults();
+
+        assert_eq!(
+            recognizer.update(frame_with_fingers(2, 100, 100, 200, 100), 1000),
+            None
+        );
+        assert_eq!(
+            recognizer.update(frame_with_fingers(2, 100, 170, 200, 170), 1010),
+            Some(TrackpadGestureEvent::Scroll(TrackpadScrollDelta {
+                x: 0,
+                y: 70,
+            }))
+        );
+    }
+
+    #[test]
+    fn emits_scroll_ended_after_two_finger_scroll_release() {
+        let mut recognizer = TrackpadGestureRecognizer::with_defaults();
+
+        assert_eq!(
+            recognizer.update(frame_with_fingers(2, 100, 100, 200, 100), 1000),
+            None
+        );
+        assert_eq!(
+            recognizer.update(frame_with_fingers(2, 100, 170, 200, 170), 1010),
+            Some(TrackpadGestureEvent::Scroll(TrackpadScrollDelta {
+                x: 0,
+                y: 70,
+            }))
+        );
+        assert_eq!(
+            recognizer.update(frame_with_fingers(0, 0, 0, 0, 0), 1020),
+            Some(TrackpadGestureEvent::ScrollEnded)
+        );
+    }
+
+    #[test]
+    fn seeds_scroll_inertia_from_recent_history() {
+        let mut history = ScrollMotionHistory::new();
+        history.push(TrackpadScrollDelta { x: 0, y: 60 }, 1000);
+        history.push(TrackpadScrollDelta { x: 0, y: 60 }, 1010);
+
+        let seed = history
+            .seed(1020)
+            .expect("recent scroll should seed inertia");
+        assert_eq!(seed.vx_fp, 0);
+        assert!(seed.vy_fp > 0);
+    }
+
+    #[test]
+    fn scroll_inertia_decays_after_release() {
+        let mut history = ScrollMotionHistory::new();
+        history.push(TrackpadScrollDelta { x: 0, y: 60 }, 1000);
+        history.push(TrackpadScrollDelta { x: 0, y: 60 }, 1010);
+        let seed = history
+            .seed(1020)
+            .expect("recent scroll should seed inertia");
+
+        let mut inertia = ScrollInertiaState::new();
+        inertia.start(seed, 1020);
+        assert_eq!(inertia.step(1025), None);
+
+        let first = inertia.step(1030).expect("due inertia step");
+        assert_eq!(first.x, 0);
+        assert!(first.y > 0);
+
+        let second = inertia.step(1040).expect("second inertia step");
+        assert!(second.y > 0);
+        assert!(second.y <= first.y);
+    }
+
+    #[test]
+    fn inertia_scroll_uses_lower_sensitivity_and_step_cap() {
+        let config = TrackpadScrollConfig::default();
+        let mut remainder_x = 0;
+        let mut remainder_y = 0;
+
+        assert_eq!(
+            config.inertia_scroll_event(
+                TrackpadSide::Right,
+                0,
+                -120,
+                &mut remainder_x,
+                &mut remainder_y
+            ),
+            Some(TrackpadMotionEvent {
+                side: TrackpadSide::Right,
+                x: 0,
+                y: 0,
+                wheel: 1,
+                pan: 0,
+                buttons: 0,
+                button_state_valid: false,
             })
         );
     }

@@ -105,7 +105,8 @@ RMK-side groundwork now lives in `src/iqs9151.rs`:
 - conversion from those edge events into RMK `KeyboardEvent` values
 - a minimal coordinate-frame recognizer for one-finger tap, two-finger tap, three-finger tap, and three-finger swipe events
 - relative cursor movement from the IQS9151 `relative_x` / `relative_y` fields through HID mouse reports
-- a split transport shim for left-half cursor movement, using RMK custom events from peripheral to central
+- two-finger vertical/horizontal scroll from centroid movement through HID mouse `wheel` / `pan` reports
+- a split transport shim for left-half pointer movement and scroll, using RMK custom events from peripheral to central
 - ZMK-derived cursor gating: relative cursor reports are emitted only for one-finger frames with `TP_MOVEMENT_DETECTED`
 - ZMK-derived cursor scaling with remainder accumulation so small deltas are not dropped. The upstream ZMK config uses `zip_xy_scaler 1 5`; the current RMK default divisor is `3`, after IQS9151 initialization made divisor `1` too aggressive while divisor `5` was previously too slow before the startup sequence existed.
 - hardware-tested cursor orientation: X and Y are left unchanged by default. The earlier X inversion was reversed on hardware.
@@ -116,9 +117,12 @@ RMK-side groundwork now lives in `src/iqs9151.rs`:
 - after repeated init failures, the driver enters a degraded polling mode that tries coordinate reads even though the startup sequence failed. While init/degraded polling is failing, it sends a small left/right diagnostic pointer nudge about every two seconds. Seeing that nudge means the RMK controller and HID/split reporting path are alive, and the remaining failure is likely IQS9151 I2C/product/config/RDY related.
 - cursor reports and split motion events use non-blocking channel sends. This matches the upstream ZMK driver's non-blocking reporting model more closely and prevents a full HID/split queue from stopping future IQS9151 reads. If a motion send fails because the channel is full, the IQS9151 input device coalesces that motion into a pending delta and retries it on later read-loop iterations.
 - continuous cursor motion is not fixed-rate throttled by default. After a motion frame is read, the driver returns to the bounded runtime RDY wait; an explicit motion interval remains available only as a tuning override.
+- RMK 0.8.2 is patched locally under `vendor/rmk-0.8.2` so the composite mouse HID report map can advertise high-resolution vertical wheel and horizontal AC Pan via HID Resolution Multiplier. BLE hosts can cache the old HID report map, so remove the old pairing before validating this change over Bluetooth.
+- two-finger scroll mode starts when centroid movement crosses the ZMK-derived threshold. The upstream LaLaPad Gen2 normal-mode setting was `zip_scroll_scaler 1 12`; after adding HID Resolution Multiplier support to the RMK composite mouse report, the RMK port uses divisor 8 with a 3-step per-report cap because each wheel/pan unit is now advertised as a high-resolution fraction. Low-speed scroll deltas at or below 48 raw units use divisor 24 to reduce slow-touch sensitivity. Active scroll deltas are smoothed with a small EMA before scaling, so sensor-side low-speed spikes are damped before HID output, but zero-delta frames reset the smoothing tail instead of continuing to scroll while the fingers are held still. Vertical scroll output is inverted for natural scrolling, while horizontal pan follows the current hardware-tested sign. Per-frame scroll amount follows finger speed because it is derived from centroid step distance, but stationary frames do not drain accumulated scroll remainder and over-cap scroll remainder is discarded instead of being drained through later frames; this avoids a small subsequent movement causing a burst from an earlier sensor spike. Release inertia uses the upstream ZMK recent-history gate shape, but is damped for RMK HID output: 10 ms interval, 0.90 decay, 60 ms recent window, 35 ms stale gap, 2 minimum samples, 4 minimum average speed, divisor 16, and a 2-step per-report cap.
 - tap recognition now follows the upstream driver's per-finger state model more closely: one-finger, two-finger, and three-finger sessions keep separate tap candidates, previous-frame coordinates, finger-count history, tap re-entry windows, and two-finger release-pending suppression.
 - tap movement tracking follows the upstream driver's coordinate-validity checks and previous-frame fallback: finger coordinates are used only when the corresponding confidence bit is set and the coordinate is not `0xffff`; otherwise the last valid coordinate is retained while the touch remains active.
 - IQS9151 built-in gesture bits are parsed for diagnostics but are not used as direct clicks. Tap clicks are emitted from the ZMK-style coordinate/movement recognizer, because direct use of the hardware gesture bits produced false taps during cursor motion on the tested hardware.
+- one-finger stationary long press now holds HID mouse button 1 directly, and releases it when the finger is lifted. Direct trackpad motion reports carry the active per-side mouse-button state, so holding one trackpad can drag/select while moving the cursor with the other trackpad.
 - right-half cursor reports and left-half split cursor events are emitted directly from the IQS9151 read loop, so pointer traffic no longer round-trips through the RMK controller event loop before the next sensor frame is read
 - RMK event/controller/report channel sizes are raised from the defaults to give split trackpad bursts more buffer headroom
 - optional axis transform settings for hardware tuning
@@ -128,7 +132,7 @@ Likely next steps:
 
 - test the I2C path on hardware and confirm the IQS9151 product number on both halves
 - tune per-side cursor axis inversion/swap, pointer speed divisor, and gesture thresholds
-- port the remaining upstream gesture behavior, especially deferred tap handling, tap-drag hold, two-finger scroll/pinch, and inertia
+- port the remaining upstream gesture behavior, especially deferred tap handling and pinch
 
 ## Behavior Differences
 
