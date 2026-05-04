@@ -39,15 +39,25 @@ changes.
 
 ### Web Flasher
 
-ブラウザから直接ファームウェアを書き込めるツールを `tools/web-flasher/` に同梱しています。
-GitHub Actions で `main` への push とリリース公開のたびに GitHub Pages へデプロイされます。
+For convenience, this repository includes a lightweight browser-based flasher
+under `tools/web-flasher/`. This is not an RMK-specific flashing path; it is a
+small helper for writing this firmware to the XIAO BLE without installing local
+flashing tools. GitHub Actions deploys it to GitHub Pages on each push to
+`main` and each published release.
 
-- 対応ブラウザ: Chrome / Edge / Opera (WebHID + WebSerial が必要)
-- 中身: Adafruit nRF52 UF2 ブートローダ (XIAO BLE 同梱) と直接話す Nordic Legacy DFU クライアント
-- 左右で別ファームのため、左半分 (Peripheral) と右半分 (Central) の両方に書き込みます (UI も左→右の順に並べてあります)
-- 右半分は WebHID 経由で自動で DFU モードに入れます。左半分は USB HID を持たないため、リセットボタンを素早く 2 回押して手動で DFU モードに入ってください
+- Supported browsers: Chrome / Edge / Opera (requires WebHID + WebSerial)
+- How it works: a Nordic Legacy DFU client talks directly to the Adafruit nRF52
+  UF2 bootloader bundled with the XIAO BLE
+- Flash both halves because the left and right firmware images are different
+  (the UI is ordered left-to-right: Peripheral, then Central)
+- The right half can enter DFU mode automatically over WebHID. The left half has
+  no USB HID interface, so double-tap the reset button to enter DFU mode
+  manually.
 
-リリース時には、`firmware/lalapad-gen2-rmk-{central,peripheral}-dfu.zip` が GitHub Release のアセットに自動添付され、Pages 側に同梱されます。手元の zip を読み込んで書き込むこともできます (UI 内 "ローカルファイルを使う")。
+Release builds attach
+`firmware/lalapad-gen2-rmk-{central,peripheral}-dfu.zip` to the GitHub Release
+and bundle those files into the Pages deployment. You can also load local ZIP
+files in the flasher UI.
 
 ### UF2
 
