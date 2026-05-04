@@ -1,6 +1,7 @@
 target
 .venv-libclang
 .bindgen-headers
+.codex
 
 *.bin
 *.elf
