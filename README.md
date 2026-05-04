@@ -103,6 +103,7 @@ Run `cargo make uf2 --release` when changing release artifacts or flashing behav
 
 ## Documentation
 
+- `AGENTS.md`: coding-agent project guide and repository working rules
 - `docs/PORTING.md`: ZMK-to-RMK porting notes, pin mapping, and behavior differences
 - `docs/TRACKPAD_HARDWARE_CHECK.md`: IQS9151 hardware validation checklist
 - `docs/RELEASE.md`: release, artifact, and flashing checklist
