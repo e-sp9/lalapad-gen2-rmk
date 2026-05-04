@@ -1,0 +1,49 @@
+name: Hardware validation report
+description: Share working or failing LaLaPad Gen2 hardware test results.
+title: "[Hardware]: "
+labels: ["hardware", "validation"]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Firmware version
+      placeholder: Release tag or commit SHA
+    validations:
+      required: true
+  - type: dropdown
+    id: result
+    attributes:
+      label: Overall result
+      options:
+        - Fully working
+        - Mostly working with tuning needed
+        - Trackpad issue
+        - Split/BLE issue
+        - Flashing issue
+    validations:
+      required: true
+  - type: checkboxes
+    id: tested
+    attributes:
+      label: Tested items
+      options:
+        - label: Matrix keys
+        - label: 5-way switches
+        - label: Combos
+        - label: Tri-layer / system layer
+        - label: Vial
+        - label: BLE profile controls
+        - label: Right IQS9151 cursor
+        - label: Left IQS9151 cursor
+        - label: Two-finger scroll
+        - label: Pinch
+        - label: Tap / tap-drag
+        - label: Three-finger gestures
+        - label: Charge LED / RGB LED
+  - type: textarea
+    id: observations
+    attributes:
+      label: Observations
+      description: Include axis direction, sensitivity, scroll/pinch feel, LED polarity, and battery behavior.
+    validations:
+      required: true

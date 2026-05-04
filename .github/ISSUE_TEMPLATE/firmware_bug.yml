@@ -1,0 +1,65 @@
+name: Firmware bug
+description: Report a firmware, flashing, keymap, split, BLE, or trackpad bug.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for testing the LaLaPad Gen2 RMK community firmware.
+        Please remove the old BLE pairing and test matching left/right artifacts from the same release before filing.
+  - type: input
+    id: version
+    attributes:
+      label: Firmware version
+      description: Release tag, commit SHA, or artifact name.
+      placeholder: v0.1.0 or 0b105a2
+    validations:
+      required: true
+  - type: dropdown
+    id: half
+    attributes:
+      label: Affected half
+      options:
+        - Right central
+        - Left peripheral
+        - Both halves
+        - Not sure
+    validations:
+      required: true
+  - type: dropdown
+    id: connection
+    attributes:
+      label: Connection
+      options:
+        - BLE
+        - USB
+        - Web flasher
+        - Not sure
+    validations:
+      required: true
+  - type: input
+    id: host
+    attributes:
+      label: Host OS / browser
+      placeholder: Windows 11 + Chrome, macOS, Linux, etc.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-checks
+      options:
+        - label: I flashed matching central/peripheral artifacts from the same release.
+        - label: I removed the old BLE pairing before testing over BLE.
+        - label: Ordinary matrix keys work before testing the trackpad.
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction steps
+      description: What did you do, what happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Additional notes
+      description: Hardware observations, videos, screenshots, logs, or workarounds.

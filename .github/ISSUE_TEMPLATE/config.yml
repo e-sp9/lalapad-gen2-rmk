@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Hardware check guide
+    url: https://github.com/e-sp9/lalapad-gen2-rmk/blob/main/docs/TRACKPAD_HARDWARE_CHECK.md
+    about: Use this checklist before reporting IQS9151 trackpad hardware issues.
