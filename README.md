@@ -10,13 +10,11 @@ Current scope:
 - 42 keyboard keys plus the two 5-way switches
 - Vial definition for the physical key matrix and trackpad virtual positions
 - Keymap positions for the upstream trackpad button/gesture bindings
-- Experimental IQS9151 cursor, scroll, tap/swipe, pinch, inertia, and dynamic scaling support
-- Upstream BLE TX power and charge-indicator pin configuration
+- Experimental IQS9151 cursor, scroll, tap/swipe, pinch, inertia, tap-drag, and dynamic scaling support
+- Upstream BLE TX power, charge-indicator pin configuration, and RGB LED status widget behavior
 
 Not yet ported:
 
-- Exact ZMK deferred tap-drag press-hold timing for IQS9151 taps
-- RGBLED battery/layer widgets from the upstream ZMK firmware
 - Hardware tuning for final IQS9151 axes, speed, thresholds, and battery behavior
 
 ## Build

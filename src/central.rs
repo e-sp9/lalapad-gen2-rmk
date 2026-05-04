@@ -9,11 +9,34 @@ mod keyboard_central {
         Iqs9151InputDevice, Iqs9151KeyboardController, Iqs9151MotionOutput, Iqs9151ReadyPin,
         Iqs9151SplitEventController, TrackpadSide,
     };
+    use lalapad_gen2_rmk::rgb_widget::RgbLedWidget;
+    use rmk::controller::PollingController;
     use static_cell::StaticCell;
 
     #[controller(event)]
     fn split_trackpad_events() {
         Iqs9151SplitEventController::new()
+    }
+
+    #[controller(poll)]
+    fn rgb_led_widget() {
+        let red = ::embassy_nrf::gpio::Output::new(
+            p.P1_03,
+            ::embassy_nrf::gpio::Level::High,
+            ::embassy_nrf::gpio::OutputDrive::Standard,
+        );
+        let green = ::embassy_nrf::gpio::Output::new(
+            p.P1_05,
+            ::embassy_nrf::gpio::Level::High,
+            ::embassy_nrf::gpio::OutputDrive::Standard,
+        );
+        let blue = ::embassy_nrf::gpio::Output::new(
+            p.P1_07,
+            ::embassy_nrf::gpio::Level::High,
+            ::embassy_nrf::gpio::OutputDrive::Standard,
+        );
+
+        RgbLedWidget::new(red, green, blue, true, true)
     }
 
     #[controller(event)]

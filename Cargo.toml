@@ -48,6 +48,7 @@ embassy-executor = { version = "0.9", features = [
     "arch-cortex-m",
     "executor-thread",
 ] }
+embedded-hal = "1.0"
 usbd-hid = "0.9"
 defmt = "1.0"
 defmt-rtt = "1.0"

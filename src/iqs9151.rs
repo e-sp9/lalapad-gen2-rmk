@@ -1218,6 +1218,19 @@ where
                                 self.pending_click =
                                     Some(TrackpadClickEvents::new(self.side, button));
                             }
+                            TrackpadGestureEvent::ReleaseAndClick(button) => {
+                                self.pending_click =
+                                    Some(TrackpadClickEvents::new(self.side, button));
+                                if let Some(event) = self.handle_trackpad_button(button, false) {
+                                    self.finish_frame_runtime(
+                                        previous_finger_count,
+                                        current_finger_count,
+                                        now_ms,
+                                        false,
+                                    );
+                                    return event;
+                                }
+                            }
                             TrackpadGestureEvent::Scroll(delta) => {
                                 if let Some(event) = self.record_active_scroll(delta, now_ms) {
                                     self.finish_frame_runtime(
@@ -1256,6 +1269,7 @@ where
                                     return event;
                                 }
                             }
+                            TrackpadGestureEvent::DeferredHoldPending => {}
                         }
                         self.finish_frame_runtime(
                             previous_finger_count,
@@ -2270,21 +2284,27 @@ pub enum TrackpadGestureEvent {
         button: TrackpadButton,
         pressed: bool,
     },
+    ReleaseAndClick(TrackpadButton),
     Click(TrackpadButton),
     Scroll(TrackpadScrollDelta),
     ScrollEnded,
     PinchStarted(i16),
     PinchWheel(i16),
+    DeferredHoldPending,
 }
 
 impl TrackpadGestureEvent {
     pub fn button_events(self, side: TrackpadSide) -> TrackpadClickEvents {
         match self {
             Self::Button { .. } => TrackpadClickEvents::empty(side),
-            Self::Click(button) => TrackpadClickEvents::new(side, button),
-            Self::Scroll(_) | Self::ScrollEnded | Self::PinchStarted(_) | Self::PinchWheel(_) => {
-                TrackpadClickEvents::empty(side)
+            Self::ReleaseAndClick(button) | Self::Click(button) => {
+                TrackpadClickEvents::new(side, button)
             }
+            Self::Scroll(_)
+            | Self::ScrollEnded
+            | Self::PinchStarted(_)
+            | Self::PinchWheel(_)
+            | Self::DeferredHoldPending => TrackpadClickEvents::empty(side),
         }
     }
 }
@@ -2690,6 +2710,13 @@ pub struct TrackpadGestureRecognizer {
     three_finger_one_lead_valid: bool,
     three_finger_two_lead_valid: bool,
     suppress_cursor_tail: bool,
+    hold_button: Option<TrackpadButton>,
+    one_finger_click_pending: bool,
+    one_finger_click_pending_ms: u32,
+    two_finger_click_pending: bool,
+    two_finger_click_pending_ms: u32,
+    three_finger_click_pending: bool,
+    three_finger_click_pending_ms: u32,
 }
 
 impl TrackpadGestureRecognizer {
@@ -2705,6 +2732,13 @@ impl TrackpadGestureRecognizer {
             three_finger_one_lead_valid: false,
             three_finger_two_lead_valid: false,
             suppress_cursor_tail: false,
+            hold_button: None,
+            one_finger_click_pending: false,
+            one_finger_click_pending_ms: 0,
+            two_finger_click_pending: false,
+            two_finger_click_pending_ms: 0,
+            three_finger_click_pending: false,
+            three_finger_click_pending_ms: 0,
         }
     }
 
@@ -2726,10 +2760,150 @@ impl TrackpadGestureRecognizer {
         self.three_finger_one_lead_valid = false;
         self.three_finger_two_lead_valid = false;
         self.suppress_cursor_tail = false;
+        self.hold_button = None;
+        self.clear_one_finger_click_pending();
+        self.clear_two_finger_click_pending();
+        self.clear_three_finger_click_pending();
     }
 
     pub const fn cursor_suppressed(self) -> bool {
         self.suppress_cursor_tail
+    }
+
+    fn clear_one_finger_click_pending(&mut self) {
+        self.one_finger_click_pending = false;
+        self.one_finger_click_pending_ms = 0;
+    }
+
+    fn clear_two_finger_click_pending(&mut self) {
+        self.two_finger_click_pending = false;
+        self.two_finger_click_pending_ms = 0;
+    }
+
+    fn clear_three_finger_click_pending(&mut self) {
+        self.three_finger_click_pending = false;
+        self.three_finger_click_pending_ms = 0;
+    }
+
+    fn arm_deferred_hold(&mut self, button: TrackpadButton, now_ms: u32) {
+        match button {
+            TrackpadButton::LeftClick => {
+                self.one_finger_click_pending = true;
+                self.one_finger_click_pending_ms = now_ms;
+            }
+            TrackpadButton::RightClick => {
+                self.two_finger_click_pending = true;
+                self.two_finger_click_pending_ms = now_ms;
+            }
+            TrackpadButton::MiddleClick => {
+                self.three_finger_click_pending = true;
+                self.three_finger_click_pending_ms = now_ms;
+            }
+            TrackpadButton::GestureLeft
+            | TrackpadButton::GestureRight
+            | TrackpadButton::GestureUp
+            | TrackpadButton::GestureDown
+            | TrackpadButton::Pinch => {}
+        }
+    }
+
+    fn emit_hold_press(
+        &mut self,
+        button: TrackpadButton,
+        now_ms: u32,
+    ) -> Option<TrackpadGestureEvent> {
+        if let Some(held) = self.hold_button {
+            self.hold_button = None;
+            return Some(TrackpadGestureEvent::Button {
+                button: held,
+                pressed: false,
+            });
+        }
+
+        self.hold_button = Some(button);
+        self.arm_deferred_hold(button, now_ms);
+        Some(TrackpadGestureEvent::Button {
+            button,
+            pressed: true,
+        })
+    }
+
+    fn release_hold(&mut self, button: TrackpadButton) -> Option<TrackpadGestureEvent> {
+        if self.hold_button != Some(button) {
+            return None;
+        }
+
+        self.hold_button = None;
+        Some(TrackpadGestureEvent::Button {
+            button,
+            pressed: false,
+        })
+    }
+
+    fn release_hold_and_click(&mut self, button: TrackpadButton) -> TrackpadGestureEvent {
+        if self.hold_button == Some(button) {
+            self.hold_button = None;
+            TrackpadGestureEvent::ReleaseAndClick(button)
+        } else {
+            TrackpadGestureEvent::Click(button)
+        }
+    }
+
+    fn release_pending_deferred_holds(
+        &mut self,
+        finger_count: u8,
+        now_ms: u32,
+    ) -> Option<TrackpadGestureEvent> {
+        if self.one_finger_click_pending {
+            let elapsed_ms = now_ms.wrapping_sub(self.one_finger_click_pending_ms);
+            if finger_count > 1
+                || (finger_count == 1 && elapsed_ms > ONE_FINGER_TAPDRAG_GAP_MAX_MS)
+                || (finger_count == 0 && elapsed_ms >= ONE_FINGER_TAPDRAG_GAP_MAX_MS)
+            {
+                self.clear_one_finger_click_pending();
+                if let Some(event) = self.release_hold(TrackpadButton::LeftClick) {
+                    return Some(event);
+                }
+            }
+        }
+
+        if self.two_finger_click_pending {
+            let elapsed_ms = now_ms.wrapping_sub(self.two_finger_click_pending_ms);
+            if finger_count > 2
+                || (finger_count == 2 && elapsed_ms > TWO_FINGER_TAPDRAG_GAP_MAX_MS)
+                || (finger_count == 0 && elapsed_ms >= TWO_FINGER_TAPDRAG_GAP_MAX_MS)
+            {
+                self.clear_two_finger_click_pending();
+                if let Some(event) = self.release_hold(TrackpadButton::RightClick) {
+                    return Some(event);
+                }
+            }
+        }
+
+        if self.three_finger_click_pending {
+            let elapsed_ms = now_ms.wrapping_sub(self.three_finger_click_pending_ms);
+            if finger_count == 3 && elapsed_ms > THREE_FINGER_TAPDRAG_GAP_MAX_MS {
+                self.clear_three_finger_click_pending();
+                if let Some(event) = self.release_hold(TrackpadButton::MiddleClick) {
+                    return Some(event);
+                }
+            } else if finger_count != 0 && finger_count != 3 {
+                if elapsed_ms < THREE_FINGER_TAPDRAG_GAP_MAX_MS {
+                    return Some(TrackpadGestureEvent::DeferredHoldPending);
+                }
+                self.clear_three_finger_click_pending();
+                if let Some(event) = self.release_hold(TrackpadButton::MiddleClick) {
+                    return Some(event);
+                }
+            } else if finger_count == 0 && elapsed_ms >= THREE_FINGER_TAPDRAG_GAP_MAX_MS {
+                self.clear_three_finger_click_pending();
+                if let Some(event) = self.release_hold(TrackpadButton::MiddleClick) {
+                    return Some(event);
+                }
+            }
+        }
+
+        None
     }
 
     pub fn update(&mut self, frame: CoordinateFrame, now_ms: u32) -> Option<TrackpadGestureEvent> {
@@ -2760,13 +2934,8 @@ impl TrackpadGestureRecognizer {
             self.suppress_cursor_tail = false;
         }
 
-        if self.one_finger.drag_active && finger_count != 1 {
-            self.one_finger.reset();
-            self.suppress_cursor_tail = true;
-            return Some(TrackpadGestureEvent::Button {
-                button: TrackpadButton::LeftClick,
-                pressed: false,
-            });
+        if let Some(event) = self.release_pending_deferred_holds(finger_count, now_ms) {
+            return Some(event);
         }
 
         if finger_count == 3 && self.one_finger.active {
@@ -2775,6 +2944,11 @@ impl TrackpadGestureRecognizer {
                 THREE_FINGER_ONE_LEAD_MAX_MS,
                 self.config.one_finger_tap_move,
             );
+            if self.one_finger.hold_sent {
+                self.one_finger.reset();
+                self.suppress_cursor_tail = true;
+                return self.release_hold(TrackpadButton::LeftClick);
+            }
             self.one_finger.reset();
         } else {
             self.three_finger_one_lead_valid = false;
@@ -2786,7 +2960,25 @@ impl TrackpadGestureRecognizer {
                 THREE_FINGER_TWO_LEAD_MAX_MS,
                 self.config.two_finger_tap_move,
             );
+            if self.two_finger.mode == TwoFingerMode::Scroll {
+                event = Some(TrackpadGestureEvent::ScrollEnded);
+            } else if self.two_finger.mode == TwoFingerMode::Pinch {
+                event = Some(TrackpadGestureEvent::Button {
+                    button: TrackpadButton::Pinch,
+                    pressed: false,
+                });
+            }
+            if self.two_finger.hold_sent {
+                self.two_finger.reset();
+                self.two_finger_one_lead_valid = false;
+                self.suppress_cursor_tail = true;
+                return self.release_hold(TrackpadButton::RightClick);
+            }
             self.two_finger.reset();
+            self.two_finger_one_lead_valid = false;
+            if event.is_some() {
+                return event;
+            }
         } else {
             self.three_finger_two_lead_valid = false;
         }
@@ -2797,6 +2989,11 @@ impl TrackpadGestureRecognizer {
                 TWO_FINGER_ONE_LEAD_MAX_MS,
                 self.config.one_finger_tap_move,
             );
+            if self.one_finger.hold_sent {
+                self.one_finger.reset();
+                self.suppress_cursor_tail = true;
+                return self.release_hold(TrackpadButton::LeftClick);
+            }
             self.one_finger.reset();
         } else if finger_count != 2 {
             self.two_finger_one_lead_valid = false;
@@ -2818,7 +3015,9 @@ impl TrackpadGestureRecognizer {
 
         match finger_count {
             1 if self.two_finger.release_pending => None,
+            1 if self.three_finger.release_pending => None,
             1 => self.update_one_finger(frame, prev_frame, now_ms),
+            2 if self.three_finger.release_pending => None,
             2 => self.update_two_finger(frame, prev_frame, now_ms),
             3 => self.update_three_finger(frame, prev_frame, now_ms),
             _ => None,
@@ -2841,14 +3040,24 @@ impl TrackpadGestureRecognizer {
                 return None;
             };
 
+            let tapdrag_second_touch = if self.one_finger_click_pending {
+                let elapsed_ms = now_ms.wrapping_sub(self.one_finger_click_pending_ms);
+                self.clear_one_finger_click_pending();
+                elapsed_ms <= ONE_FINGER_TAPDRAG_GAP_MAX_MS
+            } else {
+                false
+            };
+
             self.one_finger.start(
                 now_ms,
                 x,
                 y,
-                prev_frame.finger_count() == 0
-                    || self
-                        .finger_history
-                        .has_recent(0, now_ms, TAP_REENTRY_WINDOW_MS),
+                !tapdrag_second_touch
+                    && (prev_frame.finger_count() == 0
+                        || self
+                            .finger_history
+                            .has_recent(0, now_ms, TAP_REENTRY_WINDOW_MS)),
+                tapdrag_second_touch,
             );
             return None;
         }
@@ -2861,20 +3070,12 @@ impl TrackpadGestureRecognizer {
             if let Some((x, y)) = have_xy {
                 self.one_finger.update_position(x, y);
             }
-            if self.one_finger.drag_hold_ready(
-                now_ms,
-                self.config.one_finger_drag_hold_ms,
-                self.config.one_finger_tap_move,
-            ) {
-                self.one_finger.drag_active = true;
-                self.one_finger.tap_candidate = false;
-                self.suppress_cursor_tail = false;
-                return Some(TrackpadGestureEvent::Button {
-                    button: TrackpadButton::LeftClick,
-                    pressed: true,
-                });
-            }
             self.one_finger.cancel_tap_if_needed(
+                now_ms,
+                self.config.one_finger_tap_max_ms,
+                self.config.one_finger_tap_move,
+            );
+            self.one_finger.cancel_hold_if_needed(
                 now_ms,
                 self.config.one_finger_tap_max_ms,
                 self.config.one_finger_tap_move,
@@ -2882,18 +3083,39 @@ impl TrackpadGestureRecognizer {
             return None;
         }
 
-        let event = if frame.finger_count() == 0
+        if self.one_finger.tapdrag_second_touch {
+            let second_tap_detected = frame.finger_count() == 0
+                && self.one_finger.hold_valid(
+                    now_ms,
+                    self.config.one_finger_tap_max_ms,
+                    self.config.one_finger_tap_move,
+                );
+            let hold_sent = self.one_finger.hold_sent;
+            self.one_finger.reset();
+            self.suppress_cursor_tail = true;
+            return if hold_sent {
+                if second_tap_detected {
+                    Some(self.release_hold_and_click(TrackpadButton::LeftClick))
+                } else {
+                    self.release_hold(TrackpadButton::LeftClick)
+                }
+            } else {
+                None
+            };
+        }
+
+        let tap_detected = frame.finger_count() == 0
             && self.one_finger.tap_valid(
                 now_ms,
                 self.config.one_finger_tap_max_ms,
                 self.config.one_finger_tap_move,
-            ) {
-            Some(TrackpadGestureEvent::Click(TrackpadButton::LeftClick))
+            );
+        self.one_finger.reset();
+        if tap_detected {
+            self.emit_hold_press(TrackpadButton::LeftClick, now_ms)
         } else {
             None
-        };
-        self.one_finger.reset();
-        event
+        }
     }
 
     fn update_two_finger(
@@ -2912,14 +3134,24 @@ impl TrackpadGestureRecognizer {
                 return None;
             };
 
+            let tapdrag_second_touch = if self.two_finger_click_pending {
+                let elapsed_ms = now_ms.wrapping_sub(self.two_finger_click_pending_ms);
+                self.clear_two_finger_click_pending();
+                elapsed_ms <= TWO_FINGER_TAPDRAG_GAP_MAX_MS
+            } else {
+                false
+            };
+
             self.two_finger.start(
                 now_ms,
                 metrics,
-                prev_frame.finger_count() == 0
-                    || self
-                        .finger_history
-                        .has_recent(0, now_ms, TAP_REENTRY_WINDOW_MS)
-                    || self.two_finger_one_lead_valid,
+                !tapdrag_second_touch
+                    && (prev_frame.finger_count() == 0
+                        || self
+                            .finger_history
+                            .has_recent(0, now_ms, TAP_REENTRY_WINDOW_MS)
+                        || self.two_finger_one_lead_valid),
+                tapdrag_second_touch,
             );
             self.two_finger_one_lead_valid = false;
             return None;
@@ -2942,6 +3174,14 @@ impl TrackpadGestureRecognizer {
                 self.config.two_finger_tap_max_ms,
                 self.config.two_finger_tap_move,
             );
+            self.two_finger.cancel_hold_if_needed(
+                now_ms,
+                self.config.two_finger_tap_max_ms,
+                self.config.two_finger_tap_move,
+            );
+            if self.two_finger.tapdrag_second_touch {
+                return None;
+            }
             self.two_finger.classify_mode();
             self.two_finger.release_pending = false;
             if self.two_finger.mode == TwoFingerMode::Scroll {
@@ -2972,19 +3212,19 @@ impl TrackpadGestureRecognizer {
                 return None;
             }
 
-            let event = if frame.finger_count() == 0
+            let tap_detected = frame.finger_count() == 0
                 && pending_ms <= TWO_FINGER_RELEASE_PENDING_MAX_MS
                 && self.two_finger.tap_valid(
                     now_ms,
                     self.config.two_finger_tap_max_ms,
                     self.config.two_finger_tap_move,
-                ) {
-                Some(TrackpadGestureEvent::Click(TrackpadButton::RightClick))
+                );
+            self.two_finger.reset();
+            return if tap_detected {
+                self.emit_hold_press(TrackpadButton::RightClick, now_ms)
             } else {
                 None
             };
-            self.two_finger.reset();
-            return event;
         }
 
         if self.two_finger.mode == TwoFingerMode::Scroll {
@@ -3001,6 +3241,32 @@ impl TrackpadGestureRecognizer {
             });
         }
 
+        if self.two_finger.tapdrag_second_touch {
+            let second_tap_detected = frame.finger_count() == 0
+                && self.two_finger.hold_valid(
+                    now_ms,
+                    self.config.two_finger_tap_max_ms,
+                    self.config.two_finger_tap_move,
+                );
+            if frame.finger_count() > 0 {
+                self.two_finger.hold_candidate = false;
+                return None;
+            }
+
+            let hold_sent = self.two_finger.hold_sent;
+            self.two_finger.reset();
+            self.suppress_cursor_tail = true;
+            return if hold_sent {
+                if second_tap_detected {
+                    Some(self.release_hold_and_click(TrackpadButton::RightClick))
+                } else {
+                    self.release_hold(TrackpadButton::RightClick)
+                }
+            } else {
+                None
+            };
+        }
+
         if self.two_finger.tap_valid(
             now_ms,
             self.config.two_finger_tap_max_ms,
@@ -3015,7 +3281,7 @@ impl TrackpadGestureRecognizer {
                 }
                 0 => {
                     self.two_finger.reset();
-                    return Some(TrackpadGestureEvent::Click(TrackpadButton::RightClick));
+                    return self.emit_hold_press(TrackpadButton::RightClick, now_ms);
                 }
                 _ => {}
             }
@@ -3041,16 +3307,26 @@ impl TrackpadGestureRecognizer {
                 return None;
             };
 
+            let tapdrag_second_touch = if self.three_finger_click_pending {
+                let elapsed_ms = now_ms.wrapping_sub(self.three_finger_click_pending_ms);
+                self.clear_three_finger_click_pending();
+                elapsed_ms <= THREE_FINGER_TAPDRAG_GAP_MAX_MS
+            } else {
+                false
+            };
+
             self.three_finger.start(
                 now_ms,
                 x,
                 y,
-                prev_frame.finger_count() == 0
-                    || self
-                        .finger_history
-                        .has_recent(0, now_ms, TAP_REENTRY_WINDOW_MS)
-                    || self.three_finger_one_lead_valid
-                    || self.three_finger_two_lead_valid,
+                !tapdrag_second_touch
+                    && (prev_frame.finger_count() == 0
+                        || self
+                            .finger_history
+                            .has_recent(0, now_ms, TAP_REENTRY_WINDOW_MS)
+                        || self.three_finger_one_lead_valid
+                        || self.three_finger_two_lead_valid),
+                tapdrag_second_touch,
             );
             self.three_finger_one_lead_valid = false;
             self.three_finger_two_lead_valid = false;
@@ -3075,7 +3351,16 @@ impl TrackpadGestureRecognizer {
                 self.config.three_finger_tap_max_ms,
                 self.config.three_finger_tap_move,
             );
-            if !self.three_finger.swipe_sent {
+            self.three_finger.cancel_hold_if_needed(
+                now_ms,
+                self.config.three_finger_tap_max_ms,
+                self.config.three_finger_tap_move,
+            );
+            if self.three_finger.tapdrag_second_touch {
+                return None;
+            }
+            self.three_finger.release_pending = false;
+            if !self.three_finger.swipe_sent && !self.three_finger.hold_sent {
                 if let Some(button) = self
                     .three_finger
                     .swipe_button(self.config.three_finger_swipe_move)
@@ -3088,19 +3373,82 @@ impl TrackpadGestureRecognizer {
             return None;
         }
 
-        let event = if frame.finger_count() == 0
+        if self.three_finger.tapdrag_second_touch {
+            let second_tap_detected = frame.finger_count() == 0
+                && self.three_finger.hold_valid(
+                    now_ms,
+                    self.config.three_finger_tap_max_ms,
+                    self.config.three_finger_tap_move,
+                );
+            if frame.finger_count() > 0 {
+                self.three_finger.hold_candidate = false;
+                return None;
+            }
+
+            let hold_sent = self.three_finger.hold_sent;
+            self.three_finger.reset();
+            self.suppress_cursor_tail = true;
+            return if hold_sent {
+                if second_tap_detected {
+                    Some(self.release_hold_and_click(TrackpadButton::MiddleClick))
+                } else {
+                    self.release_hold(TrackpadButton::MiddleClick)
+                }
+            } else {
+                None
+            };
+        }
+
+        if self.three_finger.release_pending {
+            let pending_ms = now_ms.wrapping_sub(self.three_finger.release_pending_ms);
+            if frame.finger_count() > 0
+                && frame.finger_count() < 3
+                && pending_ms <= THREE_FINGER_RELEASE_PENDING_MAX_MS
+            {
+                self.suppress_cursor_tail = true;
+                return None;
+            }
+
+            let tap_detected = frame.finger_count() == 0
+                && pending_ms <= THREE_FINGER_RELEASE_PENDING_MAX_MS
+                && !self.three_finger.hold_sent
+                && !self.three_finger.swipe_sent
+                && self.three_finger.tap_valid(
+                    now_ms,
+                    self.config.three_finger_tap_max_ms,
+                    self.config.three_finger_tap_move,
+                );
+            self.three_finger.reset();
+            return if tap_detected {
+                self.emit_hold_press(TrackpadButton::MiddleClick, now_ms)
+            } else {
+                None
+            };
+        }
+
+        if !self.three_finger.hold_sent
             && !self.three_finger.swipe_sent
             && self.three_finger.tap_valid(
                 now_ms,
                 self.config.three_finger_tap_max_ms,
                 self.config.three_finger_tap_move,
-            ) {
-            Some(TrackpadGestureEvent::Click(TrackpadButton::MiddleClick))
-        } else {
-            None
-        };
+            )
+        {
+            if frame.finger_count() > 0 && frame.finger_count() < 3 {
+                self.three_finger.release_pending = true;
+                self.three_finger.release_pending_ms = now_ms;
+                self.suppress_cursor_tail = true;
+                return None;
+            }
+
+            if frame.finger_count() == 0 {
+                self.three_finger.reset();
+                return self.emit_hold_press(TrackpadButton::MiddleClick, now_ms);
+            }
+        }
+
         self.three_finger.reset();
-        event
+        None
     }
 
     fn update_prev_frame(&mut self, frame: CoordinateFrame, prev_frame: CoordinateFrame) {
@@ -3134,8 +3482,10 @@ impl TrackpadGestureRecognizer {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct OneFingerState {
     active: bool,
+    hold_sent: bool,
     tap_candidate: bool,
-    drag_active: bool,
+    hold_candidate: bool,
+    tapdrag_second_touch: bool,
     down_ms: u32,
     dx: i32,
     dy: i32,
@@ -3147,8 +3497,10 @@ impl OneFingerState {
     pub const fn new() -> Self {
         Self {
             active: false,
+            hold_sent: false,
             tap_candidate: false,
-            drag_active: false,
+            hold_candidate: false,
+            tapdrag_second_touch: false,
             down_ms: 0,
             dx: 0,
             dy: 0,
@@ -3161,10 +3513,19 @@ impl OneFingerState {
         *self = Self::new();
     }
 
-    fn start(&mut self, now_ms: u32, x: i32, y: i32, tap_candidate: bool) {
+    fn start(
+        &mut self,
+        now_ms: u32,
+        x: i32,
+        y: i32,
+        tap_candidate: bool,
+        tapdrag_second_touch: bool,
+    ) {
         self.active = true;
+        self.hold_sent = tapdrag_second_touch;
         self.tap_candidate = tap_candidate;
-        self.drag_active = false;
+        self.hold_candidate = tapdrag_second_touch;
+        self.tapdrag_second_touch = tapdrag_second_touch;
         self.down_ms = now_ms;
         self.dx = 0;
         self.dy = 0;
@@ -3185,16 +3546,21 @@ impl OneFingerState {
         }
     }
 
-    fn drag_hold_ready(self, now_ms: u32, hold_ms: u32, move_threshold: u16) -> bool {
-        self.tap_candidate
-            && !self.drag_active
-            && now_ms.wrapping_sub(self.down_ms) >= hold_ms
-            && abs_i32(self.dx) <= i32::from(move_threshold)
-            && abs_i32(self.dy) <= i32::from(move_threshold)
+    fn cancel_hold_if_needed(&mut self, now_ms: u32, max_ms: u32, move_threshold: u16) {
+        if !self.hold_valid(now_ms, max_ms, move_threshold) {
+            self.hold_candidate = false;
+        }
     }
 
     fn tap_valid(self, now_ms: u32, max_ms: u32, move_threshold: u16) -> bool {
         self.tap_candidate
+            && now_ms.wrapping_sub(self.down_ms) <= max_ms
+            && abs_i32(self.dx) <= i32::from(move_threshold)
+            && abs_i32(self.dy) <= i32::from(move_threshold)
+    }
+
+    fn hold_valid(self, now_ms: u32, max_ms: u32, move_threshold: u16) -> bool {
+        self.hold_candidate
             && now_ms.wrapping_sub(self.down_ms) <= max_ms
             && abs_i32(self.dx) <= i32::from(move_threshold)
             && abs_i32(self.dy) <= i32::from(move_threshold)
@@ -3223,7 +3589,10 @@ struct TwoFingerStep {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct TwoFingerState {
     active: bool,
+    hold_sent: bool,
     tap_candidate: bool,
+    hold_candidate: bool,
+    tapdrag_second_touch: bool,
     release_pending: bool,
     down_ms: u32,
     release_pending_ms: u32,
@@ -3242,7 +3611,10 @@ impl TwoFingerState {
     pub const fn new() -> Self {
         Self {
             active: false,
+            hold_sent: false,
             tap_candidate: false,
+            hold_candidate: false,
+            tapdrag_second_touch: false,
             release_pending: false,
             down_ms: 0,
             release_pending_ms: 0,
@@ -3262,9 +3634,18 @@ impl TwoFingerState {
         *self = Self::new();
     }
 
-    fn start(&mut self, now_ms: u32, metrics: TwoFingerMetrics, tap_candidate: bool) {
+    fn start(
+        &mut self,
+        now_ms: u32,
+        metrics: TwoFingerMetrics,
+        tap_candidate: bool,
+        tapdrag_second_touch: bool,
+    ) {
         self.active = true;
+        self.hold_sent = tapdrag_second_touch;
         self.tap_candidate = tap_candidate;
+        self.hold_candidate = tapdrag_second_touch;
+        self.tapdrag_second_touch = tapdrag_second_touch;
         self.release_pending = false;
         self.down_ms = now_ms;
         self.release_pending_ms = 0;
@@ -3301,6 +3682,12 @@ impl TwoFingerState {
     fn cancel_tap_if_needed(&mut self, now_ms: u32, max_ms: u32, move_threshold: u16) {
         if !self.tap_valid(now_ms, max_ms, move_threshold) {
             self.tap_candidate = false;
+        }
+    }
+
+    fn cancel_hold_if_needed(&mut self, now_ms: u32, max_ms: u32, move_threshold: u16) {
+        if !self.hold_valid(now_ms, max_ms, move_threshold) {
+            self.hold_candidate = false;
         }
     }
 
@@ -3346,6 +3733,15 @@ impl TwoFingerState {
             && abs_i32(self.distance_delta) <= i32::from(move_threshold)
     }
 
+    fn hold_valid(self, now_ms: u32, max_ms: u32, move_threshold: u16) -> bool {
+        self.hold_candidate
+            && self.mode == TwoFingerMode::None
+            && now_ms.wrapping_sub(self.down_ms) <= max_ms
+            && abs_i32(self.centroid_dx) <= i32::from(move_threshold)
+            && abs_i32(self.centroid_dy) <= i32::from(move_threshold)
+            && abs_i32(self.distance_delta) <= i32::from(move_threshold)
+    }
+
     fn tap_lead_valid(self, now_ms: u32, max_ms: u32, move_threshold: u16) -> bool {
         self.tap_valid(now_ms, max_ms, move_threshold)
     }
@@ -3354,8 +3750,13 @@ impl TwoFingerState {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct ThreeFingerState {
     active: bool,
+    hold_sent: bool,
     tap_candidate: bool,
+    hold_candidate: bool,
+    tapdrag_second_touch: bool,
+    release_pending: bool,
     down_ms: u32,
+    release_pending_ms: u32,
     dx: i32,
     dy: i32,
     last_x: i32,
@@ -3373,8 +3774,13 @@ impl ThreeFingerState {
     pub const fn new() -> Self {
         Self {
             active: false,
+            hold_sent: false,
             tap_candidate: false,
+            hold_candidate: false,
+            tapdrag_second_touch: false,
+            release_pending: false,
             down_ms: 0,
+            release_pending_ms: 0,
             dx: 0,
             dy: 0,
             last_x: 0,
@@ -3393,10 +3799,22 @@ impl ThreeFingerState {
         *self = Self::new();
     }
 
-    fn start(&mut self, now_ms: u32, x: i32, y: i32, tap_candidate: bool) {
+    fn start(
+        &mut self,
+        now_ms: u32,
+        x: i32,
+        y: i32,
+        tap_candidate: bool,
+        tapdrag_second_touch: bool,
+    ) {
         self.active = true;
+        self.hold_sent = tapdrag_second_touch;
         self.tap_candidate = tap_candidate;
+        self.hold_candidate = tapdrag_second_touch;
+        self.tapdrag_second_touch = tapdrag_second_touch;
+        self.release_pending = false;
         self.down_ms = now_ms;
+        self.release_pending_ms = 0;
         self.dx = 0;
         self.dy = 0;
         self.last_x = x;
@@ -3434,8 +3852,21 @@ impl ThreeFingerState {
         }
     }
 
+    fn cancel_hold_if_needed(&mut self, now_ms: u32, max_ms: u32, move_threshold: u16) {
+        if !self.hold_valid(now_ms, max_ms, move_threshold) {
+            self.hold_candidate = false;
+        }
+    }
+
     fn tap_valid(self, now_ms: u32, max_ms: u32, move_threshold: u16) -> bool {
         self.tap_candidate
+            && now_ms.wrapping_sub(self.down_ms) <= max_ms
+            && abs_i32(self.dx) <= i32::from(move_threshold)
+            && abs_i32(self.dy) <= i32::from(move_threshold)
+    }
+
+    fn hold_valid(self, now_ms: u32, max_ms: u32, move_threshold: u16) -> bool {
+        self.hold_candidate
             && now_ms.wrapping_sub(self.down_ms) <= max_ms
             && abs_i32(self.dx) <= i32::from(move_threshold)
             && abs_i32(self.dy) <= i32::from(move_threshold)
@@ -3481,7 +3912,11 @@ struct FingerHistory {
 }
 
 const TAP_REENTRY_WINDOW_MS: u32 = 30;
+const ONE_FINGER_TAPDRAG_GAP_MAX_MS: u32 = 160;
+const TWO_FINGER_TAPDRAG_GAP_MAX_MS: u32 = 200;
+const THREE_FINGER_TAPDRAG_GAP_MAX_MS: u32 = 200;
 const TWO_FINGER_RELEASE_PENDING_MAX_MS: u32 = 150;
+const THREE_FINGER_RELEASE_PENDING_MAX_MS: u32 = 150;
 const TWO_FINGER_ONE_LEAD_MAX_MS: u32 = 120;
 const THREE_FINGER_ONE_LEAD_MAX_MS: u32 = 120;
 const THREE_FINGER_TWO_LEAD_MAX_MS: u32 = 120;
@@ -3913,7 +4348,7 @@ mod tests {
     }
 
     #[test]
-    fn emits_left_click_for_one_finger_tap() {
+    fn defers_left_button_release_for_one_finger_tap() {
         let mut recognizer = TrackpadGestureRecognizer::with_defaults();
 
         assert_eq!(
@@ -3926,12 +4361,26 @@ mod tests {
         );
         assert_eq!(
             recognizer.update(frame_with_fingers(0, 0, 0, 0, 0), 1100),
-            Some(TrackpadGestureEvent::Click(TrackpadButton::LeftClick))
+            Some(TrackpadGestureEvent::Button {
+                button: TrackpadButton::LeftClick,
+                pressed: true,
+            })
+        );
+        assert_eq!(
+            recognizer.update(frame_with_fingers(0, 0, 0, 0, 0), 1259),
+            None
+        );
+        assert_eq!(
+            recognizer.update(frame_with_fingers(0, 0, 0, 0, 0), 1260),
+            Some(TrackpadGestureEvent::Button {
+                button: TrackpadButton::LeftClick,
+                pressed: false,
+            })
         );
     }
 
     #[test]
-    fn holds_left_button_for_stationary_one_finger_long_press() {
+    fn keeps_left_button_held_for_one_finger_tap_drag_reentry() {
         let mut recognizer = TrackpadGestureRecognizer::with_defaults();
 
         assert_eq!(
@@ -3939,14 +4388,18 @@ mod tests {
             None
         );
         assert_eq!(
-            recognizer.update(frame_with_fingers(1, 102, 201, 0, 0), 1220),
+            recognizer.update(frame_with_fingers(0, 0, 0, 0, 0), 1060),
             Some(TrackpadGestureEvent::Button {
                 button: TrackpadButton::LeftClick,
                 pressed: true,
             })
         );
         assert_eq!(
-            recognizer.update(frame_with_fingers(1, 104, 203, 0, 0), 1230),
+            recognizer.update(frame_with_fingers(1, 102, 201, 0, 0), 1120),
+            None
+        );
+        assert_eq!(
+            recognizer.update(frame_with_fingers(1, 190, 240, 0, 0), 1180),
             None
         );
         assert_eq!(
@@ -3972,7 +4425,17 @@ mod tests {
         );
         assert_eq!(
             recognizer.update(frame_with_fingers(0, 0, 0, 0, 0), 1100),
-            Some(TrackpadGestureEvent::Click(TrackpadButton::RightClick))
+            Some(TrackpadGestureEvent::Button {
+                button: TrackpadButton::RightClick,
+                pressed: true,
+            })
+        );
+        assert_eq!(
+            recognizer.update(frame_with_fingers(0, 0, 0, 0, 0), 1300),
+            Some(TrackpadGestureEvent::Button {
+                button: TrackpadButton::RightClick,
+                pressed: false,
+            })
         );
     }
 
@@ -4518,7 +4981,17 @@ mod tests {
         assert_eq!(recognizer.update(motion_frame, 1000), None);
         assert_eq!(
             recognizer.update(frame_with_fingers(0, 0, 0, 0, 0), 1050),
-            Some(TrackpadGestureEvent::Click(TrackpadButton::LeftClick))
+            Some(TrackpadGestureEvent::Button {
+                button: TrackpadButton::LeftClick,
+                pressed: true,
+            })
+        );
+        assert_eq!(
+            recognizer.update(frame_with_fingers(0, 0, 0, 0, 0), 1210),
+            Some(TrackpadGestureEvent::Button {
+                button: TrackpadButton::LeftClick,
+                pressed: false,
+            })
         );
     }
 
