@@ -186,6 +186,17 @@ const CUSTOM_EVENT_POINTER_MOTION: u8 = 1;
 const CUSTOM_EVENT_DYNAMIC_SCALE: u8 = 2;
 const CUSTOM_EVENT_PINCH_REPORT: u8 = 3;
 
+fn custom_event_payload(kind: u8) -> [u8; 16] {
+    let mut payload = [0u8; 16];
+    payload[0..4].copy_from_slice(&CUSTOM_EVENT_PREFIX);
+    payload[4] = kind;
+    payload
+}
+
+fn custom_event_is(payload: [u8; 16], kind: u8) -> bool {
+    payload[0..4] == CUSTOM_EVENT_PREFIX && payload[4] == kind
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Iqs9151Error<E> {
     Bus(E),
@@ -426,42 +437,7 @@ where
     }
 
     pub fn from_sensor(sensor: Iqs9151<I2C>, side: TrackpadSide) -> Self {
-        Self {
-            sensor,
-            ready: NoReadyPin,
-            side,
-            motion_output: Iqs9151MotionOutput::RmkEvent,
-            initialized: false,
-            recognizer: TrackpadGestureRecognizer::with_defaults(),
-            motion_config: TrackpadMotionConfig::default(),
-            scroll_config: TrackpadScrollConfig::default(),
-            motion_remainder_x: 0,
-            motion_remainder_y: 0,
-            scroll_remainder_x: 0,
-            scroll_remainder_y: 0,
-            scroll_smooth_x_fp: 0,
-            scroll_smooth_y_fp: 0,
-            cursor_history: ScrollMotionHistory::new(),
-            cursor_inertia: ScrollInertiaState::new(),
-            cursor_inertia_enabled: DEFAULT_CURSOR_INERTIA_ENABLED,
-            scroll_history: ScrollMotionHistory::new(),
-            scroll_inertia: ScrollInertiaState::new(),
-            pointer_buttons: 0,
-            virtual_buttons: TrackpadButtonState::new(side),
-            pending_virtual_buttons: None,
-            pending_click: None,
-            pinch_pressed: false,
-            pending_pinch_report: None,
-            pending_motion: None,
-            last_finger_count: 0,
-            poll_interval: Duration::from_millis(DEFAULT_POLL_INTERVAL_MS),
-            motion_interval: default_motion_interval(),
-            init_failure_count: 0,
-            read_error_count: 0,
-            degraded_mode: false,
-            diagnostic_motion_last_ms: 0,
-            diagnostic_motion_sign: 1,
-        }
+        Self::from_sensor_and_ready(sensor, NoReadyPin, side)
     }
 
     pub fn with_ready_pin<PIN>(
@@ -908,6 +884,18 @@ where
         self.scroll_inertia.reset();
     }
 
+    fn reset_sensor_runtime(&mut self, clear_pending_motion: bool) {
+        if clear_pending_motion {
+            self.pending_motion = None;
+        }
+        self.release_pinch_report();
+        self.release_pointer_buttons();
+        self.release_virtual_buttons();
+        self.recognizer.reset();
+        self.reset_cursor_runtime();
+        self.reset_scroll_runtime();
+    }
+
     fn smooth_scroll_delta(&mut self, delta: TrackpadScrollDelta) -> TrackpadScrollDelta {
         self.scroll_smooth_x_fp = smooth_scroll_axis(self.scroll_smooth_x_fp, delta.x);
         self.scroll_smooth_y_fp = smooth_scroll_axis(self.scroll_smooth_y_fp, delta.y);
@@ -977,20 +965,10 @@ where
 
         self.pointer_buttons = 0;
         let motion = TrackpadMotionEvent::button_state(self.side, 0);
-        match self.motion_output {
-            Iqs9151MotionOutput::RmkEvent => {
-                self.pending_motion = Some(motion);
-            }
-            Iqs9151MotionOutput::HidReport => {
-                if !send_mouse_motion_reports(motion) {
-                    self.queue_pending_motion(motion);
-                }
-            }
-            Iqs9151MotionOutput::SplitEvent => {
-                if !send_split_motion_event(motion) {
-                    self.queue_pending_motion(motion);
-                }
-            }
+        if self.motion_output == Iqs9151MotionOutput::RmkEvent {
+            self.pending_motion = Some(motion);
+        } else {
+            self.send_or_queue_motion(motion);
         }
     }
 
@@ -1034,16 +1012,8 @@ where
         let motion = motion.with_button_state(self.pointer_buttons).capped();
         match self.motion_output {
             Iqs9151MotionOutput::RmkEvent => Some(motion.into_rmk_event()),
-            Iqs9151MotionOutput::HidReport => {
-                if !send_mouse_motion_reports(motion) {
-                    self.queue_pending_motion(motion);
-                }
-                None
-            }
-            Iqs9151MotionOutput::SplitEvent => {
-                if !send_split_motion_event(motion) {
-                    self.queue_pending_motion(motion);
-                }
+            Iqs9151MotionOutput::HidReport | Iqs9151MotionOutput::SplitEvent => {
+                self.send_or_queue_motion(motion);
                 None
             }
         }
@@ -1054,13 +1024,15 @@ where
             return;
         };
 
-        let sent = match self.motion_output {
-            Iqs9151MotionOutput::RmkEvent => false,
-            Iqs9151MotionOutput::HidReport => send_mouse_motion_reports(motion),
-            Iqs9151MotionOutput::SplitEvent => send_split_motion_event(motion),
-        };
+        let sent = self.motion_output.try_send_motion(motion);
         if sent {
             self.pending_motion = None;
+        }
+    }
+
+    fn send_or_queue_motion(&mut self, motion: TrackpadMotionEvent) {
+        if !self.motion_output.try_send_motion(motion) {
+            self.queue_pending_motion(motion);
         }
     }
 
@@ -1160,13 +1132,7 @@ where
                 Ok(frame) => {
                     self.read_error_count = 0;
                     if frame.show_reset() {
-                        self.pending_motion = None;
-                        self.release_pinch_report();
-                        self.release_pointer_buttons();
-                        self.release_virtual_buttons();
-                        self.recognizer.reset();
-                        self.reset_cursor_runtime();
-                        self.reset_scroll_runtime();
+                        self.reset_sensor_runtime(true);
                         self.initialized = false;
                         self.degraded_mode = false;
                         continue;
@@ -1314,12 +1280,7 @@ where
                 }
                 Err(_) => {
                     self.read_error_count = self.read_error_count.saturating_add(1);
-                    self.release_pinch_report();
-                    self.release_pointer_buttons();
-                    self.release_virtual_buttons();
-                    self.recognizer.reset();
-                    self.reset_cursor_runtime();
-                    self.reset_scroll_runtime();
+                    self.reset_sensor_runtime(false);
                     if self.read_error_count >= MAX_RUNTIME_READ_ERRORS {
                         self.initialized = false;
                         self.degraded_mode = false;
@@ -1369,26 +1330,7 @@ where
     async fn process_event(&mut self, event: Self::Event) {
         match event {
             Event::Key(key_event) => KEY_EVENT_CHANNEL.send(key_event).await,
-            Event::Custom(payload) => match self.target {
-                Iqs9151ControllerTarget::HidReport => {
-                    if let Some(scale) = TrackpadDynamicScaleEvent::decode(payload) {
-                        scale.apply();
-                    } else if let Some(pinch) = TrackpadPinchReport::decode(payload) {
-                        process_pinch_report(pinch).await;
-                    } else if let Some(motion) = TrackpadMotionEvent::decode(payload) {
-                        send_mouse_motion_reports(motion);
-                    }
-                }
-                Iqs9151ControllerTarget::SplitEvent => {
-                    if let Some(scale) = TrackpadDynamicScaleEvent::decode(payload) {
-                        scale.apply();
-                    } else if TrackpadPinchReport::decode(payload).is_some() {
-                        send_split_custom_event(payload);
-                    } else if let Some(motion) = TrackpadMotionEvent::decode(payload) {
-                        send_split_motion_event(motion);
-                    }
-                }
-            },
+            Event::Custom(payload) => process_controller_custom_event(payload, self.target).await,
             _ => {}
         }
     }
@@ -1411,6 +1353,16 @@ pub enum Iqs9151MotionOutput {
     SplitEvent,
 }
 
+impl Iqs9151MotionOutput {
+    fn try_send_motion(self, motion: TrackpadMotionEvent) -> bool {
+        match self {
+            Self::RmkEvent => false,
+            Self::HidReport => send_mouse_motion_reports(motion),
+            Self::SplitEvent => send_split_motion_event(motion),
+        }
+    }
+}
+
 pub struct Iqs9151SplitEventController;
 
 impl Iqs9151SplitEventController {
@@ -1424,13 +1376,7 @@ impl Controller for Iqs9151SplitEventController {
 
     async fn process_event(&mut self, event: Self::Event) {
         if let Event::Custom(payload) = event {
-            if let Some(scale) = TrackpadDynamicScaleEvent::decode(payload) {
-                scale.apply();
-            } else if let Some(pinch) = TrackpadPinchReport::decode(payload) {
-                process_pinch_report(pinch).await;
-            } else if let Some(motion) = TrackpadMotionEvent::decode(payload) {
-                send_mouse_motion_reports(motion);
-            }
+            process_controller_custom_event(payload, Iqs9151ControllerTarget::HidReport).await;
         }
     }
 
@@ -1441,6 +1387,30 @@ impl Controller for Iqs9151SplitEventController {
 
 static LEFT_TRACKPAD_MOUSE_BUTTONS: AtomicU8 = AtomicU8::new(0);
 static RIGHT_TRACKPAD_MOUSE_BUTTONS: AtomicU8 = AtomicU8::new(0);
+
+async fn process_controller_custom_event(payload: [u8; 16], target: Iqs9151ControllerTarget) {
+    if let Some(scale) = TrackpadDynamicScaleEvent::decode(payload) {
+        scale.apply();
+        return;
+    }
+
+    match target {
+        Iqs9151ControllerTarget::HidReport => {
+            if let Some(pinch) = TrackpadPinchReport::decode(payload) {
+                process_pinch_report(pinch).await;
+            } else if let Some(motion) = TrackpadMotionEvent::decode(payload) {
+                send_mouse_motion_reports(motion);
+            }
+        }
+        Iqs9151ControllerTarget::SplitEvent => {
+            if TrackpadPinchReport::decode(payload).is_some() {
+                send_split_custom_event(payload);
+            } else if let Some(motion) = TrackpadMotionEvent::decode(payload) {
+                send_split_motion_event(motion);
+            }
+        }
+    }
+}
 
 async fn process_pinch_report(report: TrackpadPinchReport) {
     let position = trackpad_button_position(report.side, TrackpadButton::Pinch);
@@ -1525,6 +1495,23 @@ pub enum TrackpadSide {
     Right,
 }
 
+impl TrackpadSide {
+    const fn to_wire(self) -> u8 {
+        match self {
+            Self::Left => 0,
+            Self::Right => 1,
+        }
+    }
+
+    const fn from_wire(value: u8) -> Option<Self> {
+        match value {
+            0 => Some(Self::Left),
+            1 => Some(Self::Right),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TrackpadDynamicScaleGroup {
     Cursor,
@@ -1551,7 +1538,7 @@ impl TrackpadDynamicScaleEvent {
     }
 
     pub fn decode(payload: [u8; 16]) -> Option<Self> {
-        if payload[0..4] != CUSTOM_EVENT_PREFIX || payload[4] != CUSTOM_EVENT_DYNAMIC_SCALE {
+        if !custom_event_is(payload, CUSTOM_EVENT_DYNAMIC_SCALE) {
             return None;
         }
 
@@ -1813,34 +1800,36 @@ impl TrackpadButtonEvent {
     }
 }
 
+const LEFT_TRACKPAD_BUTTON_POSITIONS: [VirtualKeyPosition; 8] = [
+    VirtualKeyPosition { row: 5, col: 0 },
+    VirtualKeyPosition { row: 5, col: 1 },
+    VirtualKeyPosition { row: 5, col: 2 },
+    VirtualKeyPosition { row: 6, col: 0 },
+    VirtualKeyPosition { row: 6, col: 1 },
+    VirtualKeyPosition { row: 6, col: 2 },
+    VirtualKeyPosition { row: 6, col: 3 },
+    VirtualKeyPosition { row: 6, col: 4 },
+];
+
+const RIGHT_TRACKPAD_BUTTON_POSITIONS: [VirtualKeyPosition; 8] = [
+    VirtualKeyPosition { row: 5, col: 9 },
+    VirtualKeyPosition { row: 5, col: 10 },
+    VirtualKeyPosition { row: 5, col: 11 },
+    VirtualKeyPosition { row: 6, col: 7 },
+    VirtualKeyPosition { row: 6, col: 8 },
+    VirtualKeyPosition { row: 6, col: 9 },
+    VirtualKeyPosition { row: 6, col: 10 },
+    VirtualKeyPosition { row: 6, col: 11 },
+];
+
 pub const fn trackpad_button_position(
     side: TrackpadSide,
     button: TrackpadButton,
 ) -> VirtualKeyPosition {
-    match (side, button) {
-        (TrackpadSide::Left, TrackpadButton::LeftClick) => VirtualKeyPosition { row: 5, col: 0 },
-        (TrackpadSide::Left, TrackpadButton::RightClick) => VirtualKeyPosition { row: 5, col: 1 },
-        (TrackpadSide::Left, TrackpadButton::MiddleClick) => VirtualKeyPosition { row: 5, col: 2 },
-        (TrackpadSide::Left, TrackpadButton::GestureLeft) => VirtualKeyPosition { row: 6, col: 0 },
-        (TrackpadSide::Left, TrackpadButton::GestureRight) => VirtualKeyPosition { row: 6, col: 1 },
-        (TrackpadSide::Left, TrackpadButton::GestureUp) => VirtualKeyPosition { row: 6, col: 2 },
-        (TrackpadSide::Left, TrackpadButton::GestureDown) => VirtualKeyPosition { row: 6, col: 3 },
-        (TrackpadSide::Left, TrackpadButton::Pinch) => VirtualKeyPosition { row: 6, col: 4 },
-
-        (TrackpadSide::Right, TrackpadButton::LeftClick) => VirtualKeyPosition { row: 5, col: 9 },
-        (TrackpadSide::Right, TrackpadButton::RightClick) => VirtualKeyPosition { row: 5, col: 10 },
-        (TrackpadSide::Right, TrackpadButton::MiddleClick) => {
-            VirtualKeyPosition { row: 5, col: 11 }
-        }
-        (TrackpadSide::Right, TrackpadButton::GestureLeft) => VirtualKeyPosition { row: 6, col: 7 },
-        (TrackpadSide::Right, TrackpadButton::GestureRight) => {
-            VirtualKeyPosition { row: 6, col: 8 }
-        }
-        (TrackpadSide::Right, TrackpadButton::GestureUp) => VirtualKeyPosition { row: 6, col: 9 },
-        (TrackpadSide::Right, TrackpadButton::GestureDown) => {
-            VirtualKeyPosition { row: 6, col: 10 }
-        }
-        (TrackpadSide::Right, TrackpadButton::Pinch) => VirtualKeyPosition { row: 6, col: 11 },
+    let index = button.input_btn_code() as usize;
+    match side {
+        TrackpadSide::Left => LEFT_TRACKPAD_BUTTON_POSITIONS[index],
+        TrackpadSide::Right => RIGHT_TRACKPAD_BUTTON_POSITIONS[index],
     }
 }
 
@@ -2137,13 +2126,8 @@ impl TrackpadMotionEvent {
     }
 
     pub fn encode(self) -> [u8; 16] {
-        let mut payload = [0u8; 16];
-        payload[0..4].copy_from_slice(&CUSTOM_EVENT_PREFIX);
-        payload[4] = CUSTOM_EVENT_POINTER_MOTION;
-        payload[5] = match self.side {
-            TrackpadSide::Left => 0,
-            TrackpadSide::Right => 1,
-        };
+        let mut payload = custom_event_payload(CUSTOM_EVENT_POINTER_MOTION);
+        payload[5] = self.side.to_wire();
         payload[6..8].copy_from_slice(&self.x.to_le_bytes());
         payload[8..10].copy_from_slice(&self.y.to_le_bytes());
         payload[10..12].copy_from_slice(&self.wheel.to_le_bytes());
@@ -2154,15 +2138,11 @@ impl TrackpadMotionEvent {
     }
 
     pub fn decode(payload: [u8; 16]) -> Option<Self> {
-        if payload[0..4] != CUSTOM_EVENT_PREFIX || payload[4] != CUSTOM_EVENT_POINTER_MOTION {
+        if !custom_event_is(payload, CUSTOM_EVENT_POINTER_MOTION) {
             return None;
         }
 
-        let side = match payload[5] {
-            0 => TrackpadSide::Left,
-            1 => TrackpadSide::Right,
-            _ => return None,
-        };
+        let side = TrackpadSide::from_wire(payload[5])?;
         let x = i16::from_le_bytes([payload[6], payload[7]]);
         let y = i16::from_le_bytes([payload[8], payload[9]]);
         let wheel = i16::from_le_bytes([payload[10], payload[11]]);
@@ -2242,13 +2222,8 @@ impl TrackpadPinchReport {
     }
 
     pub fn encode(self) -> [u8; 16] {
-        let mut payload = [0u8; 16];
-        payload[0..4].copy_from_slice(&CUSTOM_EVENT_PREFIX);
-        payload[4] = CUSTOM_EVENT_PINCH_REPORT;
-        payload[5] = match self.side {
-            TrackpadSide::Left => 0,
-            TrackpadSide::Right => 1,
-        };
+        let mut payload = custom_event_payload(CUSTOM_EVENT_PINCH_REPORT);
+        payload[5] = self.side.to_wire();
         payload[6] = u8::from(self.started) | (u8::from(self.ended) << 1);
         payload[8..10].copy_from_slice(&self.motion.wheel.to_le_bytes());
         payload[10..12].copy_from_slice(&self.motion.pan.to_le_bytes());
@@ -2256,15 +2231,11 @@ impl TrackpadPinchReport {
     }
 
     pub fn decode(payload: [u8; 16]) -> Option<Self> {
-        if payload[0..4] != CUSTOM_EVENT_PREFIX || payload[4] != CUSTOM_EVENT_PINCH_REPORT {
+        if !custom_event_is(payload, CUSTOM_EVENT_PINCH_REPORT) {
             return None;
         }
 
-        let side = match payload[5] {
-            0 => TrackpadSide::Left,
-            1 => TrackpadSide::Right,
-            _ => return None,
-        };
+        let side = TrackpadSide::from_wire(payload[5])?;
         let flags = payload[6];
         let wheel = i16::from_le_bytes([payload[8], payload[9]]);
         let pan = i16::from_le_bytes([payload[10], payload[11]]);
@@ -4508,9 +4479,7 @@ mod tests {
 
     #[test]
     fn decodes_dynamic_scale_custom_event() {
-        let mut payload = [0u8; 16];
-        payload[0..4].copy_from_slice(&CUSTOM_EVENT_PREFIX);
-        payload[4] = CUSTOM_EVENT_DYNAMIC_SCALE;
+        let mut payload = custom_event_payload(CUSTOM_EVENT_DYNAMIC_SCALE);
         payload[5] = 2;
         payload[6] = 3;
 

@@ -89,6 +89,11 @@ impl<R: OutputPin, G: OutputPin, B: OutputPin> RgbLedWidget<R, G, B> {
         widget
     }
 
+    fn set_idle(&mut self) {
+        self.mode = WidgetMode::Idle;
+        self.apply_color(RgbColor::Off);
+    }
+
     fn queue_blink(&mut self, color: RgbColor, ticks_left: u8) {
         self.mode = WidgetMode::Blink { color, ticks_left };
         self.apply_color(color);
@@ -96,8 +101,7 @@ impl<R: OutputPin, G: OutputPin, B: OutputPin> RgbLedWidget<R, G, B> {
 
     fn queue_layer_change(&mut self, layer: u8) {
         if layer == 0 {
-            self.mode = WidgetMode::Idle;
-            self.apply_color(RgbColor::Off);
+            self.set_idle();
             return;
         }
 
@@ -182,8 +186,7 @@ impl<R: OutputPin, G: OutputPin, B: OutputPin> Controller for RgbLedWidget<R, G,
                 );
             }
             ControllerEvent::Sleep(true) => {
-                self.mode = WidgetMode::Idle;
-                self.apply_color(RgbColor::Off);
+                self.set_idle();
             }
             _ => {}
         }
@@ -204,8 +207,7 @@ impl<R: OutputPin, G: OutputPin, B: OutputPin> PollingController for RgbLedWidge
             }
             WidgetMode::Blink { color, ticks_left } => {
                 if ticks_left == 0 {
-                    self.mode = WidgetMode::Idle;
-                    self.apply_color(RgbColor::Off);
+                    self.set_idle();
                 } else {
                     self.mode = WidgetMode::Blink {
                         color,
@@ -235,8 +237,7 @@ impl<R: OutputPin, G: OutputPin, B: OutputPin> PollingController for RgbLedWidge
                 on,
             } => {
                 if phases_left == 0 {
-                    self.mode = WidgetMode::Idle;
-                    self.apply_color(RgbColor::Off);
+                    self.set_idle();
                 } else if phase_ticks_left > 1 {
                     self.mode = WidgetMode::LayerBlink {
                         phases_left,

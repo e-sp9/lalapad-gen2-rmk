@@ -71,7 +71,8 @@ lower = 2
 adjust = 3
 
 [behavior.morse]
-hold_timeout = "180ms"
+hold_timeout = "120ms"
+permissive_hold = true
 hold_on_other_press = true
 
 [behavior.combo]
