@@ -48,6 +48,7 @@ mod keyboard_central {
         static IQS9151_TX_BUFFER: StaticCell<[u8; 2]> = StaticCell::new();
         let tx_buffer = &mut IQS9151_TX_BUFFER.init([0; 2])[..];
         let mut i2c_config = ::embassy_nrf::twim::Config::default();
+        i2c_config.frequency = ::embassy_nrf::twim::Frequency::K400;
         i2c_config.sda_pullup = true;
         i2c_config.scl_pullup = true;
         let i2c = ::embassy_nrf::twim::Twim::new(

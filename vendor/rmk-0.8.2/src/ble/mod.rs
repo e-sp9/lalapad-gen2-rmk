@@ -41,6 +41,8 @@ use crate::ble::battery_service::BleBatteryServer;
 use crate::ble::ble_server::{BleHidServer, Server};
 use crate::ble::device_info::{PnPID, VidSource};
 use crate::ble::led::BleLedReader;
+#[cfg(feature = "passkey_entry")]
+use crate::ble::passkey::{PasskeyInputState, next_gatt_event};
 use crate::ble::profile::{ProfileInfo, ProfileManager, UPDATED_CCCD_TABLE, UPDATED_PROFILE};
 use crate::channel::{KEYBOARD_REPORT_CHANNEL, LED_SIGNAL};
 use crate::config::RmkConfig;
@@ -57,6 +59,8 @@ pub(crate) mod device_info;
 #[cfg(feature = "host")]
 pub(crate) mod host_service;
 pub(crate) mod led;
+#[cfg(feature = "passkey_entry")]
+pub mod passkey;
 pub(crate) mod profile;
 
 #[derive(Clone, Copy, Debug)]
@@ -98,9 +102,14 @@ pub async fn build_ble_stack<
     resources: &'a mut HostResources<P, CONNECTIONS_MAX, L2CAP_CHANNELS_MAX>,
 ) -> Stack<'a, C, P> {
     // Initialize trouble host stack
-    trouble_host::new(controller, resources)
+    let stack = trouble_host::new(controller, resources)
         .set_random_address(Address::random(host_address))
-        .set_random_generator_seed(random_generator)
+        .set_random_generator_seed(random_generator);
+
+    #[cfg(feature = "passkey_entry")]
+    let stack = stack.set_io_capabilities(trouble_host::IoCapabilities::KeyboardOnly);
+
+    stack
 }
 
 /// Run the BLE stack.
@@ -509,13 +518,26 @@ async fn gatt_events_task(server: &Server<'_>, conn: &GattConnection<'_, '_, Def
     let mut published_connected_state = false;
     #[cfg(feature = "controller")]
     let mut controller_pub = unwrap!(CONTROLLER_CHANNEL.publisher());
+    #[cfg(feature = "passkey_entry")]
+    let mut passkey_state = PasskeyInputState::new();
     loop {
-        match conn.next().await {
+        #[cfg(feature = "passkey_entry")]
+        let Some(event) = next_gatt_event(conn, &mut passkey_state).await else {
+            continue;
+        };
+        #[cfg(not(feature = "passkey_entry"))]
+        let event = conn.next().await;
+
+        match event {
             GattConnectionEvent::Disconnected { reason } => {
+                #[cfg(feature = "passkey_entry")]
+                passkey_state.clear();
                 info!("[gatt] disconnected: {:?}", reason);
                 break;
             }
             GattConnectionEvent::PairingComplete { security_level, bond } => {
+                #[cfg(feature = "passkey_entry")]
+                passkey_state.clear();
                 info!("[gatt] pairing complete: {:?}", security_level);
                 let profile = ACTIVE_PROFILE.load(Ordering::Acquire);
                 if let Some(bond_info) = bond {
@@ -533,6 +555,8 @@ async fn gatt_events_task(server: &Server<'_>, conn: &GattConnection<'_, '_, Def
                 }
             }
             GattConnectionEvent::PairingFailed(err) => {
+                #[cfg(feature = "passkey_entry")]
+                passkey_state.clear();
                 error!("[gatt] pairing error: {:?}", err);
             }
             GattConnectionEvent::Gatt { event: gatt_event } => {
@@ -700,7 +724,15 @@ async fn gatt_events_task(server: &Server<'_>, conn: &GattConnection<'_, '_, Def
             }
             GattConnectionEvent::PassKeyDisplay(pass_key) => info!("[gatt] PassKeyDisplay: {:?}", pass_key),
             GattConnectionEvent::PassKeyConfirm(pass_key) => info!("[gatt] PassKeyConfirm: {:?}", pass_key),
-            GattConnectionEvent::PassKeyInput => warn!("[gatt] PassKeyInput event, should not happen"),
+            GattConnectionEvent::PassKeyInput => {
+                #[cfg(feature = "passkey_entry")]
+                {
+                    info!("[gatt] PassKeyInput: entering passkey entry mode");
+                    passkey_state.begin();
+                }
+                #[cfg(not(feature = "passkey_entry"))]
+                warn!("[gatt] PassKeyInput event, should not happen");
+            }
         }
 
         // Publish the controller connected event
@@ -741,8 +773,8 @@ async fn advertise<'a, 'b, C: Controller>(
     )?;
 
     let advertise_config = AdvertisementParameters {
-        primary_phy: PhyKind::Le2M,
-        secondary_phy: PhyKind::Le2M,
+        primary_phy: PhyKind::Le1M,
+        secondary_phy: PhyKind::Le1M,
         tx_power: TxPower::Plus8dBm,
         interval_min: Duration::from_millis(200),
         interval_max: Duration::from_millis(200),
@@ -815,7 +847,7 @@ pub(crate) async fn set_conn_params<
         &ConnectParams {
             min_connection_interval: Duration::from_millis(15),
             max_connection_interval: Duration::from_millis(15),
-            max_latency: 30,
+            max_latency: 1,
             min_event_length: Duration::from_secs(0),
             max_event_length: Duration::from_secs(0),
             supervision_timeout: Duration::from_secs(5),
@@ -830,9 +862,9 @@ pub(crate) async fn set_conn_params<
         stack,
         conn.raw(),
         &ConnectParams {
-            min_connection_interval: Duration::from_micros(7500),
-            max_connection_interval: Duration::from_micros(7500),
-            max_latency: 30,
+            min_connection_interval: Duration::from_millis(15),
+            max_connection_interval: Duration::from_millis(15),
+            max_latency: 1,
             min_event_length: Duration::from_secs(0),
             max_event_length: Duration::from_secs(0),
             supervision_timeout: Duration::from_secs(5),
@@ -882,7 +914,7 @@ async fn run_ble_keyboard<
         server.set_cccd_table(conn.raw(), bond_info.cccd_table.clone());
     }
 
-    // Use 2M Phy
+    // Keep the PHY configured by update_ble_phy.
     update_ble_phy(stack, conn.raw()).await;
 
     let communication_task = async {
@@ -913,13 +945,13 @@ async fn run_ble_keyboard<
     .await;
 }
 
-// Update the PHY to 2M
+// Keep the PHY on 1M for broader host and BLE adapter compatibility.
 pub(crate) async fn update_ble_phy<P: PacketPool>(
     stack: &Stack<'_, impl Controller + ControllerCmdAsync<LeSetPhy>, P>,
     conn: &Connection<'_, P>,
 ) {
     loop {
-        match conn.set_phy(stack, PhyKind::Le2M).await {
+        match conn.set_phy(stack, PhyKind::Le1M).await {
             Err(BleHostError::BleHost(Error::Hci(error))) => {
                 if 0x2A == error.to_status().into_inner() {
                     // Busy, retry

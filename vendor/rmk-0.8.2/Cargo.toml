@@ -108,6 +108,7 @@ nrf52832_ble = [
 ]
 nrf52833_ble = ["_nrf_ble"]
 nrf52840_ble = ["_nrf_ble"]
+passkey_entry = ["_ble"]
 pico_w_ble = [
     "_ble",
     "dep:embassy-rp",

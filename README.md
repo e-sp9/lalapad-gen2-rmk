@@ -37,6 +37,18 @@ Before testing over BLE, remove the old host pairing and pair again. Hosts can
 cache the old HID report descriptor, especially after mouse/scroll firmware
 changes.
 
+## Bluetooth Pairing
+
+This firmware enables RMK passkey entry for hosts that require authenticated
+keyboard pairing. If the host shows a 6-digit passkey during pairing, type that
+passkey on the keyboard and press Enter. During passkey entry, digit keys,
+Enter, Escape, and Backspace are captured by the firmware and are not sent as
+normal host keypresses.
+
+On the default keymap, use layer 1 for digit entry. The right side has a numpad
+layout on layer 1, and the left side has `1`-`5` on the first row and `6`-`0`
+on the second row.
+
 ### Web Flasher
 
 For convenience, this repository includes a lightweight browser-based flasher

@@ -290,7 +290,7 @@ fn defaul_central_conn_param() -> ConnectParams {
     ConnectParams {
         min_connection_interval: Duration::from_micros(7500),
         max_connection_interval: Duration::from_micros(7500),
-        max_latency: 30, // 225ms
+        max_latency: 1,
         supervision_timeout: Duration::from_secs(5),
         ..Default::default()
     }
@@ -311,7 +311,7 @@ async fn run_central_manager_task<
 ) -> Result<(), BleHostError<C::Error>> {
     let client = GattClient::<C, P, 10>::new(stack, conn).await?;
 
-    // Use 2M Phy
+    // Keep the PHY configured by update_ble_phy.
     update_ble_phy(stack, conn).await;
 
     info!("Updating connection parameters for peripheral");

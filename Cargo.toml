@@ -16,6 +16,7 @@ rmk = { version = "0.8", features = [
     "async_matrix",
     "controller",
     "adafruit_bl",
+    "passkey_entry",
 ] }
 nrf-sdc = { git = "https://github.com/alexmoon/nrf-sdc", rev = "11d5c3c", features = [
     "defmt",

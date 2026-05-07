@@ -61,10 +61,10 @@ pub const DEFAULT_POLL_INTERVAL_MS: u64 = 10;
 pub const DEFAULT_MOTION_INTERVAL_MS: u64 = 0;
 pub const DEFAULT_CURSOR_DIVISOR: u16 = 3;
 pub const DEFAULT_SCROLL_DIVISOR: u16 = 8;
-pub const DEFAULT_SCROLL_LOW_SPEED_DIVISOR: u16 = 24;
+pub const DEFAULT_SCROLL_LOW_SPEED_DIVISOR: u16 = 16;
 pub const DEFAULT_SCROLL_LOW_SPEED_THRESHOLD: i16 = 48;
 pub const DEFAULT_SCROLL_INERTIA_DIVISOR: u16 = 16;
-pub const DEFAULT_SCROLL_MAX_STEP: i16 = 3;
+pub const DEFAULT_SCROLL_MAX_STEP: i16 = 2;
 pub const DEFAULT_SCROLL_INERTIA_MAX_STEP: i16 = 2;
 pub const DEFAULT_ONE_FINGER_DRAG_HOLD_MS: u32 = 220;
 pub const DEFAULT_CURSOR_INERTIA_ENABLED: bool = false;
@@ -918,8 +918,8 @@ where
         self.scroll_smooth_y_fp = smooth_scroll_axis(self.scroll_smooth_y_fp, delta.y);
 
         TrackpadScrollDelta {
-            x: clamp_i32_to_i16(self.scroll_smooth_x_fp >> SCROLL_SMOOTHING_FP_SHIFT),
-            y: clamp_i32_to_i16(self.scroll_smooth_y_fp >> SCROLL_SMOOTHING_FP_SHIFT),
+            x: fixed_point_to_i16_rounded(self.scroll_smooth_x_fp, SCROLL_SMOOTHING_FP_SHIFT),
+            y: fixed_point_to_i16_rounded(self.scroll_smooth_y_fp, SCROLL_SMOOTHING_FP_SHIFT),
         }
     }
 
@@ -3070,12 +3070,29 @@ impl TrackpadGestureRecognizer {
         now_ms: u32,
     ) -> Option<TrackpadGestureEvent> {
         let two_now = frame.finger_count() == 2;
+        let current_positions_confident = two_finger_positions_confident(frame);
         let have_xy = two_now
             .then(|| get_two_finger_metrics(frame, prev_frame, self.config.axis_transform))
             .flatten();
 
         if !self.two_finger.active && two_now {
+            let tapdrag_reentry = pending_tapdrag_second_touch(
+                self.two_finger_click_pending,
+                self.two_finger_click_pending_ms,
+                now_ms,
+                TWO_FINGER_TAPDRAG_GAP_MAX_MS,
+            );
             let Some(metrics) = have_xy else {
+                if !tapdrag_reentry {
+                    if let Some(delta) = two_finger_relative_scroll_delta(
+                        frame,
+                        self.config.axis_transform,
+                        TWO_FINGER_RELATIVE_SCROLL_START_MOVE,
+                    ) {
+                        self.two_finger.start_relative_scroll(now_ms);
+                        return Some(TrackpadGestureEvent::Scroll(delta));
+                    }
+                }
                 return None;
             };
 
@@ -3085,6 +3102,15 @@ impl TrackpadGestureRecognizer {
                 now_ms,
                 TWO_FINGER_TAPDRAG_GAP_MAX_MS,
             );
+            let relative_scroll = if tapdrag_second_touch || current_positions_confident {
+                None
+            } else {
+                two_finger_relative_scroll_delta(
+                    frame,
+                    self.config.axis_transform,
+                    TWO_FINGER_RELATIVE_SCROLL_START_MOVE,
+                )
+            };
 
             self.two_finger.start(
                 now_ms,
@@ -3095,6 +3121,15 @@ impl TrackpadGestureRecognizer {
                 tapdrag_second_touch,
             );
             self.two_finger_one_lead_valid = false;
+            if let Some(delta) = relative_scroll {
+                if !current_positions_confident {
+                    self.two_finger.mark_metrics_stale();
+                }
+                self.two_finger.mode = TwoFingerMode::Scroll;
+                self.two_finger.tap_candidate = false;
+                self.two_finger.hold_candidate = false;
+                return Some(TrackpadGestureEvent::Scroll(delta));
+            }
             return None;
         }
 
@@ -3108,6 +3143,10 @@ impl TrackpadGestureRecognizer {
         if two_now {
             let mut step = TwoFingerStep::default();
             if let Some(metrics) = have_xy {
+                if self.two_finger.metrics_stale {
+                    self.two_finger.sync_metrics(metrics);
+                    return None;
+                }
                 step = self.two_finger.update_metrics(metrics);
             }
             self.two_finger.cancel_tap_if_needed(
@@ -3122,6 +3161,23 @@ impl TrackpadGestureRecognizer {
             );
             if self.two_finger.tapdrag_second_touch {
                 return None;
+            }
+            if !current_positions_confident && self.two_finger.mode != TwoFingerMode::Pinch {
+                let min_move = if self.two_finger.mode == TwoFingerMode::Scroll {
+                    0
+                } else {
+                    TWO_FINGER_RELATIVE_SCROLL_START_MOVE
+                };
+                if let Some(delta) =
+                    two_finger_relative_scroll_delta(frame, self.config.axis_transform, min_move)
+                {
+                    self.two_finger.mark_metrics_stale();
+                    self.two_finger.mode = TwoFingerMode::Scroll;
+                    self.two_finger.tap_candidate = false;
+                    self.two_finger.hold_candidate = false;
+                    self.two_finger.release_pending = false;
+                    return Some(TrackpadGestureEvent::Scroll(delta));
+                }
             }
             self.two_finger.classify_mode();
             self.two_finger.release_pending = false;
@@ -3539,6 +3595,7 @@ struct TwoFingerState {
     centroid_last_x: i32,
     centroid_last_y: i32,
     distance_last: i32,
+    metrics_stale: bool,
     mode: TwoFingerMode,
     pinch_wheel_remainder: i32,
     pinch_button_sent: bool,
@@ -3561,6 +3618,7 @@ impl TwoFingerState {
             centroid_last_x: 0,
             centroid_last_y: 0,
             distance_last: 0,
+            metrics_stale: false,
             mode: TwoFingerMode::None,
             pinch_wheel_remainder: 0,
             pinch_button_sent: false,
@@ -3592,9 +3650,42 @@ impl TwoFingerState {
         self.centroid_last_x = metrics.centroid_x;
         self.centroid_last_y = metrics.centroid_y;
         self.distance_last = metrics.distance;
+        self.metrics_stale = false;
         self.mode = TwoFingerMode::None;
         self.pinch_wheel_remainder = 0;
         self.pinch_button_sent = false;
+    }
+
+    fn start_relative_scroll(&mut self, now_ms: u32) {
+        self.active = true;
+        self.hold_sent = false;
+        self.tap_candidate = false;
+        self.hold_candidate = false;
+        self.tapdrag_second_touch = false;
+        self.release_pending = false;
+        self.down_ms = now_ms;
+        self.release_pending_ms = 0;
+        self.centroid_dx = 0;
+        self.centroid_dy = 0;
+        self.distance_delta = 0;
+        self.centroid_last_x = 0;
+        self.centroid_last_y = 0;
+        self.distance_last = 0;
+        self.metrics_stale = true;
+        self.mode = TwoFingerMode::Scroll;
+        self.pinch_wheel_remainder = 0;
+        self.pinch_button_sent = false;
+    }
+
+    fn sync_metrics(&mut self, metrics: TwoFingerMetrics) {
+        self.centroid_last_x = metrics.centroid_x;
+        self.centroid_last_y = metrics.centroid_y;
+        self.distance_last = metrics.distance;
+        self.metrics_stale = false;
+    }
+
+    fn mark_metrics_stale(&mut self) {
+        self.metrics_stale = true;
     }
 
     fn update_metrics(&mut self, metrics: TwoFingerMetrics) -> TwoFingerStep {
@@ -3608,6 +3699,7 @@ impl TwoFingerState {
         self.centroid_dx = self.centroid_dx.saturating_add(step_x);
         self.centroid_dy = self.centroid_dy.saturating_add(step_y);
         self.distance_delta = self.distance_delta.saturating_add(step_distance);
+        self.metrics_stale = false;
 
         TwoFingerStep {
             x: step_x,
@@ -3857,7 +3949,8 @@ const THREE_FINGER_RELEASE_PENDING_MAX_MS: u32 = 150;
 const TWO_FINGER_ONE_LEAD_MAX_MS: u32 = 120;
 const THREE_FINGER_ONE_LEAD_MAX_MS: u32 = 120;
 const THREE_FINGER_TWO_LEAD_MAX_MS: u32 = 120;
-const TWO_FINGER_SCROLL_START_MOVE: i32 = 50;
+const TWO_FINGER_SCROLL_START_MOVE: i32 = 24;
+const TWO_FINGER_RELATIVE_SCROLL_START_MOVE: i16 = 8;
 const TWO_FINGER_SCROLL_DOMINANCE_MULTIPLIER: i32 = 2;
 const TWO_FINGER_PINCH_START_DISTANCE: i32 = 100;
 const TWO_FINGER_PINCH_WHEEL_DIVISOR: i32 = 96;
@@ -4050,6 +4143,33 @@ fn get_two_finger_metrics(
     })
 }
 
+fn two_finger_positions_confident(frame: CoordinateFrame) -> bool {
+    frame.finger_count() == 2 && finger1_valid(frame) && finger2_valid(frame)
+}
+
+fn two_finger_relative_scroll_delta(
+    frame: CoordinateFrame,
+    axis_transform: TrackpadAxisTransform,
+    min_move: i16,
+) -> Option<TrackpadScrollDelta> {
+    if frame.finger_count() != 2 || !frame.movement_detected() {
+        return None;
+    }
+
+    let (x, y) = axis_transform.apply((i32::from(frame.relative_x), i32::from(frame.relative_y)));
+    let x = clamp_i32_to_i16(x);
+    let y = clamp_i32_to_i16(y);
+    let min_move = min_move.max(0);
+    if x == 0 && y == 0 {
+        return None;
+    }
+    if min_move > 0 && x.saturating_abs().max(y.saturating_abs()) < min_move {
+        return None;
+    }
+
+    Some(TrackpadScrollDelta { x, y })
+}
+
 fn finger1_valid(frame: CoordinateFrame) -> bool {
     frame.trackpad_flags & TP_FINGER1_CONFIDENCE != 0 && finger_position_valid(frame.finger1)
 }
@@ -4076,6 +4196,15 @@ fn take_pending_tapdrag_second_touch(
     *pending = false;
     *pending_ms = 0;
     elapsed_ms <= max_gap_ms
+}
+
+fn pending_tapdrag_second_touch(
+    pending: bool,
+    pending_ms: u32,
+    now_ms: u32,
+    max_gap_ms: u32,
+) -> bool {
+    pending && now_ms.wrapping_sub(pending_ms) <= max_gap_ms
 }
 
 fn deferred_hold_expired(
@@ -4120,6 +4249,23 @@ fn clamp_pending_scroll(value: i16) -> i16 {
 fn clamp_scroll_step(value: i16, max_step: i16) -> i16 {
     let max_step = if max_step <= 0 { 1 } else { max_step };
     value.clamp(-max_step, max_step)
+}
+
+fn fixed_point_to_i16_rounded(value: i32, shift: u8) -> i16 {
+    if shift == 0 {
+        return clamp_i32_to_i16(value);
+    }
+
+    let half = 1_i64 << (shift - 1);
+    let raw = i64::from(value);
+    let magnitude = raw.abs();
+    let rounded_magnitude = (magnitude.saturating_add(half)) >> shift;
+    let rounded = if raw < 0 {
+        -rounded_magnitude
+    } else {
+        rounded_magnitude
+    };
+    rounded.clamp(i64::from(i16::MIN), i64::from(i16::MAX)) as i16
 }
 
 fn effective_scroll_divisor(
@@ -4577,8 +4723,8 @@ mod tests {
                 side: TrackpadSide::Right,
                 x: 0,
                 y: 0,
-                wheel: 3,
-                pan: 3,
+                wheel: 2,
+                pan: 2,
                 buttons: 0,
                 button_state_valid: false,
             })
@@ -4633,10 +4779,42 @@ mod tests {
 
     #[test]
     fn smooths_scroll_delta_spikes() {
-        assert_eq!(smooth_scroll_axis(0, 80) >> SCROLL_SMOOTHING_FP_SHIFT, 40);
         assert_eq!(
-            smooth_scroll_axis(40 << SCROLL_SMOOTHING_FP_SHIFT, 0) >> SCROLL_SMOOTHING_FP_SHIFT,
+            fixed_point_to_i16_rounded(smooth_scroll_axis(0, 80), SCROLL_SMOOTHING_FP_SHIFT),
+            40
+        );
+        assert_eq!(
+            fixed_point_to_i16_rounded(
+                smooth_scroll_axis(40 << SCROLL_SMOOTHING_FP_SHIFT, 0),
+                SCROLL_SMOOTHING_FP_SHIFT
+            ),
             0
+        );
+    }
+
+    #[test]
+    fn scroll_smoothing_preserves_small_delta() {
+        assert_eq!(
+            fixed_point_to_i16_rounded(smooth_scroll_axis(0, 1), SCROLL_SMOOTHING_FP_SHIFT),
+            1
+        );
+    }
+
+    #[test]
+    fn rounds_negative_fixed_point_without_extra_bias() {
+        assert_eq!(
+            fixed_point_to_i16_rounded(
+                -(1 << SCROLL_SMOOTHING_FP_SHIFT),
+                SCROLL_SMOOTHING_FP_SHIFT
+            ),
+            -1
+        );
+        assert_eq!(
+            fixed_point_to_i16_rounded(
+                -(40 << SCROLL_SMOOTHING_FP_SHIFT),
+                SCROLL_SMOOTHING_FP_SHIFT
+            ),
+            -40
         );
     }
 
@@ -4658,7 +4836,7 @@ mod tests {
                 side: TrackpadSide::Right,
                 x: 0,
                 y: 0,
-                wheel: 3,
+                wheel: 2,
                 pan: 0,
                 buttons: 0,
                 button_state_valid: false,
@@ -4753,6 +4931,167 @@ mod tests {
             Some(TrackpadGestureEvent::Scroll(TrackpadScrollDelta {
                 x: 0,
                 y: 70,
+            }))
+        );
+    }
+
+    #[test]
+    fn defers_initial_two_finger_relative_scroll_when_positions_are_confident() {
+        let mut recognizer = TrackpadGestureRecognizer::with_defaults();
+
+        assert_eq!(
+            recognizer.update(
+                frame_with_relative_two_finger_motion(0, 30, true, true),
+                1000
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn emits_scroll_from_relative_motion_when_finger_positions_are_not_confident() {
+        let mut recognizer = TrackpadGestureRecognizer::with_defaults();
+
+        assert_eq!(
+            recognizer.update(
+                frame_with_relative_two_finger_motion(0, 12, false, false),
+                1000
+            ),
+            Some(TrackpadGestureEvent::Scroll(TrackpadScrollDelta {
+                x: 0,
+                y: 12,
+            }))
+        );
+    }
+
+    #[test]
+    fn ignores_relative_scroll_during_two_finger_tapdrag_reentry() {
+        let mut recognizer = TrackpadGestureRecognizer::with_defaults();
+
+        assert_eq!(
+            recognizer.update(frame_with_fingers(2, 100, 200, 300, 200), 1000),
+            None
+        );
+        assert_eq!(
+            recognizer.update(frame_with_fingers(0, 0, 0, 0, 0), 1060),
+            Some(TrackpadGestureEvent::Button {
+                button: TrackpadButton::RightClick,
+                pressed: true,
+            })
+        );
+        assert_eq!(
+            recognizer.update(
+                frame_with_relative_two_finger_motion(0, 30, false, false),
+                1120
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn ignores_tiny_relative_scroll_before_scroll_mode_is_selected() {
+        let mut recognizer = TrackpadGestureRecognizer::with_defaults();
+
+        assert_eq!(
+            recognizer.update(frame_with_fingers(2, 100, 100, 200, 100), 1000),
+            None
+        );
+        assert_eq!(
+            recognizer.update(
+                frame_with_relative_two_finger_motion(0, 1, false, false),
+                1010
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn emits_scroll_ended_after_relative_scroll_release() {
+        let mut recognizer = TrackpadGestureRecognizer::with_defaults();
+
+        assert_eq!(
+            recognizer.update(
+                frame_with_relative_two_finger_motion(0, 12, false, false),
+                1000
+            ),
+            Some(TrackpadGestureEvent::Scroll(TrackpadScrollDelta {
+                x: 0,
+                y: 12,
+            }))
+        );
+        assert_eq!(
+            recognizer.update(frame_with_fingers(0, 0, 0, 0, 0), 1010),
+            Some(TrackpadGestureEvent::ScrollEnded)
+        );
+    }
+
+    #[test]
+    fn continues_scroll_from_relative_motion_after_position_confidence_drops() {
+        let mut recognizer = TrackpadGestureRecognizer::with_defaults();
+
+        assert_eq!(
+            recognizer.update(frame_with_fingers(2, 100, 100, 200, 100), 1000),
+            None
+        );
+        assert_eq!(
+            recognizer.update(
+                frame_with_relative_two_finger_motion(0, 10, false, false),
+                1010
+            ),
+            Some(TrackpadGestureEvent::Scroll(TrackpadScrollDelta {
+                x: 0,
+                y: 10,
+            }))
+        );
+    }
+
+    #[test]
+    fn prefers_relative_scroll_when_current_confidence_drops_but_prev_frame_was_valid() {
+        let mut recognizer = TrackpadGestureRecognizer::with_defaults();
+
+        assert_eq!(
+            recognizer.update(frame_with_fingers(2, 100, 100, 200, 100), 1000),
+            None
+        );
+        assert_eq!(
+            recognizer.update(
+                frame_with_relative_two_finger_motion(0, 12, false, false),
+                1010
+            ),
+            Some(TrackpadGestureEvent::Scroll(TrackpadScrollDelta {
+                x: 0,
+                y: 12,
+            }))
+        );
+    }
+
+    #[test]
+    fn resyncs_absolute_metrics_after_relative_scroll_without_burst() {
+        let mut recognizer = TrackpadGestureRecognizer::with_defaults();
+
+        assert_eq!(
+            recognizer.update(frame_with_fingers(2, 100, 100, 200, 100), 1000),
+            None
+        );
+        assert_eq!(
+            recognizer.update(
+                frame_with_relative_two_finger_motion(0, 10, false, false),
+                1010
+            ),
+            Some(TrackpadGestureEvent::Scroll(TrackpadScrollDelta {
+                x: 0,
+                y: 10,
+            }))
+        );
+        assert_eq!(
+            recognizer.update(frame_with_fingers(2, 100, 130, 200, 130), 1020),
+            None
+        );
+        assert_eq!(
+            recognizer.update(frame_with_fingers(2, 100, 140, 200, 140), 1030),
+            Some(TrackpadGestureEvent::Scroll(TrackpadScrollDelta {
+                x: 0,
+                y: 10,
             }))
         );
     }
@@ -4995,6 +5334,44 @@ mod tests {
             finger2: FingerPosition {
                 x: finger2_x,
                 y: finger2_y,
+            },
+            ..CoordinateFrame::default()
+        }
+    }
+
+    fn frame_with_relative_two_finger_motion(
+        relative_x: i16,
+        relative_y: i16,
+        finger1_confident: bool,
+        finger2_confident: bool,
+    ) -> CoordinateFrame {
+        let mut trackpad_flags = TP_MOVEMENT_DETECTED | 2;
+        if finger1_confident {
+            trackpad_flags |= TP_FINGER1_CONFIDENCE;
+        }
+        if finger2_confident {
+            trackpad_flags |= TP_FINGER2_CONFIDENCE;
+        }
+
+        CoordinateFrame {
+            relative_x,
+            relative_y,
+            trackpad_flags,
+            finger1: if finger1_confident {
+                FingerPosition { x: 100, y: 100 }
+            } else {
+                FingerPosition {
+                    x: u16::MAX,
+                    y: u16::MAX,
+                }
+            },
+            finger2: if finger2_confident {
+                FingerPosition { x: 200, y: 100 }
+            } else {
+                FingerPosition {
+                    x: u16::MAX,
+                    y: u16::MAX,
+                }
             },
             ..CoordinateFrame::default()
         }
