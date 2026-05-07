@@ -5,9 +5,11 @@ use core::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 /// - 1: BLE
 /// - Other: reserved
 pub(crate) static CONNECTION_TYPE: AtomicU8 = AtomicU8::new(0);
+pub(crate) static ACTIVE_CONNECTION_TYPE: AtomicU8 = AtomicU8::new(0);
 pub(crate) static CONNECTION_STATE: AtomicBool = AtomicBool::new(false);
 
 /// Current default connection type
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ConnectionType {
     Usb = 0,
     Ble = 1,
@@ -50,6 +52,10 @@ impl From<ConnectionType> for u8 {
 
 pub fn get_connection_type() -> ConnectionType {
     CONNECTION_TYPE.load(Ordering::Acquire).into()
+}
+
+pub fn get_active_connection_type() -> ConnectionType {
+    ACTIVE_CONNECTION_TYPE.load(Ordering::Acquire).into()
 }
 
 pub fn get_connection_state() -> ConnectionState {

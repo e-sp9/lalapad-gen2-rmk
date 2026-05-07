@@ -62,7 +62,7 @@ use crate::config::PositionalConfig;
 #[cfg(feature = "vial")]
 use crate::config::VialConfig;
 use crate::keyboard::LOCK_LED_STATES;
-use crate::state::ConnectionState;
+use crate::state::{ACTIVE_CONNECTION_TYPE, ConnectionState};
 
 #[cfg(feature = "_ble")]
 pub mod ble;
@@ -353,6 +353,9 @@ pub(crate) async fn run_keyboard<
 ) {
     // The state will be changed to true after the keyboard starts running
     CONNECTION_STATE.store(ConnectionState::Connected.into(), Ordering::Release);
+    if let Some(connection_type) = keyboard_writer.connection_type() {
+        ACTIVE_CONNECTION_TYPE.store(connection_type.into(), Ordering::Release);
+    }
     let writer_fut = keyboard_writer.run_writer();
     let led_fut = async {
         #[cfg(feature = "controller")]

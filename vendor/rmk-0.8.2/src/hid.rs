@@ -9,7 +9,7 @@ use usbd_hid::descriptor::{AsInputReport, MediaKeyboardReport, MouseReport, Syst
 use crate::CONNECTION_STATE;
 use crate::channel::KEYBOARD_REPORT_CHANNEL;
 use crate::descriptor::KeyboardReport;
-use crate::state::ConnectionState;
+use crate::state::{ConnectionState, ConnectionType};
 #[cfg(not(feature = "_no_usb"))]
 use crate::usb::USB_REMOTE_WAKEUP;
 
@@ -47,6 +47,11 @@ pub trait HidWriterTrait {
 
     /// Write report to the host, return the number of bytes written if success.
     fn write_report(&mut self, report: Self::ReportType) -> impl Future<Output = Result<usize, HidError>>;
+
+    /// Active transport used by this writer, if it represents host HID reports.
+    fn connection_type(&self) -> Option<ConnectionType> {
+        None
+    }
 }
 
 /// Runnable writer

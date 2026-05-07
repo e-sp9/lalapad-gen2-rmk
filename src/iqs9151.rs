@@ -18,6 +18,7 @@ use rmk::{
     event::{Event, KeyboardEvent},
     hid::Report,
     input_device::InputDevice,
+    state::{ConnectionType, get_active_connection_type},
 };
 use usbd_hid::descriptor::MouseReport;
 
@@ -64,7 +65,7 @@ pub const DEFAULT_SCROLL_DIVISOR: u16 = 8;
 pub const DEFAULT_SCROLL_LOW_SPEED_DIVISOR: u16 = 16;
 pub const DEFAULT_SCROLL_LOW_SPEED_THRESHOLD: i16 = 48;
 pub const DEFAULT_SCROLL_INERTIA_DIVISOR: u16 = 16;
-pub const DEFAULT_SCROLL_MAX_STEP: i16 = 2;
+pub const DEFAULT_SCROLL_MAX_STEP: i16 = 3;
 pub const DEFAULT_SCROLL_INERTIA_MAX_STEP: i16 = 2;
 pub const DEFAULT_ONE_FINGER_DRAG_HOLD_MS: u32 = 220;
 pub const DEFAULT_CURSOR_INERTIA_ENABLED: bool = false;
@@ -1399,7 +1400,7 @@ async fn process_pinch_report(report: TrackpadPinchReport) {
 }
 
 fn send_mouse_motion_reports(mut motion: TrackpadMotionEvent) -> bool {
-    motion = apply_dynamic_motion_scale(motion).capped();
+    motion = apply_transport_motion_scale(apply_dynamic_motion_scale(motion)).capped();
     if motion.is_empty() {
         return true;
     }
@@ -1549,6 +1550,23 @@ static LEFT_SCROLL_WHEEL_DYNAMIC_REMAINDER: AtomicI32 = AtomicI32::new(0);
 static LEFT_SCROLL_PAN_DYNAMIC_REMAINDER: AtomicI32 = AtomicI32::new(0);
 static RIGHT_SCROLL_WHEEL_DYNAMIC_REMAINDER: AtomicI32 = AtomicI32::new(0);
 static RIGHT_SCROLL_PAN_DYNAMIC_REMAINDER: AtomicI32 = AtomicI32::new(0);
+static LEFT_CURSOR_X_TRANSPORT_REMAINDER: AtomicI32 = AtomicI32::new(0);
+static LEFT_CURSOR_Y_TRANSPORT_REMAINDER: AtomicI32 = AtomicI32::new(0);
+static RIGHT_CURSOR_X_TRANSPORT_REMAINDER: AtomicI32 = AtomicI32::new(0);
+static RIGHT_CURSOR_Y_TRANSPORT_REMAINDER: AtomicI32 = AtomicI32::new(0);
+static LEFT_SCROLL_WHEEL_TRANSPORT_REMAINDER: AtomicI32 = AtomicI32::new(0);
+static LEFT_SCROLL_PAN_TRANSPORT_REMAINDER: AtomicI32 = AtomicI32::new(0);
+static RIGHT_SCROLL_WHEEL_TRANSPORT_REMAINDER: AtomicI32 = AtomicI32::new(0);
+static RIGHT_SCROLL_PAN_TRANSPORT_REMAINDER: AtomicI32 = AtomicI32::new(0);
+
+const USB_CURSOR_TRANSPORT_NUM: i32 = 3;
+const USB_CURSOR_TRANSPORT_DEN: i32 = 4;
+const USB_SCROLL_TRANSPORT_NUM: i32 = 1;
+const USB_SCROLL_TRANSPORT_DEN: i32 = 2;
+const BLE_CURSOR_TRANSPORT_NUM: i32 = 4;
+const BLE_CURSOR_TRANSPORT_DEN: i32 = 3;
+const BLE_SCROLL_TRANSPORT_NUM: i32 = 3;
+const BLE_SCROLL_TRANSPORT_DEN: i32 = 2;
 
 pub fn trackpad_dynamic_scale_x10(group: TrackpadDynamicScaleGroup) -> u16 {
     match group {
@@ -1605,6 +1623,14 @@ fn reset_dynamic_scale_remainders() {
         &LEFT_SCROLL_PAN_DYNAMIC_REMAINDER,
         &RIGHT_SCROLL_WHEEL_DYNAMIC_REMAINDER,
         &RIGHT_SCROLL_PAN_DYNAMIC_REMAINDER,
+        &LEFT_CURSOR_X_TRANSPORT_REMAINDER,
+        &LEFT_CURSOR_Y_TRANSPORT_REMAINDER,
+        &RIGHT_CURSOR_X_TRANSPORT_REMAINDER,
+        &RIGHT_CURSOR_Y_TRANSPORT_REMAINDER,
+        &LEFT_SCROLL_WHEEL_TRANSPORT_REMAINDER,
+        &LEFT_SCROLL_PAN_TRANSPORT_REMAINDER,
+        &RIGHT_SCROLL_WHEEL_TRANSPORT_REMAINDER,
+        &RIGHT_SCROLL_PAN_TRANSPORT_REMAINDER,
     ] {
         remainder.store(0, Ordering::Relaxed);
     }
@@ -1642,6 +1668,55 @@ fn apply_dynamic_motion_scale(mut motion: TrackpadMotionEvent) -> TrackpadMotion
     motion
 }
 
+fn apply_transport_motion_scale(mut motion: TrackpadMotionEvent) -> TrackpadMotionEvent {
+    let (cursor_num, cursor_den, scroll_num, scroll_den) = match get_active_connection_type() {
+        ConnectionType::Usb => (
+            USB_CURSOR_TRANSPORT_NUM,
+            USB_CURSOR_TRANSPORT_DEN,
+            USB_SCROLL_TRANSPORT_NUM,
+            USB_SCROLL_TRANSPORT_DEN,
+        ),
+        ConnectionType::Ble => (
+            BLE_CURSOR_TRANSPORT_NUM,
+            BLE_CURSOR_TRANSPORT_DEN,
+            BLE_SCROLL_TRANSPORT_NUM,
+            BLE_SCROLL_TRANSPORT_DEN,
+        ),
+    };
+
+    if motion.x != 0 || motion.y != 0 {
+        motion.x = transport_scale_axis(
+            motion.x,
+            cursor_num,
+            cursor_den,
+            transport_cursor_remainder(motion.side, DynamicAxis::X),
+        );
+        motion.y = transport_scale_axis(
+            motion.y,
+            cursor_num,
+            cursor_den,
+            transport_cursor_remainder(motion.side, DynamicAxis::Y),
+        );
+    }
+
+    if motion.wheel != 0 || motion.pan != 0 {
+        motion.wheel = transport_scale_axis(
+            motion.wheel,
+            scroll_num,
+            scroll_den,
+            transport_scroll_remainder(motion.side, DynamicScrollAxis::Wheel),
+        );
+        motion.pan = transport_scale_axis(
+            motion.pan,
+            scroll_num,
+            scroll_den,
+            transport_scroll_remainder(motion.side, DynamicScrollAxis::Pan),
+        );
+    }
+
+    motion
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum DynamicAxis {
     X,
@@ -1672,6 +1747,24 @@ fn dynamic_scroll_remainder(side: TrackpadSide, axis: DynamicScrollAxis) -> &'st
     }
 }
 
+fn transport_cursor_remainder(side: TrackpadSide, axis: DynamicAxis) -> &'static AtomicI32 {
+    match (side, axis) {
+        (TrackpadSide::Left, DynamicAxis::X) => &LEFT_CURSOR_X_TRANSPORT_REMAINDER,
+        (TrackpadSide::Left, DynamicAxis::Y) => &LEFT_CURSOR_Y_TRANSPORT_REMAINDER,
+        (TrackpadSide::Right, DynamicAxis::X) => &RIGHT_CURSOR_X_TRANSPORT_REMAINDER,
+        (TrackpadSide::Right, DynamicAxis::Y) => &RIGHT_CURSOR_Y_TRANSPORT_REMAINDER,
+    }
+}
+
+fn transport_scroll_remainder(side: TrackpadSide, axis: DynamicScrollAxis) -> &'static AtomicI32 {
+    match (side, axis) {
+        (TrackpadSide::Left, DynamicScrollAxis::Wheel) => &LEFT_SCROLL_WHEEL_TRANSPORT_REMAINDER,
+        (TrackpadSide::Left, DynamicScrollAxis::Pan) => &LEFT_SCROLL_PAN_TRANSPORT_REMAINDER,
+        (TrackpadSide::Right, DynamicScrollAxis::Wheel) => &RIGHT_SCROLL_WHEEL_TRANSPORT_REMAINDER,
+        (TrackpadSide::Right, DynamicScrollAxis::Pan) => &RIGHT_SCROLL_PAN_TRANSPORT_REMAINDER,
+    }
+}
+
 fn dynamic_scale_axis(value: i16, scale_x10: u16, remainder: &AtomicI32) -> i16 {
     let value_mul = i32::from(value)
         .saturating_mul(i32::from(scale_x10))
@@ -1679,6 +1772,28 @@ fn dynamic_scale_axis(value: i16, scale_x10: u16, remainder: &AtomicI32) -> i16 
     let scaled = value_mul / 10;
     remainder.store(
         value_mul.saturating_sub(scaled.saturating_mul(10)),
+        Ordering::Relaxed,
+    );
+    clamp_i32_to_i16(scaled)
+}
+
+fn transport_scale_axis(
+    value: i16,
+    numerator: i32,
+    denominator: i32,
+    remainder: &AtomicI32,
+) -> i16 {
+    if value == 0 {
+        return 0;
+    }
+
+    let denominator = denominator.max(1);
+    let total = i32::from(value)
+        .saturating_mul(numerator)
+        .saturating_add(remainder.load(Ordering::Relaxed));
+    let scaled = total / denominator;
+    remainder.store(
+        total - scaled.saturating_mul(denominator),
         Ordering::Relaxed,
     );
     clamp_i32_to_i16(scaled)

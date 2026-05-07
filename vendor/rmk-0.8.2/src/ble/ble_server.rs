@@ -12,6 +12,7 @@ use crate::descriptor::{
     MOUSE_RESOLUTION_MULTIPLIER_REPORT,
 };
 use crate::hid::{HidError, HidWriterTrait, Report, RunnableHidWriter};
+use crate::state::ConnectionType;
 
 // Used for saving the CCCD table
 pub(crate) const CCCD_TABLE_SIZE: usize = _CCCD_TABLE_SIZE;
@@ -105,6 +106,10 @@ impl<'stack, 'server, 'conn, P: PacketPool> BleHidServer<'stack, 'server, 'conn,
 
 impl<P: PacketPool> HidWriterTrait for BleHidServer<'_, '_, '_, P> {
     type ReportType = Report;
+
+    fn connection_type(&self) -> Option<ConnectionType> {
+        Some(ConnectionType::Ble)
+    }
 
     async fn write_report(&mut self, report: Self::ReportType) -> Result<usize, HidError> {
         match report {

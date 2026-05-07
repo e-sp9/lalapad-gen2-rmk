@@ -12,7 +12,7 @@ use crate::channel::KEYBOARD_REPORT_CHANNEL;
 use crate::config::DeviceConfig;
 use crate::descriptor::{CompositeReportType, MOUSE_RESOLUTION_MULTIPLIER_REPORT};
 use crate::hid::{HidError, HidWriterTrait, Report, RunnableHidWriter};
-use crate::state::ConnectionState;
+use crate::state::{ConnectionState, ConnectionType};
 use crate::{CONNECTION_STATE, RawMutex};
 
 pub(crate) static USB_REMOTE_WAKEUP: Signal<RawMutex, ()> = Signal::new();
@@ -63,6 +63,10 @@ impl<'d, D: Driver<'d>> RunnableHidWriter for UsbKeyboardWriter<'_, 'd, D> {
 
 impl<'d, D: Driver<'d>> HidWriterTrait for UsbKeyboardWriter<'_, 'd, D> {
     type ReportType = Report;
+
+    fn connection_type(&self) -> Option<ConnectionType> {
+        Some(ConnectionType::Usb)
+    }
 
     async fn write_report(&mut self, report: Self::ReportType) -> Result<usize, HidError> {
         // Write report to USB
