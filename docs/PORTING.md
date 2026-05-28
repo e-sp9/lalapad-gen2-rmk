@@ -176,6 +176,12 @@ The base keymap is translated from `config/lalapadgen2.keymap`, but some ZMK-spe
   firmware's central image after trackpad and split features are linked.
   `tools/check_flash_layout.py` is wired into `cargo make uf2` to reject future
   application/storage overlaps before firmware is flashed.
+- The upstream ZMK config enables sleep with a one-hour idle-sleep timeout.
+  RMK's BLE split central sleep timeout is kept explicitly disabled
+  (`split_central_sleep_timeout_seconds = 0`) until right-half direct pointer
+  reports are wired into RMK's sleep activity signal. Enabling the timeout
+  before that could let the central enter low-power connection parameters while
+  the user is only moving the right trackpad.
 - The current recognizer and pointer path support axis inversion/swap settings, but the actual left/right hardware orientation, pointer speed, and thresholds still need tuning after hardware testing.
 - ZMK Studio is approximated by Vial support in this RMK project.
 
@@ -185,12 +191,16 @@ The base keymap is translated from `config/lalapadgen2.keymap`, but some ZMK-spe
 contract derived from the upstream ZMK keymap plus documented RMK-specific
 deltas. It covers all configured RMK keymap cells, combo bindings, tri-layer and
 tap-hold behavior settings, and golden thumb-layer scenarios for Space, Enter,
-and the system tri-layer.
+and the system tri-layer. It also covers source-backed split matrix pins,
+right-central/left-peripheral orientation, BLE TX power, charge pins, RGB pins,
+IQS9151 I2C/IRQ pins, trackpad scaling constants, and selected ZMK driver
+thresholds.
 
 When the upstream checkout from `metadata.source_repo_hint` is available, the
 gate also parses `config/lalapadgen2.keymap` directly and checks the manifest
 against the raw source keymap cells, the explicitly documented RMK deltas, combo
-definitions, hold-tap timing settings, and conditional layer rule. Use
+definitions, hold-tap timing settings, conditional layer rule, shield
+`*.dtsi` / `*.overlay` pins, ZMK `*.conf` values, and RMK Rust constants. Use
 `--zmk-keymap PATH --require-zmk-source` to make that source-backed check
 mandatory in a different checkout layout.
 
@@ -201,7 +211,7 @@ python3 tools/porting_coverage.py
 ```
 
 With the local upstream source checkout present, the current gate reports
-`713/713 = 100.00%`. This is a static, source-backed, and scenario-level RMK
+`829/829 = 100.00%`. This is a static, source-backed, and scenario-level RMK
 configuration coverage metric, not a claim that hardware-only IQS9151, BLE,
 storage, or Vial runtime paths have been exhaustively exercised on real devices.
 It is intended to prevent regressions like a visible `LT(...)` binding whose

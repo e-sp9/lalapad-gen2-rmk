@@ -165,6 +165,20 @@ ZMK_DYNAMIC_SCALE_TO_RMK = {
     ("ZDS_ALL", "ZDS_RST"): "User13",
 }
 
+XIAO_D_TO_NRF = {
+    0: "P0_02",
+    1: "P0_03",
+    2: "P0_28",
+    3: "P0_29",
+    4: "P0_04",
+    5: "P0_05",
+    6: "P1_11",
+    7: "P1_12",
+    8: "P1_13",
+    9: "P1_14",
+    10: "P1_15",
+}
+
 
 @dataclass
 class Result:
@@ -187,6 +201,12 @@ def load_toml(path: Path) -> dict[str, Any]:
 def path_get(root: dict[str, Any], dotted: str) -> Any:
     value: Any = root
     for part in dotted.split("."):
+        if isinstance(value, list) and part.isdigit():
+            index = int(part)
+            if index >= len(value):
+                raise KeyError(dotted)
+            value = value[index]
+            continue
         if not isinstance(value, dict) or part not in value:
             raise KeyError(dotted)
         value = value[part]
@@ -285,6 +305,27 @@ def check_behavior_values(manifest: dict[str, Any], config: dict[str, Any]) -> l
             Result(
                 check["id"],
                 "behavior",
+                1 if ok else 0,
+                1,
+                f"expected {expected!r}, got {actual!r}",
+            )
+        )
+    return results
+
+
+def check_config_values(manifest: dict[str, Any], config: dict[str, Any]) -> list[Result]:
+    results: list[Result] = []
+    for check in manifest.get("config_values", []):
+        expected = check["expected"]
+        try:
+            actual = path_get(config, check["path"])
+        except KeyError:
+            actual = None
+        ok = actual == expected
+        results.append(
+            Result(
+                check["id"],
+                "config",
                 1 if ok else 0,
                 1,
                 f"expected {expected!r}, got {actual!r}",
@@ -558,6 +599,218 @@ def scalar_property(block: str, name: str) -> str:
     return match.group("value")
 
 
+def zmk_pin_to_rmk(controller: str, pin: int) -> str:
+    if controller == "xiao_d":
+        try:
+            return XIAO_D_TO_NRF[pin]
+        except KeyError as e:
+            raise ValueError(f"unmapped XIAO D pin {pin}") from e
+    if controller == "gpio0":
+        return f"P0_{pin:02d}"
+    if controller == "gpio1":
+        return f"P1_{pin:02d}"
+    raise ValueError(f"unmapped GPIO controller {controller!r}")
+
+
+def parse_gpio_property(block: str, name: str) -> list[str]:
+    body = f"<{extract_angle_property(block, name)}>"
+    return [
+        zmk_pin_to_rmk(match.group(1), int(match.group(2)))
+        for match in re.finditer(r"<&([A-Za-z0-9_]+)\s+([0-9]+)\b[^>]*>", body)
+    ]
+
+
+def parse_kconfig(path: Path) -> dict[str, str]:
+    values: dict[str, str] = {}
+    text = path.read_text()
+    for match in re.finditer(r"(?m)^\s*(CONFIG_[A-Za-z0-9_]+)=([^\s#]+)", text):
+        values[match.group(1)] = match.group(2)
+    return values
+
+
+def parse_rust_const(path: Path, name: str) -> Any:
+    text = re.sub(r"/\*.*?\*/", "", path.read_text(), flags=re.S)
+    text = re.sub(r"//.*", "", text)
+    match = re.search(
+        rf"(?m)^\s*(?:pub(?:\([^)]*\))?\s+)?const\s+{re.escape(name)}\s*:[^=]+=\s*(?P<value>[^;]+);",
+        text,
+    )
+    if not match:
+        raise ValueError(f"const {name!r} not found in {path}")
+    value = match.group("value").strip()
+    if value == "true":
+        return True
+    if value == "false":
+        return False
+    if value.startswith("0x"):
+        return int(value, 16)
+    numeric = re.sub(r"_(?=\d)", "", value)
+    numeric = re.sub(r"(u|i)(8|16|32|64|128|size)$", "", numeric)
+    if re.fullmatch(r"-?\d+", numeric):
+        return int(numeric)
+    return value
+
+
+def check_source_regex_values(manifest: dict[str, Any], zmk_config_dir: Path) -> list[Result]:
+    results: list[Result] = []
+    for check in manifest.get("source_regex_values", []):
+        source_path = zmk_config_dir / check["source_file"]
+        text = source_path.read_text()
+        ok = re.search(check["pattern"], text, re.S) is not None
+        results.append(
+            Result(
+                check["id"],
+                "zmk_source_regex",
+                1 if ok else 0,
+                1,
+                "ok" if ok else f"pattern {check['pattern']!r} not found in {source_path}",
+            )
+        )
+    return results
+
+
+def check_zmk_config_values(
+    manifest: dict[str, Any],
+    keyboard: dict[str, Any],
+    zmk_config_dir: Path,
+) -> list[Result]:
+    results: list[Result] = []
+    cache: dict[Path, dict[str, str]] = {}
+    for check in manifest.get("zmk_config_values", []):
+        source_path = zmk_config_dir / check["source_file"]
+        if source_path not in cache:
+            cache[source_path] = parse_kconfig(source_path)
+        actual_source = cache[source_path].get(check["key"])
+        expected_source = check["source_expected"]
+        source_ok = actual_source == expected_source
+
+        passed = 1 if source_ok else 0
+        total = 1
+        messages = [f"source expected {expected_source!r}, got {actual_source!r}"]
+
+        if "target_path" in check:
+            try:
+                actual_target = path_get(keyboard, check["target_path"])
+            except KeyError:
+                actual_target = None
+            expected_target = check["target_expected"]
+            target_ok = actual_target == expected_target
+            passed += 1 if target_ok else 0
+            total += 1
+            messages.append(f"target expected {expected_target!r}, got {actual_target!r}")
+
+        results.append(
+            Result(
+                check["id"],
+                "zmk_config",
+                passed,
+                total,
+                "ok" if passed == total else "; ".join(messages),
+            )
+        )
+    return results
+
+
+def check_zmk_pin_values(
+    manifest: dict[str, Any],
+    keyboard: dict[str, Any],
+    zmk_config_dir: Path,
+) -> list[Result]:
+    results: list[Result] = []
+    for check in manifest.get("zmk_pin_values", []):
+        source_path = zmk_config_dir / check["source_file"]
+        block = extract_block(source_path.read_text(), check["source_block"])
+        actual_source = parse_gpio_property(block, check["source_property"])
+        expected_source = list(check["expected"])
+        source_ok = actual_source == expected_source
+        passed = 1 if source_ok else 0
+        total = 1
+        messages = [f"source expected {expected_source!r}, got {actual_source!r}"]
+
+        for target_path in check.get("target_paths", []):
+            try:
+                actual_target = path_get(keyboard, target_path)
+            except KeyError:
+                actual_target = None
+            expected_target: Any = expected_source
+            if len(expected_source) == 1 and not isinstance(actual_target, list):
+                expected_target = expected_source[0]
+            target_ok = actual_target == expected_target
+            passed += 1 if target_ok else 0
+            total += 1
+            messages.append(f"{target_path} expected {expected_target!r}, got {actual_target!r}")
+
+        results.append(
+            Result(
+                check["id"],
+                "zmk_pin",
+                passed,
+                total,
+                "ok" if passed == total else "; ".join(messages),
+            )
+        )
+    return results
+
+
+def check_rust_const_values(manifest: dict[str, Any], zmk_config_dir: Path, project_root: Path) -> list[Result]:
+    results: list[Result] = []
+    source_cache: dict[Path, dict[str, str]] = {}
+    for check in manifest.get("rust_const_values", []):
+        passed = 0
+        total = 0
+        messages: list[str] = []
+
+        expected = check["expected"]
+        if "source_file" in check and "source_key" in check:
+            source_path = zmk_config_dir / check["source_file"]
+            if source_path not in source_cache:
+                source_cache[source_path] = parse_kconfig(source_path)
+            actual_source = source_cache[source_path].get(check["source_key"])
+            expected_source = str(expected).lower() if isinstance(expected, bool) else str(expected)
+            total += 1
+            if actual_source == expected_source:
+                passed += 1
+            else:
+                messages.append(f"source expected {expected_source!r}, got {actual_source!r}")
+
+        actual_const = parse_rust_const(project_root / check["target_file"], check["target_const"])
+        total += 1
+        if actual_const == expected:
+            passed += 1
+        else:
+            messages.append(f"{check['target_const']} expected {expected!r}, got {actual_const!r}")
+
+        results.append(
+            Result(
+                check["id"],
+                "rust_const",
+                passed,
+                total,
+                "ok" if not messages else "; ".join(messages),
+            )
+        )
+    return results
+
+
+def check_code_contains(manifest: dict[str, Any], project_root: Path) -> list[Result]:
+    results: list[Result] = []
+    for check in manifest.get("code_contains", []):
+        text = (project_root / check["file"]).read_text()
+        needles = list(check["needles"])
+        passed = sum(1 for needle in needles if needle in text)
+        missing = [needle for needle in needles if needle not in text]
+        results.append(
+            Result(
+                check["id"],
+                "code",
+                passed,
+                len(needles),
+                "ok" if not missing else f"missing {missing!r}",
+            )
+        )
+    return results
+
+
 def check_zmk_source_deltas(manifest: dict[str, Any], raw_layers: list[list[list[str]]]) -> list[Result]:
     results: list[Result] = []
     for delta in manifest.get("source_deltas", []):
@@ -608,7 +861,13 @@ def check_zmk_behavior_source(manifest: dict[str, Any], source_text: str) -> lis
     return results
 
 
-def check_zmk_source(manifest: dict[str, Any], zmk_keymap_path: Path, required: bool) -> list[Result]:
+def check_zmk_source(
+    manifest: dict[str, Any],
+    keyboard: dict[str, Any],
+    project_root: Path,
+    zmk_keymap_path: Path,
+    required: bool,
+) -> list[Result]:
     results: list[Result] = []
     if not zmk_keymap_path.exists():
         if required:
@@ -631,6 +890,7 @@ def check_zmk_source(manifest: dict[str, Any], zmk_keymap_path: Path, required: 
             )
         ]
 
+    zmk_config_dir = zmk_keymap_path.parent
     raw_source_layers = raw_zmk_keymap_rows(zmk_keymap_path)
     results.extend(check_zmk_source_deltas(manifest, raw_source_layers))
     source_layers = apply_documented_rmk_deltas(manifest, raw_source_layers)
@@ -706,6 +966,10 @@ def check_zmk_source(manifest: dict[str, Any], zmk_keymap_path: Path, required: 
             "ok" if ok else "ZMK conditional layer 1+2=>3 is not mirrored by manifest tri-layer",
         )
     )
+    results.extend(check_zmk_config_values(manifest, keyboard, zmk_config_dir))
+    results.extend(check_zmk_pin_values(manifest, keyboard, zmk_config_dir))
+    results.extend(check_source_regex_values(manifest, zmk_config_dir))
+    results.extend(check_rust_const_values(manifest, zmk_config_dir, project_root))
     return results
 
 
@@ -729,17 +993,22 @@ def run(
     zmk_keymap_path: Path | None,
     require_zmk_source: bool,
 ) -> list[Result]:
+    project_root = keyboard_path.resolve().parent
     manifest = load_toml(manifest_path)
     keyboard = load_toml(keyboard_path)
     results: list[Result] = []
     results.extend(check_layout(manifest, keyboard))
     results.extend(check_keymap_rows(manifest, keyboard))
+    results.extend(check_config_values(manifest, keyboard))
     results.extend(check_behavior_values(manifest, keyboard))
     results.extend(check_combos(manifest, keyboard))
     results.extend(check_scenarios(manifest, keyboard))
+    results.extend(check_code_contains(manifest, project_root))
     results.extend(
         check_zmk_source(
             manifest,
+            keyboard,
+            project_root,
             zmk_keymap_path if zmk_keymap_path is not None else default_zmk_keymap_path(manifest),
             require_zmk_source,
         )

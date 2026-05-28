@@ -124,8 +124,9 @@ cargo build --release
 
 `tools/porting_coverage.py` reads `tools/porting_coverage_manifest.toml` and,
 when the upstream ZMK checkout from the manifest is present, also parses
-`config/lalapadgen2.keymap` to verify that the migration contract still matches
-the source firmware. Use `--zmk-keymap PATH --require-zmk-source` when the
+`config/lalapadgen2.keymap`, shield overlays, ZMK Kconfig values, and selected
+RMK Rust constants to verify that the migration contract still matches the
+source firmware. Use `--zmk-keymap PATH --require-zmk-source` when the
 source-backed check must be mandatory in another checkout layout.
 
 Host-side parity tests can be run explicitly with:
