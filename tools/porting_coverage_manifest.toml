@@ -3,6 +3,13 @@ source = "ZMK LaLaPad Gen2 config/lalapadgen2.keymap"
 source_repo_hint = "../zmk-config-LalaPadGen2"
 description = "Machine-readable porting target for the RMK migration coverage gate. Expected values describe the RMK target behavior, including documented RMK-specific deltas needed to preserve the user's established thumb layer-tap workflow."
 
+[source_inventory]
+kconfig_files = [
+  "lalapadgen2.conf",
+  "boards/shields/lalapadgen2/lalapadgen2_left.conf",
+  "boards/shields/lalapadgen2/lalapadgen2_right.conf",
+]
+
 [layout]
 rows = 7
 cols = 12

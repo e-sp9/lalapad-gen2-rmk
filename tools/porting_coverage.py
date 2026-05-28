@@ -748,6 +748,53 @@ def check_zmk_config_mirrors(manifest: dict[str, Any], zmk_config_dir: Path) -> 
     return results
 
 
+def covered_zmk_config_keys(manifest: dict[str, Any]) -> dict[str, set[str]]:
+    covered: dict[str, set[str]] = {}
+
+    def add(source_file: str, key: str) -> None:
+        covered.setdefault(source_file, set()).add(key)
+
+    for check in manifest.get("zmk_config_values", []):
+        add(check["source_file"], check["key"])
+    for check in manifest.get("rust_const_values", []):
+        if "source_file" in check and "source_key" in check:
+            add(check["source_file"], check["source_key"])
+    for check in manifest.get("zmk_config_mirrors", []):
+        for source_file in check["source_files"]:
+            for key in check["keys"]:
+                add(source_file, key)
+
+    return covered
+
+
+def check_zmk_config_inventory(manifest: dict[str, Any], zmk_config_dir: Path) -> list[Result]:
+    inventory = manifest.get("source_inventory", {})
+    covered = covered_zmk_config_keys(manifest)
+    results: list[Result] = []
+    for source_file in inventory.get("kconfig_files", []):
+        actual_keys = set(parse_kconfig(zmk_config_dir / source_file))
+        covered_keys = covered.get(source_file, set())
+        missing = sorted(actual_keys - covered_keys)
+        extra = sorted(covered_keys - actual_keys)
+        passed = len(actual_keys) - len(missing)
+        total = len(actual_keys) + len(extra)
+        messages: list[str] = []
+        if missing:
+            messages.append(f"unclassified active keys {missing!r}")
+        if extra:
+            messages.append(f"manifest references absent keys {extra!r}")
+        results.append(
+            Result(
+                f"kconfig_inventory.{source_file}",
+                "zmk_inventory",
+                passed,
+                total,
+                "ok" if not messages else "; ".join(messages),
+            )
+        )
+    return results
+
+
 def check_zmk_pin_values(
     manifest: dict[str, Any],
     keyboard: dict[str, Any],
@@ -1101,6 +1148,7 @@ def check_zmk_source(
     )
     results.extend(check_zmk_config_values(manifest, keyboard, zmk_config_dir))
     results.extend(check_zmk_config_mirrors(manifest, zmk_config_dir))
+    results.extend(check_zmk_config_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_pin_values(manifest, keyboard, zmk_config_dir))
     results.extend(check_source_regex_values(manifest, zmk_config_dir))
     results.extend(check_rust_const_values(manifest, zmk_config_dir, project_root))

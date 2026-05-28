@@ -196,9 +196,11 @@ right-central/left-peripheral orientation, BLE TX power, charge pins, RGB pins,
 IQS9151 I2C/IRQ pins, trackpad scaling constants, and selected ZMK driver
 thresholds. Source-backed checks also verify the ZMK global Kconfig flags,
 left/right IQS9151 Kconfig parity, trackpad listener split routing, and
-tap/gesture timing constants that are mirrored into RMK. The gate also compares
-the Vial matrix positions against the upstream ZMK layout JSON and checks the
-RMK custom keycode order used for the ZMK Bluetooth and trackpad scale actions.
+tap/gesture timing constants that are mirrored into RMK. The gate also verifies
+that every active ZMK Kconfig key in the configured source files is classified
+by the migration contract, compares the Vial matrix positions against the
+upstream ZMK layout JSON, and checks the RMK custom keycode order used for the
+ZMK Bluetooth and trackpad scale actions.
 
 When the upstream checkout from `metadata.source_repo_hint` is available, the
 gate also parses `config/lalapadgen2.keymap` directly and checks the manifest
@@ -215,7 +217,7 @@ python3 tools/porting_coverage.py
 ```
 
 With the local upstream source checkout present, the current gate reports
-`998/998 = 100.00%`. This is a static, source-backed, and scenario-level RMK
+`1103/1103 = 100.00%`. This is a static, source-backed, and scenario-level RMK
 configuration coverage metric, not a claim that hardware-only IQS9151, BLE,
 storage, or Vial runtime paths have been exhaustively exercised on real devices.
 It is intended to prevent regressions like a visible `LT(...)` binding whose
