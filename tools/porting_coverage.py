@@ -504,10 +504,24 @@ def extract_block(text: str, name: str) -> str:
 
 def matching_block_end(text: str, start: int) -> int:
     depth = 0
+    in_string = False
+    escaped = False
     for index in range(start, len(text)):
-        if text[index] == "{":
+        char = text[index]
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+
+        if char == '"':
+            in_string = True
+        elif char == "{":
             depth += 1
-        elif text[index] == "}":
+        elif char == "}":
             depth -= 1
             if depth == 0:
                 return index
@@ -687,8 +701,21 @@ def manifest_keymap_rows(manifest: dict[str, Any]) -> list[list[list[str]]]:
 def top_level_text(block: str) -> str:
     chars: list[str] = []
     depth = 0
+    in_string = False
+    escaped = False
     for char in block:
-        if char == "{":
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            chars.append(char if depth == 0 else " ")
+        elif char == '"':
+            in_string = True
+            chars.append(char if depth == 0 else " ")
+        elif char == "{":
             depth += 1
             chars.append(" ")
         elif char == "}":
@@ -706,21 +733,28 @@ def has_top_level_property(block: str, name: str) -> bool:
     return re.search(rf"(?<![A-Za-z0-9_,]){re.escape(name)}\s*=", top_level_text(block)) is not None
 
 
-def zmk_keymap_layer_names(source_text: str) -> list[str]:
-    keymap_block = extract_block(strip_c_style_comments(source_text), "keymap")
-    names: list[str] = []
+def top_level_child_blocks(block: str) -> list[tuple[str | None, str, str]]:
+    children: list[tuple[str | None, str, str]] = []
     index = 0
     pattern = re.compile(
         r"(?:(?P<label>[A-Za-z_][A-Za-z0-9_]*)\s*:\s*)?"
         r"(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*\{"
     )
-    while match := pattern.search(keymap_block, index):
+    while match := pattern.search(block, index):
         body_start = match.end() - 1
-        body_end = matching_block_end(keymap_block, body_start)
-        body = keymap_block[body_start + 1 : body_end]
-        if has_top_level_property(body, "bindings"):
-            names.append(match.group("name"))
+        body_end = matching_block_end(block, body_start)
+        body = block[body_start + 1 : body_end]
+        children.append((match.group("label"), match.group("name"), body))
         index = body_end + 1
+    return children
+
+
+def zmk_keymap_layer_names(source_text: str) -> list[str]:
+    keymap_block = extract_block(strip_c_style_comments(source_text), "keymap")
+    names: list[str] = []
+    for _, name, body in top_level_child_blocks(keymap_block):
+        if has_top_level_property(body, "bindings"):
+            names.append(name)
     return names
 
 
@@ -744,6 +778,39 @@ def check_zmk_keymap_layer_inventory(manifest: dict[str, Any], source_text: str)
             passed,
             total,
             "ok" if not mismatches else "; ".join(mismatches),
+        )
+    ]
+
+
+def zmk_behavior_node_names(source_text: str) -> list[str]:
+    behaviors_block = extract_block(strip_c_style_comments(source_text), "behaviors")
+    return [label or name for label, name, _ in top_level_child_blocks(behaviors_block)]
+
+
+def check_zmk_behavior_inventory(manifest: dict[str, Any], source_text: str) -> list[Result]:
+    expected = list(manifest.get("source_inventory", {}).get("behavior_nodes", []))
+    actual_list = zmk_behavior_node_names(source_text)
+    actual = set(actual_list)
+    expected_set = set(expected)
+    missing = sorted(expected_set - actual)
+    extra = sorted(actual - expected_set)
+    duplicates = sorted(node for node in actual if actual_list.count(node) > 1)
+    passed = len(expected_set) - len(missing)
+    total = len(expected_set) + len(extra) + len(duplicates)
+    messages: list[str] = []
+    if missing:
+        messages.append(f"missing behavior nodes {missing!r}")
+    if extra:
+        messages.append(f"unexpected behavior nodes {extra!r}")
+    if duplicates:
+        messages.append(f"duplicated behavior nodes {duplicates!r}")
+    return [
+        Result(
+            "zmk_source.behavior_inventory",
+            "zmk_source_inventory",
+            passed,
+            total,
+            "ok" if not messages else "; ".join(messages),
         )
     ]
 
@@ -1390,6 +1457,7 @@ def check_zmk_source(
     zmk_config_dir = zmk_keymap_path.parent
     source_text = zmk_keymap_path.read_text()
     results.extend(check_zmk_keymap_layer_inventory(manifest, source_text))
+    results.extend(check_zmk_behavior_inventory(manifest, source_text))
     raw_source_layers = raw_zmk_keymap_rows(zmk_keymap_path)
     results.extend(check_zmk_source_deltas(manifest, raw_source_layers))
     source_layers = apply_documented_rmk_deltas(manifest, raw_source_layers)

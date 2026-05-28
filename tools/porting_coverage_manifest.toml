@@ -10,6 +10,12 @@ keymap_layers = [
   "TERTIARY_LAYER",
   "SYSTEM_LAYER",
 ]
+behavior_nodes = [
+  "zip_dyn_scale",
+  "zip_dyn_scale_set",
+  "mt2",
+  "tap_dance_layer_1and2",
+]
 kconfig_files = [
   "lalapadgen2.conf",
   "boards/shields/lalapadgen2/lalapadgen2_left.conf",

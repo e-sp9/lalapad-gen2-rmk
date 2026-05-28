@@ -2,10 +2,16 @@ use crate::iqs9151::{TrackpadButton, TrackpadSide, VirtualKeyPosition, trackpad_
 use std::process::Command;
 
 const KEYBOARD_TOML: &str = include_str!("../keyboard.toml");
+const PORTING_COVERAGE_MANIFEST_TOML: &str =
+    include_str!("../tools/porting_coverage_manifest.toml");
 const VIAL_JSON: &str = include_str!("../vial.json");
 
 fn keyboard_toml() -> toml::Value {
     toml::from_str(KEYBOARD_TOML).unwrap()
+}
+
+fn porting_coverage_manifest_toml() -> toml::Value {
+    toml::from_str(PORTING_COVERAGE_MANIFEST_TOML).unwrap()
 }
 
 fn vial_json() -> serde_json::Value {
@@ -109,6 +115,26 @@ fn porting_coverage_includes_exact_rmk_inventory_gates() {
         assert_eq!(layer_inventory["passed"].as_i64(), Some(layers));
         assert_eq!(layer_inventory["total"].as_i64(), Some(layers));
         assert_eq!(layer_inventory["ok"], true);
+
+        let behavior_inventory = results
+            .iter()
+            .find(|result| result["id"] == "zmk_source.behavior_inventory")
+            .expect("ZMK behavior inventory coverage result is missing");
+        let expected_behavior_nodes =
+            porting_coverage_manifest_toml()["source_inventory"]["behavior_nodes"]
+                .as_array()
+                .unwrap()
+                .len() as i64;
+        assert_eq!(behavior_inventory["kind"], "zmk_source_inventory");
+        assert_eq!(
+            behavior_inventory["passed"].as_i64(),
+            Some(expected_behavior_nodes)
+        );
+        assert_eq!(
+            behavior_inventory["total"].as_i64(),
+            Some(expected_behavior_nodes)
+        );
+        assert_eq!(behavior_inventory["ok"], true);
     }
 }
 
@@ -234,6 +260,124 @@ print(json.dumps({
     assert_eq!(nested_non_layer["passed"].as_i64(), Some(expected_layers));
     assert_eq!(nested_non_layer["total"].as_i64(), Some(expected_layers));
     assert_eq!(nested_non_layer["ok"], true);
+}
+
+#[test]
+fn porting_coverage_rejects_unclassified_zmk_behaviors() {
+    let output = run_python(
+        r#"
+import importlib.util
+import json
+import sys
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("porting_coverage", "tools/porting_coverage.py")
+pc = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = pc
+spec.loader.exec_module(pc)
+manifest = pc.load_toml(Path("tools/porting_coverage_manifest.toml"))
+
+def source(extra):
+    return f'''
+/ {{
+    behaviors {{
+        {extra}
+    }};
+}};
+'''
+
+def pack(results):
+    return [result.__dict__ | {"ok": result.ok} for result in results]
+
+print(json.dumps({
+    "reordered": pack(pc.check_zmk_behavior_inventory(
+        manifest,
+        source('''
+        tap_dance_layer_1and2: tap_dance_layer_1and2 { compatible = "zmk,behavior-tap-dance"; };
+        mt2: mod_tap2 { compatible = "zmk,behavior-hold-tap"; label = "brace { in string }"; };
+        zip_dyn_scale_set: zip_dyn_scale_set { compatible = "zmk,behavior-zip-dynamic-scale-set"; };
+        zip_dyn_scale: zip_dyn_scale { compatible = "zmk,behavior-zip-dynamic-scale"; };
+        '''),
+    )),
+    "extra": pack(pc.check_zmk_behavior_inventory(
+        manifest,
+        source('''
+        zip_dyn_scale: zip_dyn_scale { compatible = "zmk,behavior-zip-dynamic-scale"; };
+        zip_dyn_scale_set: zip_dyn_scale_set { compatible = "zmk,behavior-zip-dynamic-scale-set"; };
+        mt2: mod_tap2 { compatible = "zmk,behavior-hold-tap"; };
+        tap_dance_layer_1and2: tap_dance_layer_1and2 { compatible = "zmk,behavior-tap-dance"; };
+        new_hold: new_hold { compatible = "zmk,behavior-hold-tap"; };
+        '''),
+    )),
+    "nested_non_behavior": pack(pc.check_zmk_behavior_inventory(
+        manifest,
+        source('''
+        zip_dyn_scale: zip_dyn_scale { compatible = "zmk,behavior-zip-dynamic-scale"; };
+        zip_dyn_scale_set: zip_dyn_scale_set { compatible = "zmk,behavior-zip-dynamic-scale-set"; };
+        mt2: mod_tap2 { compatible = "zmk,behavior-hold-tap"; };
+        tap_dance_layer_1and2: tap_dance_layer_1and2 { compatible = "zmk,behavior-tap-dance"; };
+        metadata { child { compatible = "zmk,behavior-hold-tap"; }; };
+        '''),
+    )),
+}))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "behavior inventory parser check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let expected_behavior_nodes =
+        porting_coverage_manifest_toml()["source_inventory"]["behavior_nodes"]
+            .as_array()
+            .unwrap()
+            .len() as i64;
+
+    let reordered = &parsed["reordered"][0];
+    assert_eq!(reordered["kind"], "zmk_source_inventory");
+    assert_eq!(reordered["passed"].as_i64(), Some(expected_behavior_nodes));
+    assert_eq!(reordered["total"].as_i64(), Some(expected_behavior_nodes));
+    assert_eq!(reordered["ok"], true);
+
+    let behavior_inventory = &parsed["extra"][0];
+    assert_eq!(behavior_inventory["kind"], "zmk_source_inventory");
+    assert_eq!(
+        behavior_inventory["passed"].as_i64(),
+        Some(expected_behavior_nodes)
+    );
+    assert_eq!(
+        behavior_inventory["total"].as_i64(),
+        Some(expected_behavior_nodes + 1)
+    );
+    assert_eq!(behavior_inventory["ok"], false);
+    assert!(
+        behavior_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("new_hold")
+    );
+
+    let nested_non_behavior = &parsed["nested_non_behavior"][0];
+    assert_eq!(nested_non_behavior["kind"], "zmk_source_inventory");
+    assert_eq!(
+        nested_non_behavior["passed"].as_i64(),
+        Some(expected_behavior_nodes)
+    );
+    assert_eq!(
+        nested_non_behavior["total"].as_i64(),
+        Some(expected_behavior_nodes + 1)
+    );
+    assert_eq!(nested_non_behavior["ok"], false);
+    assert!(
+        nested_non_behavior["message"]
+            .as_str()
+            .unwrap()
+            .contains("metadata")
+    );
 }
 
 fn keymap(value: &toml::Value) -> &Vec<toml::Value> {
