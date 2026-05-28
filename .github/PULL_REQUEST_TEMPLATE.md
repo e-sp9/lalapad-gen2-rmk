@@ -17,6 +17,7 @@
 - [ ] `python3 -c 'import tomllib; tomllib.load(open("keyboard.toml", "rb")); tomllib.load(open("Cargo.toml", "rb")); print("toml ok")'`
 - [ ] `rmkit get-chip --keyboard-toml-path keyboard.toml`
 - [ ] `rmkit get-project-name --keyboard-toml-path keyboard.toml`
+- [ ] `python3 tools/porting_coverage.py --require-zmk-source`
 - [ ] `cargo check --release --bin central`
 - [ ] `cargo check --release --bin peripheral`
 - [ ] `cargo build --release`

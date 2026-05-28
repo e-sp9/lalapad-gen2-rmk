@@ -213,10 +213,12 @@ mandatory in a different checkout layout.
 Run:
 
 ```sh
-python3 tools/porting_coverage.py
+python3 tools/porting_coverage.py --require-zmk-source
 ```
 
-With the local upstream source checkout present, the current gate reports
+The firmware GitHub Actions workflow checks out `e-sp9/zmk-config-LalaPadGen2`
+and runs this source-backed gate before building release binaries. With the
+local upstream source checkout present, the current gate reports
 `1103/1103 = 100.00%`. This is a static, source-backed, and scenario-level RMK
 configuration coverage metric, not a claim that hardware-only IQS9151, BLE,
 storage, or Vial runtime paths have been exhaustively exercised on real devices.

@@ -115,7 +115,7 @@ python3 -m json.tool vial.json >/tmp/lalapad-vial-check.json
 python3 -c 'import tomllib; tomllib.load(open("keyboard.toml", "rb")); tomllib.load(open("Cargo.toml", "rb")); print("toml ok")'
 rmkit get-chip --keyboard-toml-path keyboard.toml
 rmkit get-project-name --keyboard-toml-path keyboard.toml
-python3 tools/porting_coverage.py
+python3 tools/porting_coverage.py --require-zmk-source
 python3 tools/check_flash_layout.py --config-only
 cargo check --release --bin central
 cargo check --release --bin peripheral
@@ -131,7 +131,9 @@ ZMK trackpad listener routing shape, verifies that every active ZMK Kconfig key
 in the source files is classified by the migration contract, and checks Vial's
 matrix positions plus RMK custom keycode order. Use
 `--zmk-keymap PATH --require-zmk-source` when the source-backed check must be
-mandatory in another checkout layout.
+mandatory in another checkout layout. The firmware CI checks out
+`e-sp9/zmk-config-LalaPadGen2` and runs this source-backed gate before building
+release binaries.
 
 Host-side parity tests can be run explicitly with:
 
