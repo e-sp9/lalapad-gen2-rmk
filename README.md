@@ -129,7 +129,8 @@ RMK Rust constants to verify that the migration contract still matches the
 source firmware. It also checks left/right IQS9151 Kconfig parity and the
 ZMK trackpad listener routing shape, verifies that every active ZMK Kconfig key
 in the source files is classified by the migration contract, and checks Vial's
-matrix positions plus RMK custom keycode order. Use
+matrix positions, ZMK `default_transform` order, the active ZMK physical-layout
+chain, and RMK custom keycode order. Use
 `--zmk-keymap PATH --require-zmk-source` when the source-backed check must be
 mandatory in another checkout layout. The firmware CI checks out
 `e-sp9/zmk-config-LalaPadGen2` and runs this source-backed gate before building

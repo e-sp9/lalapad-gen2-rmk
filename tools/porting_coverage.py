@@ -416,11 +416,31 @@ def extract_block(text: str, name: str) -> str:
     raise ValueError(f"block {name!r} is not closed")
 
 
+def strip_c_style_comments(text: str) -> str:
+    text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
+    return re.sub(r"//.*", "", text)
+
+
 def extract_angle_property(block: str, name: str) -> str:
     match = re.search(rf"\b{re.escape(name)}\s*=\s*<(?P<body>.*?)>\s*;", block, re.S)
     if not match:
         raise ValueError(f"property {name!r} not found")
     return match.group("body")
+
+
+def extract_ref_property(block: str, name: str) -> str:
+    pattern = (
+        rf"(?<![A-Za-z0-9_,]){re.escape(name)}(?![A-Za-z0-9_,])\s*=\s*"
+        r"(?:<(?P<angle>.*?)>|(?P<plain>&[A-Za-z0-9_]+))\s*;"
+    )
+    match = re.search(
+        pattern,
+        block,
+        re.S,
+    )
+    if not match:
+        raise ValueError(f"reference property {name!r} not found")
+    return (match.group("angle") or match.group("plain")).strip()
 
 
 def zmk_kp_to_rmk(key: str) -> str:
@@ -497,31 +517,26 @@ def parse_zmk_bindings(body: str) -> list[str]:
     return bindings
 
 
-def zmk_rows_from_bindings(bindings: list[str]) -> list[list[str]]:
-    if len(bindings) != 68:
-        raise ValueError(f"expected 68 ZMK bindings per layer, got {len(bindings)}")
+def zmk_rows_from_bindings(
+    bindings: list[str],
+    transform_rows: int,
+    transform_cols: int,
+    transform_positions: list[tuple[int, int]],
+) -> list[list[str]]:
+    if len(bindings) != len(transform_positions):
+        raise ValueError(
+            f"expected {len(transform_positions)} ZMK bindings per layer from default_transform, "
+            f"got {len(bindings)}"
+        )
 
-    source_rows = [
-        bindings[0:10],
-        bindings[10:20],
-        bindings[20:30],
-        bindings[30:42],
-        bindings[42:52],
-        bindings[52:58],
-        bindings[58:68],
-    ]
-    if bindings[68:]:
-        raise ValueError(f"unexpected trailing ZMK bindings: {bindings[68:]!r}")
-
-    return [
-        source_rows[0][0:5] + [NO_KEY, NO_KEY] + source_rows[0][5:10],
-        source_rows[1][0:5] + [NO_KEY, NO_KEY] + source_rows[1][5:10],
-        source_rows[2][0:5] + [NO_KEY, NO_KEY] + source_rows[2][5:10],
-        source_rows[3],
-        [NO_KEY] + source_rows[4] + [NO_KEY],
-        source_rows[5][0:3] + [NO_KEY] * 6 + source_rows[5][3:6],
-        source_rows[6][0:5] + [NO_KEY, NO_KEY] + source_rows[6][5:10],
-    ]
+    rows = [[NO_KEY for _ in range(transform_cols)] for _ in range(transform_rows)]
+    for binding, (row, col) in zip(bindings, transform_positions, strict=True):
+        if row >= transform_rows or col >= transform_cols:
+            raise ValueError(f"default_transform position {(row, col)!r} exceeds matrix shape")
+        if rows[row][col] != NO_KEY:
+            raise ValueError(f"default_transform maps duplicate position {(row, col)!r}")
+        rows[row][col] = binding
+    return rows
 
 
 def apply_documented_rmk_deltas(
@@ -536,10 +551,20 @@ def apply_documented_rmk_deltas(
 
 def raw_zmk_keymap_rows(path: Path) -> list[list[list[str]]]:
     text = path.read_text()
+    transform_rows, transform_cols, transform_positions = zmk_matrix_transform(
+        path.parent / "boards/shields/lalapadgen2/lalapadgen2.dtsi"
+    )
     layers: list[list[list[str]]] = []
     for layer_name in LAYER_NAMES:
         block = extract_block(text, layer_name)
-        layers.append(zmk_rows_from_bindings(parse_zmk_bindings(extract_angle_property(block, "bindings"))))
+        layers.append(
+            zmk_rows_from_bindings(
+                parse_zmk_bindings(extract_angle_property(block, "bindings")),
+                transform_rows,
+                transform_cols,
+                transform_positions,
+            )
+        )
     return layers
 
 
@@ -914,6 +939,136 @@ def zmk_json_positions(value: dict[str, Any]) -> list[tuple[int, int]]:
     return [(int(item["row"]), int(item["col"])) for item in layout]
 
 
+def zmk_matrix_transform(path: Path) -> tuple[int, int, list[tuple[int, int]]]:
+    block = extract_block(strip_c_style_comments(path.read_text()), "default_transform")
+    rows = angle_int_property(block, "rows")
+    cols = angle_int_property(block, "columns")
+    map_body = strip_c_style_comments(extract_angle_property(block, "map"))
+    positions = [
+        (int(match.group(1)), int(match.group(2)))
+        for match in re.finditer(r"RC\(\s*(\d+)\s*,\s*(\d+)\s*\)", map_body)
+    ]
+    return rows, cols, positions
+
+
+def check_zmk_physical_layout_chain(zmk_config_dir: Path) -> list[Result]:
+    dtsi_text = strip_c_style_comments(
+        (zmk_config_dir / "boards/shields/lalapadgen2/lalapadgen2.dtsi").read_text()
+    )
+    layout_text = strip_c_style_comments(
+        (zmk_config_dir / "boards/shields/lalapadgen2/lalapadgen2-layouts.dtsi").read_text()
+    )
+    rows, cols, transform_positions = zmk_matrix_transform(
+        zmk_config_dir / "boards/shields/lalapadgen2/lalapadgen2.dtsi"
+    )
+
+    chosen_block = extract_block(dtsi_text, "chosen")
+    layout_block = extract_block(layout_text, "lalapadgen2_physical_layout")
+    checks = [
+        (
+            "chosen.zmk,physical-layout",
+            extract_ref_property(chosen_block, "zmk,physical-layout"),
+            "&lalapadgen2_physical_layout",
+        ),
+        ("physical_layout.kscan", extract_ref_property(layout_block, "kscan"), "&kscan0"),
+        (
+            "physical_layout.transform",
+            extract_ref_property(layout_block, "transform"),
+            "&default_transform",
+        ),
+    ]
+    passed = sum(1 for _, actual, expected in checks if actual == expected)
+    messages = [
+        f"{name} expected {expected!r}, got {actual!r}"
+        for name, actual, expected in checks
+        if actual != expected
+    ]
+    results = [
+        Result(
+            "zmk_physical_layout_chain",
+            "zmk_transform",
+            passed,
+            len(checks),
+            "ok" if not messages else "; ".join(messages),
+        )
+    ]
+
+    keys_body = extract_angle_property(layout_block, "keys")
+    key_count = len(re.findall(r"&key_physical_attrs\b", keys_body))
+    expected_key_count = len(transform_positions)
+    unique_transform_positions = set(transform_positions)
+    in_bounds_positions = {
+        (row, col)
+        for row in range(rows)
+        for col in range(cols)
+        if (row, col) in unique_transform_positions
+    }
+    ok = key_count == expected_key_count == len(in_bounds_positions)
+    results.append(
+        Result(
+            "zmk_physical_layout_key_count",
+            "zmk_transform",
+            1 if ok else 0,
+            1,
+            "ok"
+            if ok
+            else f"physical layout keys {key_count}, transform positions {expected_key_count}",
+        )
+    )
+    return results
+
+
+def check_zmk_matrix_transform(manifest: dict[str, Any], zmk_config_dir: Path) -> list[Result]:
+    transform_path = zmk_config_dir / "boards/shields/lalapadgen2/lalapadgen2.dtsi"
+    zmk_layout = load_json(zmk_config_dir / "lalapadgen2.json")
+    rows, cols, transform_positions = zmk_matrix_transform(transform_path)
+    expected_layout = manifest["layout"]
+    expected_positions = zmk_json_positions(zmk_layout)
+    results: list[Result] = []
+
+    shape_checks = [
+        ("rows", rows, expected_layout["rows"]),
+        ("cols", cols, expected_layout["cols"]),
+    ]
+    shape_passed = sum(1 for _, actual, expected in shape_checks if actual == expected)
+    shape_messages = [
+        f"{name} expected {expected!r}, got {actual!r}"
+        for name, actual, expected in shape_checks
+        if actual != expected
+    ]
+    results.append(
+        Result(
+            "zmk_matrix_transform_shape",
+            "zmk_transform",
+            shape_passed,
+            len(shape_checks),
+            "ok" if not shape_messages else "; ".join(shape_messages),
+        )
+    )
+
+    position_total = max(len(expected_positions), len(transform_positions))
+    position_passed = 0
+    mismatches: list[str] = []
+    for index in range(position_total):
+        expected = expected_positions[index] if index < len(expected_positions) else None
+        actual = transform_positions[index] if index < len(transform_positions) else None
+        if actual == expected:
+            position_passed += 1
+        else:
+            mismatches.append(f"p{index}: expected {expected!r}, got {actual!r}")
+    results.append(
+        Result(
+            "zmk_matrix_transform_matches_layout_json",
+            "zmk_transform",
+            position_passed,
+            position_total,
+            "ok" if not mismatches else "; ".join(mismatches[:8]),
+        )
+    )
+    results.extend(check_zmk_physical_layout_chain(zmk_config_dir))
+    return results
+
+
 def check_vial_layout(manifest: dict[str, Any], project_root: Path, zmk_config_dir: Path) -> list[Result]:
     vial = load_json(project_root / "vial.json")
     zmk_layout = load_json(zmk_config_dir / "lalapadgen2.json")
@@ -1169,6 +1324,7 @@ def check_zmk_source(
     results.extend(check_zmk_config_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_pin_values(manifest, keyboard, zmk_config_dir))
     results.extend(check_source_regex_values(manifest, zmk_config_dir))
+    results.extend(check_zmk_matrix_transform(manifest, zmk_config_dir))
     results.extend(check_rust_const_values(manifest, zmk_config_dir, project_root))
     results.extend(check_vial_layout(manifest, project_root, zmk_config_dir))
     return results

@@ -202,8 +202,10 @@ left/right IQS9151 Kconfig parity, trackpad listener split routing, and
 tap/gesture timing constants that are mirrored into RMK. The gate also verifies
 that every active ZMK Kconfig key in the configured source files is classified
 by the migration contract, compares the Vial matrix positions against the
-upstream ZMK layout JSON, and checks the RMK custom keycode order used for the
-ZMK Bluetooth and trackpad scale actions.
+upstream ZMK layout JSON, verifies that ZMK's `default_transform` matrix map
+matches that same layout order, confirms the active ZMK physical layout points
+at that transform, and checks the RMK custom keycode order used for the ZMK
+Bluetooth and trackpad scale actions.
 
 When the upstream checkout from `metadata.source_repo_hint` is available, the
 gate also parses `config/lalapadgen2.keymap` directly and checks the manifest
