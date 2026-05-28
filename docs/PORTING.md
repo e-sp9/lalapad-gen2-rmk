@@ -205,8 +205,8 @@ that every active ZMK Kconfig key in the configured source files is classified
 by the migration contract, compares the Vial matrix positions against the
 upstream ZMK layout JSON, verifies that ZMK's `default_transform` matrix map
 matches that same layout order, confirms the active ZMK physical layout points
-at that transform, and checks the RMK custom keycode order used for the ZMK
-Bluetooth and trackpad scale actions.
+at that transform, checks the ZMK keymap layer inventory, and checks the RMK
+custom keycode order used for the ZMK Bluetooth and trackpad scale actions.
 
 When the upstream checkout from `metadata.source_repo_hint` is available, the
 gate also parses `config/lalapadgen2.keymap` directly and checks the manifest

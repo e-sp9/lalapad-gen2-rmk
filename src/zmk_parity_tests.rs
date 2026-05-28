@@ -21,6 +21,21 @@ fn run_porting_coverage(args: &[&str]) -> std::process::Output {
         .unwrap()
 }
 
+fn run_python(script: &str) -> std::process::Output {
+    Command::new("python3")
+        .arg("-c")
+        .arg(script)
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .output()
+        .unwrap()
+}
+
+fn default_zmk_config_dir() -> Option<std::path::PathBuf> {
+    let path =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../zmk-config-LalaPadGen2/config");
+    path.join("lalapadgen2.keymap").exists().then_some(path)
+}
+
 #[test]
 fn porting_coverage_manifest_is_satisfied() {
     let output = run_porting_coverage(&[]);
@@ -84,6 +99,17 @@ fn porting_coverage_includes_exact_rmk_inventory_gates() {
         Some(expected_combo_total)
     );
     assert_eq!(combo_inventory["ok"], true);
+
+    if default_zmk_config_dir().is_some() {
+        let layer_inventory = results
+            .iter()
+            .find(|result| result["id"] == "zmk_source.keymap_layer_inventory")
+            .expect("ZMK keymap layer inventory coverage result is missing");
+        assert_eq!(layer_inventory["kind"], "zmk_source_inventory");
+        assert_eq!(layer_inventory["passed"].as_i64(), Some(layers));
+        assert_eq!(layer_inventory["total"].as_i64(), Some(layers));
+        assert_eq!(layer_inventory["ok"], true);
+    }
 }
 
 #[test]
@@ -135,6 +161,79 @@ fn porting_coverage_rejects_duplicate_rmk_combos() {
             .unwrap()
             .contains("duplicated RMK combos")
     );
+}
+
+#[test]
+fn porting_coverage_rejects_unclassified_zmk_layers() {
+    let output = run_python(
+        r#"
+import importlib.util
+import json
+import sys
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("porting_coverage", "tools/porting_coverage.py")
+pc = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = pc
+spec.loader.exec_module(pc)
+manifest = pc.load_toml(Path("tools/porting_coverage_manifest.toml"))
+
+def source(extra):
+    return f'''
+/ {{
+    keymap {{
+        compatible = "zmk,keymap";
+        DEFAULT_LAYER {{ bindings = <&kp A>; }};
+        SECONDARY_LAYER {{ bindings = <&kp A>; }};
+        TERTIARY_LAYER {{ bindings = <&kp A>; }};
+        SYSTEM_LAYER {{ bindings = <&kp A>; }};
+        {extra}
+    }};
+}};
+'''
+
+def pack(results):
+    return [result.__dict__ | {"ok": result.ok} for result in results]
+
+print(json.dumps({
+    "extra": pack(pc.check_zmk_keymap_layer_inventory(
+        manifest,
+        source('EXTRA_LAYER { bindings = <&kp A>; };'),
+    )),
+    "nested_non_layer": pack(pc.check_zmk_keymap_layer_inventory(
+        manifest,
+        source('metadata { child { bindings = <&kp A>; }; };'),
+    )),
+}))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "layer inventory parser check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let layer_inventory = &parsed["extra"][0];
+    let expected_layers = keyboard_toml()["layout"]["layers"].as_integer().unwrap();
+    assert_eq!(layer_inventory["kind"], "zmk_source_inventory");
+    assert_eq!(layer_inventory["passed"].as_i64(), Some(expected_layers));
+    assert_eq!(layer_inventory["total"].as_i64(), Some(expected_layers + 1));
+    assert_eq!(layer_inventory["ok"], false);
+    assert!(
+        layer_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("EXTRA_LAYER")
+    );
+
+    let nested_non_layer = &parsed["nested_non_layer"][0];
+    assert_eq!(nested_non_layer["kind"], "zmk_source_inventory");
+    assert_eq!(nested_non_layer["passed"].as_i64(), Some(expected_layers));
+    assert_eq!(nested_non_layer["total"].as_i64(), Some(expected_layers));
+    assert_eq!(nested_non_layer["ok"], true);
 }
 
 fn keymap(value: &toml::Value) -> &Vec<toml::Value> {

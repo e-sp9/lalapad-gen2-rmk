@@ -502,6 +502,18 @@ def extract_block(text: str, name: str) -> str:
     raise ValueError(f"block {name!r} is not closed")
 
 
+def matching_block_end(text: str, start: int) -> int:
+    depth = 0
+    for index in range(start, len(text)):
+        if text[index] == "{":
+            depth += 1
+        elif text[index] == "}":
+            depth -= 1
+            if depth == 0:
+                return index
+    raise ValueError("block is not closed")
+
+
 def strip_c_style_comments(text: str) -> str:
     text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
     return re.sub(r"//.*", "", text)
@@ -670,6 +682,70 @@ def manifest_keymap_rows(manifest: dict[str, Any]) -> list[list[list[str]]]:
     if missing:
         raise ValueError(f"manifest is missing keymap rows: {', '.join(missing)}")
     return rows  # type: ignore[return-value]
+
+
+def top_level_text(block: str) -> str:
+    chars: list[str] = []
+    depth = 0
+    for char in block:
+        if char == "{":
+            depth += 1
+            chars.append(" ")
+        elif char == "}":
+            if depth > 0:
+                depth -= 1
+            chars.append(" ")
+        elif depth == 0:
+            chars.append(char)
+        else:
+            chars.append(" ")
+    return "".join(chars)
+
+
+def has_top_level_property(block: str, name: str) -> bool:
+    return re.search(rf"(?<![A-Za-z0-9_,]){re.escape(name)}\s*=", top_level_text(block)) is not None
+
+
+def zmk_keymap_layer_names(source_text: str) -> list[str]:
+    keymap_block = extract_block(strip_c_style_comments(source_text), "keymap")
+    names: list[str] = []
+    index = 0
+    pattern = re.compile(
+        r"(?:(?P<label>[A-Za-z_][A-Za-z0-9_]*)\s*:\s*)?"
+        r"(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*\{"
+    )
+    while match := pattern.search(keymap_block, index):
+        body_start = match.end() - 1
+        body_end = matching_block_end(keymap_block, body_start)
+        body = keymap_block[body_start + 1 : body_end]
+        if has_top_level_property(body, "bindings"):
+            names.append(match.group("name"))
+        index = body_end + 1
+    return names
+
+
+def check_zmk_keymap_layer_inventory(manifest: dict[str, Any], source_text: str) -> list[Result]:
+    expected = list(manifest.get("source_inventory", {}).get("keymap_layers", LAYER_NAMES))
+    actual = zmk_keymap_layer_names(source_text)
+    total = max(len(expected), len(actual))
+    passed = 0
+    mismatches: list[str] = []
+    for index in range(total):
+        want = expected[index] if index < len(expected) else None
+        got = actual[index] if index < len(actual) else None
+        if want == got:
+            passed += 1
+        else:
+            mismatches.append(f"l{index}: expected {want!r}, got {got!r}")
+    return [
+        Result(
+            "zmk_source.keymap_layer_inventory",
+            "zmk_source_inventory",
+            passed,
+            total,
+            "ok" if not mismatches else "; ".join(mismatches),
+        )
+    ]
 
 
 def zmk_combo_blocks(text: str) -> dict[str, tuple[list[int], str]]:
@@ -1312,6 +1388,8 @@ def check_zmk_source(
         ]
 
     zmk_config_dir = zmk_keymap_path.parent
+    source_text = zmk_keymap_path.read_text()
+    results.extend(check_zmk_keymap_layer_inventory(manifest, source_text))
     raw_source_layers = raw_zmk_keymap_rows(zmk_keymap_path)
     results.extend(check_zmk_source_deltas(manifest, raw_source_layers))
     source_layers = apply_documented_rmk_deltas(manifest, raw_source_layers)
@@ -1335,7 +1413,6 @@ def check_zmk_source(
                 )
             )
 
-    source_text = zmk_keymap_path.read_text()
     results.extend(check_zmk_behavior_source(manifest, source_text))
     source_combos = zmk_combo_blocks(source_text)
     base_bindings = zmk_flat_base_bindings(zmk_keymap_path)
