@@ -89,6 +89,7 @@ python3 -m json.tool vial.json >/tmp/lalapad-vial-check.json
 python3 -c 'import tomllib; tomllib.load(open("keyboard.toml", "rb")); tomllib.load(open("Cargo.toml", "rb")); print("toml ok")'
 rmkit get-chip --keyboard-toml-path keyboard.toml
 rmkit get-project-name --keyboard-toml-path keyboard.toml
+python3 tools/check_flash_layout.py --config-only
 ```
 
 Run firmware checks for code, config, dependency, or behavior changes:
@@ -104,6 +105,10 @@ Build UF2 artifacts when requested or when changing release/flashing behavior:
 ```sh
 cargo make uf2 --release
 ```
+
+`cargo make uf2 --release` also runs `tools/check_flash_layout.py
+--require-uf2` after UF2 generation. Treat any application/storage overlap as a
+release blocker.
 
 For docs-only changes, at minimum run:
 

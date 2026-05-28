@@ -7,7 +7,11 @@ install_crate = { crate_name = "flip-link", binary = "flip-link", test_arg = ["-
 [tasks.build]
 command = "cargo"
 args = ["build", "--release"]
-dependencies = ["install-llvm-tools", "flip-link"]
+dependencies = ["install-llvm-tools", "flip-link", "flash-layout-config"]
+
+[tasks.flash-layout-config]
+command = "python3"
+args = ["tools/check_flash_layout.py", "--config-only"]
 
 [tasks.firmware-dirs]
 command = "mkdir"
@@ -83,5 +87,10 @@ args = [
 ]
 dependencies = ["objcopy-peripheral"]
 
-[tasks.uf2]
+[tasks.flash-layout]
+command = "python3"
+args = ["tools/check_flash_layout.py", "--require-uf2"]
 dependencies = ["uf2-central", "uf2-peripheral"]
+
+[tasks.uf2]
+dependencies = ["flash-layout"]

@@ -147,10 +147,32 @@ Likely next steps:
 
 The base keymap is translated from `config/lalapadgen2.keymap`, but some ZMK-specific behaviors are approximated:
 
-- ZMK conditional layer `1 + 2 => 3` is mapped to RMK tri-layer.
-- ZMK Bluetooth controls are mapped to RMK user keys for four BLE profiles: `User0..User3` select profiles, `User4`/`User5` move next/previous, `User6` clears the current profile, `User7` toggles output, and `User8` remains available for RMK split peer clearing.
+- ZMK conditional layer `1 + 2 => 3` is mapped to RMK tri-layer. RMK layers
+  `0` and `1` are Windows and Mac base-layer variants, so the shared numeric,
+  symbol, and adjust layers live at `2`, `3`, and `4`.
+- ZMK Bluetooth controls are mapped to RMK user keys for four BLE profiles:
+  `User0..User3` select profiles, `User4`/`User5` move next/previous, `User6`
+  clears the current profile, `User7` toggles output, and `User8` remains
+  available for RMK split peer clearing. The adjust/Bluetooth layer also maps
+  `DF(0)` and `DF(1)` as Windows/Mac OS selectors; the Mac base layer replaces
+  the Windows Ctrl positions with Cmd.
+- Semicolon and colon are swapped by an RMK fork: an unmodified `Semicolon`
+  position emits `Shift+Semicolon` (`:`), while holding Shift suppresses the
+  incoming Shift and emits plain `Semicolon` (`;`).
+- Space and Enter layer-tap keys use a dedicated hold-on-other-press profile so
+  layer output is selected as soon as the next non-tap-hold key is pressed.
+  Enter-layer `Y` emits `Minus`, so the normal `Enter` tap decision does not
+  delay that common symbol. The Space numeric layer keeps the central/right half
+  transparent so punctuation such as comma and dot still comes from the base
+  layer while Space is held. Base combos omit a layer restriction so they work
+  on both Windows and Mac base layers.
 - ZMK dynamic trackpad sensitivity controls are mapped to `User9..User13` and handled by the local RMK vendor hook described above. Scale changes are runtime-only for now.
 - ZMK trackpad virtual positions `52..67` are represented in the RMK keymap as rows `5..6`, and IQS9151 runtime instances are wired into the central and peripheral firmware entrypoints.
 - ZMK's RGBLED widget is represented by a local RMK controller rather than the ZMK module. Battery, connection, and central layer-change indications are preserved, but on-demand `&ind_bat` / `&ind_con` keymap behaviors are not exposed as RMK keycodes.
+- RMK storage is pinned to `0x000E0000` for 8 nRF flash sectors. The default
+  nRF BLE storage address in RMK 0.8 is `0x00060000`, which overlaps this
+  firmware's central image after trackpad and split features are linked.
+  `tools/check_flash_layout.py` is wired into `cargo make uf2` to reject future
+  application/storage overlaps before firmware is flashed.
 - The current recognizer and pointer path support axis inversion/swap settings, but the actual left/right hardware orientation, pointer speed, and thresholds still need tuning after hardware testing.
 - ZMK Studio is approximated by Vial support in this RMK project.

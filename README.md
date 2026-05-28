@@ -45,9 +45,18 @@ passkey on the keyboard and press Enter. During passkey entry, digit keys,
 Enter, Escape, and Backspace are captured by the firmware and are not sent as
 normal host keypresses.
 
-On the default keymap, use layer 1 for digit entry. The right side has a numpad
-layout on layer 1, and the left side has `1`-`5` on the first row and `6`-`0`
-on the second row.
+On the default keymap, use the numeric layer for digit entry. The left side has
+`1`-`5` on the first row and `6`-`0` on the second row. The right side remains
+transparent on the numeric layer so punctuation and letters still pass through
+while Space is held.
+
+The adjust/Bluetooth layer provides OS default-layer selectors: Windows selects
+layer 0 and Mac selects layer 1. The Mac base layer maps the positions that are
+Ctrl on Windows to Cmd.
+
+Space and Enter layer-tap keys use a fast hold-on-other-press profile. Holding
+Enter and then pressing `Y` emits `-` without waiting for the normal tap-hold
+timeout.
 
 ### Web Flasher
 
@@ -92,6 +101,9 @@ Build UF2 files for the XIAO BLE / Adafruit nRF52 bootloader:
 cargo make uf2 --release
 ```
 
+This build runs a flash-layout guard that fails if the linked application or
+generated UF2 files overlap RMK's on-chip storage region.
+
 The generated files are:
 
 - `firmware/normal/lalapad-gen2-rmk-central.uf2` for the right half
@@ -106,6 +118,7 @@ python3 -m json.tool vial.json >/tmp/lalapad-vial-check.json
 python3 -c 'import tomllib; tomllib.load(open("keyboard.toml", "rb")); tomllib.load(open("Cargo.toml", "rb")); print("toml ok")'
 rmkit get-chip --keyboard-toml-path keyboard.toml
 rmkit get-project-name --keyboard-toml-path keyboard.toml
+python3 tools/check_flash_layout.py --config-only
 cargo check --release --bin central
 cargo check --release --bin peripheral
 cargo build --release
