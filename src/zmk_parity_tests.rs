@@ -135,6 +135,26 @@ fn porting_coverage_includes_exact_rmk_inventory_gates() {
             Some(expected_behavior_nodes)
         );
         assert_eq!(behavior_inventory["ok"], true);
+
+        let file_inventory = results
+            .iter()
+            .find(|result| result["id"] == "zmk_source.file_inventory")
+            .expect("ZMK source file inventory coverage result is missing");
+        let expected_source_files =
+            porting_coverage_manifest_toml()["source_inventory"]["source_files"]
+                .as_array()
+                .unwrap()
+                .len() as i64;
+        assert_eq!(file_inventory["kind"], "zmk_inventory");
+        assert_eq!(
+            file_inventory["passed"].as_i64(),
+            Some(expected_source_files)
+        );
+        assert_eq!(
+            file_inventory["total"].as_i64(),
+            Some(expected_source_files)
+        );
+        assert_eq!(file_inventory["ok"], true);
     }
 }
 
@@ -461,6 +481,91 @@ print(json.dumps({"ok": ok, "extra": extra}))
             .as_str()
             .unwrap()
             .contains("new_listener:okay")
+    );
+}
+
+#[test]
+fn porting_coverage_rejects_unclassified_zmk_source_files() {
+    let output = run_python(
+        r#"
+import importlib.util
+import json
+import sys
+import tempfile
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("porting_coverage", "tools/porting_coverage.py")
+pc = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = pc
+spec.loader.exec_module(pc)
+
+manifest = {
+    "source_inventory": {
+        "source_files": [
+            "lalapadgen2.keymap",
+            "boards/shields/lalapadgen2/lalapadgen2.dtsi",
+        ],
+    },
+}
+
+def pack(results):
+    return [result.__dict__ | {"ok": result.ok} for result in results]
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    shield = root / "boards/shields/lalapadgen2"
+    shield.mkdir(parents=True)
+    (root / "lalapadgen2.keymap").write_text("")
+    (shield / "lalapadgen2.dtsi").write_text("")
+    (shield / ".editor.swp").write_text("")
+    (shield / "notes.txt").write_text("")
+    ok = pack(pc.check_zmk_source_file_inventory(manifest, root))
+
+    (shield / "lalapadgen2_new.overlay").write_text("")
+    extra = pack(pc.check_zmk_source_file_inventory(manifest, root))
+    (shield / "lalapadgen2.dtsi").unlink()
+    missing = pack(pc.check_zmk_source_file_inventory(manifest, root))
+
+print(json.dumps({"ok": ok, "extra": extra, "missing": missing}))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "source file inventory parser check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let ok_inventory = &parsed["ok"][0];
+    assert_eq!(ok_inventory["kind"], "zmk_inventory");
+    assert_eq!(ok_inventory["passed"].as_i64(), Some(2));
+    assert_eq!(ok_inventory["total"].as_i64(), Some(2));
+    assert_eq!(ok_inventory["ok"], true);
+
+    let extra_inventory = &parsed["extra"][0];
+    assert_eq!(extra_inventory["kind"], "zmk_inventory");
+    assert_eq!(extra_inventory["passed"].as_i64(), Some(2));
+    assert_eq!(extra_inventory["total"].as_i64(), Some(3));
+    assert_eq!(extra_inventory["ok"], false);
+    assert!(
+        extra_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("lalapadgen2_new.overlay")
+    );
+
+    let missing_inventory = &parsed["missing"][0];
+    assert_eq!(missing_inventory["kind"], "zmk_inventory");
+    assert_eq!(missing_inventory["passed"].as_i64(), Some(1));
+    assert_eq!(missing_inventory["total"].as_i64(), Some(3));
+    assert_eq!(missing_inventory["ok"], false);
+    assert!(
+        missing_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("missing source files")
     );
 }
 

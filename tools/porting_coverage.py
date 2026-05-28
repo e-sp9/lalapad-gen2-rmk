@@ -1084,6 +1084,52 @@ def check_zmk_config_inventory(manifest: dict[str, Any], zmk_config_dir: Path) -
     return results
 
 
+def check_zmk_source_file_inventory(manifest: dict[str, Any], zmk_config_dir: Path) -> list[Result]:
+    expected = list(manifest.get("source_inventory", {}).get("source_files", []))
+
+    def is_source_file(path: Path) -> bool:
+        relative = path.relative_to(zmk_config_dir)
+        if any(part.startswith(".") for part in relative.parts):
+            return False
+        return path.name.startswith("Kconfig") or path.suffix in {
+            ".conf",
+            ".dtsi",
+            ".json",
+            ".keymap",
+            ".overlay",
+            ".yml",
+        }
+
+    actual_list = sorted(
+        path.relative_to(zmk_config_dir).as_posix()
+        for path in zmk_config_dir.rglob("*")
+        if path.is_file() and is_source_file(path)
+    )
+    actual = set(actual_list)
+    expected_set = set(expected)
+    missing = sorted(expected_set - actual)
+    extra = sorted(actual - expected_set)
+    duplicates = sorted(item for item in actual if actual_list.count(item) > 1)
+    passed = len(expected_set) - len(missing)
+    total = len(expected_set) + len(extra) + len(duplicates)
+    messages: list[str] = []
+    if missing:
+        messages.append(f"missing source files {missing!r}")
+    if extra:
+        messages.append(f"unclassified source files {extra!r}")
+    if duplicates:
+        messages.append(f"duplicated source files {duplicates!r}")
+    return [
+        Result(
+            "zmk_source.file_inventory",
+            "zmk_inventory",
+            passed,
+            total,
+            "ok" if not messages else "; ".join(messages),
+        )
+    ]
+
+
 def check_zmk_dts_status_inventory(manifest: dict[str, Any], zmk_config_dir: Path) -> list[Result]:
     inventory = manifest.get("source_inventory", {})
     results: list[Result] = []
@@ -1623,6 +1669,7 @@ def check_zmk_source(
     )
     results.extend(check_zmk_config_values(manifest, keyboard, zmk_config_dir))
     results.extend(check_zmk_config_mirrors(manifest, zmk_config_dir))
+    results.extend(check_zmk_source_file_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_config_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_dts_status_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_pin_values(manifest, keyboard, zmk_config_dir))

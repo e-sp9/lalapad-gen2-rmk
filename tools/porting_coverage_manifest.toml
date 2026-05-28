@@ -16,6 +16,20 @@ behavior_nodes = [
   "mt2",
   "tap_dance_layer_1and2",
 ]
+source_files = [
+  "boards/shields/lalapadgen2/Kconfig.defconfig",
+  "boards/shields/lalapadgen2/Kconfig.shield",
+  "boards/shields/lalapadgen2/lalapadgen2-layouts.dtsi",
+  "boards/shields/lalapadgen2/lalapadgen2.dtsi",
+  "boards/shields/lalapadgen2/lalapadgen2_left.conf",
+  "boards/shields/lalapadgen2/lalapadgen2_left.overlay",
+  "boards/shields/lalapadgen2/lalapadgen2_right.conf",
+  "boards/shields/lalapadgen2/lalapadgen2_right.overlay",
+  "lalapadgen2.conf",
+  "lalapadgen2.json",
+  "lalapadgen2.keymap",
+  "west.yml",
+]
 kconfig_files = [
   "lalapadgen2.conf",
   "boards/shields/lalapadgen2/lalapadgen2_left.conf",
