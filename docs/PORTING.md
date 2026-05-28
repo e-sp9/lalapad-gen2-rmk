@@ -164,8 +164,11 @@ The base keymap is translated from `config/lalapadgen2.keymap`, but some ZMK-spe
   Enter-layer `Y` emits `Minus`, so the normal `Enter` tap decision does not
   delay that common symbol. The Space numeric layer keeps the central/right half
   transparent so punctuation such as comma and dot still comes from the base
-  layer while Space is held. Base combos omit a layer restriction so they work
-  on both Windows and Mac base layers.
+  layer while Space is held. Base combos remain restricted to layer 0. Letting
+  them follow the duplicated Mac base layer made normal Japanese romanization
+  rolls such as `s` then `a` trigger the `A+S` Tab combo. The RMK 0.8.2 combo
+  path used here does not expose ZMK-style `require-prior-idle-ms`, so the
+  firmware also keeps the upstream ZMK default 50 ms combo timeout.
 - ZMK dynamic trackpad sensitivity controls are mapped to `User9..User13` and handled by the local RMK vendor hook described above. Scale changes are runtime-only for now.
 - ZMK trackpad virtual positions `52..67` are represented in the RMK keymap as rows `5..6`, and IQS9151 runtime instances are wired into the central and peripheral firmware entrypoints.
 - ZMK's RGBLED widget is represented by a local RMK controller rather than the ZMK module. Battery, connection, and central layer-change indications are preserved, but on-demand `&ind_bat` / `&ind_con` keymap behaviors are not exposed as RMK keycodes.

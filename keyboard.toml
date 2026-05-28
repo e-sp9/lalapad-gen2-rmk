@@ -95,12 +95,12 @@ hold_on_other_press = true
 FAST_LAYER = { hold_on_other_press = true, unilateral_tap = false, hold_timeout = "120ms", gap_timeout = "120ms" }
 
 [behavior.combo]
-timeout = "150ms"
+timeout = "50ms"
 combos = [
-  { actions = ["Q", "W"], output = "Escape" },
-  { actions = ["A", "S"], output = "Tab" },
-  { actions = ["F", "D"], output = "Language2" },
-  { actions = ["J", "K"], output = "Language1" },
+  { actions = ["Q", "W"], output = "Escape", layer = 0 },
+  { actions = ["A", "S"], output = "Tab", layer = 0 },
+  { actions = ["F", "D"], output = "Language2", layer = 0 },
+  { actions = ["J", "K"], output = "Language1", layer = 0 },
 ]
 
 [host]

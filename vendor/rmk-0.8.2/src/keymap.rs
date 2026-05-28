@@ -93,6 +93,8 @@ impl<'a, const ROW: usize, const COL: usize, const NUM_LAYER: usize, const NUM_E
         // If the storage is initialized, read keymap from storage
         fill_vec(&mut behavior.fork.forks); // Is this needed? (has no Vial support)
         fill_vec(&mut behavior.morse.morses);
+        let default_combo_timeout = behavior.combo.timeout;
+        let default_combos = behavior.combo.combos;
 
         if let Some(storage) = storage
             && {
@@ -123,6 +125,7 @@ impl<'a, const ROW: usize, const COL: usize, const NUM_LAYER: usize, const NUM_E
 
             reboot_keyboard();
         }
+        restore_default_combo_constraints(default_combo_timeout, &default_combos, behavior);
 
         KeyMap {
             layers: action_map,
@@ -401,6 +404,31 @@ impl<'a, const ROW: usize, const COL: usize, const NUM_LAYER: usize, const NUM_E
         {
             let layer = self.get_activated_layer();
             send_controller_event(&mut self.controller_pub, ControllerEvent::Layer(layer));
+        }
+    }
+}
+
+#[cfg(all(feature = "storage", feature = "host"))]
+fn restore_default_combo_constraints(
+    default_timeout: embassy_time::Duration,
+    defaults: &[Option<crate::combo::Combo>],
+    behavior: &mut BehaviorConfig,
+) {
+    if behavior.combo.timeout.as_millis() > default_timeout.as_millis() {
+        behavior.combo.timeout = default_timeout;
+    }
+
+    for combo in behavior.combo.combos.iter_mut().filter_map(|combo| combo.as_mut()) {
+        if combo.config.layer.is_some() {
+            continue;
+        }
+
+        if let Some(default_combo) = defaults.iter().filter_map(|combo| combo.as_ref()).find(|default_combo| {
+            default_combo.config.layer.is_some()
+                && default_combo.config.actions == combo.config.actions
+                && default_combo.config.output == combo.config.output
+        }) {
+            combo.config.layer = default_combo.config.layer;
         }
     }
 }
