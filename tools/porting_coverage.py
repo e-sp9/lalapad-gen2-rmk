@@ -1130,6 +1130,56 @@ def check_zmk_source_file_inventory(manifest: dict[str, Any], zmk_config_dir: Pa
     ]
 
 
+def zmk_include_targets(text: str) -> list[str]:
+    return [
+        match.group("target")
+        for match in re.finditer(
+            r"(?m)^\s*#include\s+(?P<target><[^>]+>|\"[^\"]+\")",
+            strip_c_style_comments(text),
+        )
+    ]
+
+
+def check_zmk_include_inventory(manifest: dict[str, Any], zmk_config_dir: Path) -> list[Result]:
+    results: list[Result] = []
+    for check in manifest.get("source_inventory", {}).get("include_files", []):
+        source_file = check["source_file"]
+        expected = list(check["expected"])
+        source_path = zmk_config_dir / source_file
+        if not source_path.exists():
+            results.append(
+                Result(
+                    f"zmk_source.include_inventory.{source_file}",
+                    "zmk_inventory",
+                    0,
+                    max(1, len(expected)),
+                    f"missing include source file {source_file!r}",
+                )
+            )
+            continue
+        actual = zmk_include_targets(source_path.read_text())
+        total = max(len(expected), len(actual))
+        passed = 0
+        mismatches: list[str] = []
+        for index in range(total):
+            want = expected[index] if index < len(expected) else None
+            got = actual[index] if index < len(actual) else None
+            if want == got:
+                passed += 1
+            else:
+                mismatches.append(f"i{index}: expected {want!r}, got {got!r}")
+        results.append(
+            Result(
+                f"zmk_source.include_inventory.{source_file}",
+                "zmk_inventory",
+                passed,
+                total,
+                "ok" if not mismatches else "; ".join(mismatches),
+            )
+        )
+    return results
+
+
 def check_zmk_dts_status_inventory(manifest: dict[str, Any], zmk_config_dir: Path) -> list[Result]:
     inventory = manifest.get("source_inventory", {})
     results: list[Result] = []
@@ -1670,6 +1720,7 @@ def check_zmk_source(
     results.extend(check_zmk_config_values(manifest, keyboard, zmk_config_dir))
     results.extend(check_zmk_config_mirrors(manifest, zmk_config_dir))
     results.extend(check_zmk_source_file_inventory(manifest, zmk_config_dir))
+    results.extend(check_zmk_include_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_config_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_dts_status_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_pin_values(manifest, keyboard, zmk_config_dir))

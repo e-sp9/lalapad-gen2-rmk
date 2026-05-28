@@ -155,6 +155,29 @@ fn porting_coverage_includes_exact_rmk_inventory_gates() {
             Some(expected_source_files)
         );
         assert_eq!(file_inventory["ok"], true);
+
+        for include_file in porting_coverage_manifest_toml()["source_inventory"]["include_files"]
+            .as_array()
+            .unwrap()
+        {
+            let source_file = include_file["source_file"].as_str().unwrap();
+            let expected_includes = include_file["expected"].as_array().unwrap().len() as i64;
+            let include_inventory = results
+                .iter()
+                .find(|result| {
+                    result["id"] == format!("zmk_source.include_inventory.{source_file}")
+                })
+                .unwrap_or_else(|| {
+                    panic!("ZMK include inventory coverage result is missing for {source_file}")
+                });
+            assert_eq!(include_inventory["kind"], "zmk_inventory");
+            assert_eq!(
+                include_inventory["passed"].as_i64(),
+                Some(expected_includes)
+            );
+            assert_eq!(include_inventory["total"].as_i64(), Some(expected_includes));
+            assert_eq!(include_inventory["ok"], true);
+        }
     }
 }
 
@@ -566,6 +589,120 @@ print(json.dumps({"ok": ok, "extra": extra, "missing": missing}))
             .as_str()
             .unwrap()
             .contains("missing source files")
+    );
+}
+
+#[test]
+fn porting_coverage_rejects_unclassified_zmk_includes() {
+    let output = run_python(
+        r#"
+import importlib.util
+import json
+import sys
+import tempfile
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("porting_coverage", "tools/porting_coverage.py")
+pc = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = pc
+spec.loader.exec_module(pc)
+
+manifest = {
+    "source_inventory": {
+        "include_files": [{
+            "source_file": "fixture.keymap",
+            "expected": ["<behaviors.dtsi>", "<dt-bindings/zmk/keys.h>"],
+        }],
+    },
+}
+
+def pack(results):
+    return [result.__dict__ | {"ok": result.ok} for result in results]
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    fixture = root / "fixture.keymap"
+    fixture.write_text('''
+    /* #include <disabled/commented-out.dtsi> */
+    #include <behaviors.dtsi>
+    #include <dt-bindings/zmk/keys.h>
+    / {};
+    ''')
+    ok = pack(pc.check_zmk_include_inventory(manifest, root))
+
+    fixture.write_text('''
+    #include <behaviors.dtsi>
+    #include <dt-bindings/zmk/pointing.h>
+    #include <dt-bindings/zmk/keys.h>
+    / {};
+    ''')
+    extra = pack(pc.check_zmk_include_inventory(manifest, root))
+
+    fixture.write_text('''
+    #include <behaviors.dtsi>
+    / {};
+    ''')
+    missing = pack(pc.check_zmk_include_inventory(manifest, root))
+    fixture.unlink()
+    missing_file = pack(pc.check_zmk_include_inventory(manifest, root))
+
+print(json.dumps({
+    "ok": ok,
+    "extra": extra,
+    "missing": missing,
+    "missing_file": missing_file,
+}))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "include inventory parser check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let ok_inventory = &parsed["ok"][0];
+    assert_eq!(ok_inventory["kind"], "zmk_inventory");
+    assert_eq!(ok_inventory["passed"].as_i64(), Some(2));
+    assert_eq!(ok_inventory["total"].as_i64(), Some(2));
+    assert_eq!(ok_inventory["ok"], true);
+
+    let extra_inventory = &parsed["extra"][0];
+    assert_eq!(extra_inventory["kind"], "zmk_inventory");
+    assert_eq!(extra_inventory["passed"].as_i64(), Some(1));
+    assert_eq!(extra_inventory["total"].as_i64(), Some(3));
+    assert_eq!(extra_inventory["ok"], false);
+    assert!(
+        extra_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("dt-bindings/zmk/pointing.h")
+    );
+
+    let missing_inventory = &parsed["missing"][0];
+    assert_eq!(missing_inventory["kind"], "zmk_inventory");
+    assert_eq!(missing_inventory["passed"].as_i64(), Some(1));
+    assert_eq!(missing_inventory["total"].as_i64(), Some(2));
+    assert_eq!(missing_inventory["ok"], false);
+    assert!(
+        missing_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("got None")
+    );
+
+    let missing_file_inventory = &parsed["missing_file"][0];
+    assert_eq!(missing_file_inventory["kind"], "zmk_inventory");
+    assert_eq!(missing_file_inventory["passed"].as_i64(), Some(0));
+    assert_eq!(missing_file_inventory["total"].as_i64(), Some(2));
+    assert_eq!(missing_file_inventory["ok"], false);
+    assert!(
+        missing_file_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("missing include source file")
     );
 }
 

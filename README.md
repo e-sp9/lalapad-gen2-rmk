@@ -131,8 +131,8 @@ ZMK trackpad listener routing shape, verifies that every active ZMK Kconfig key
 in the source files is classified by the migration contract, and checks Vial's
 matrix positions, ZMK `default_transform` order, the active ZMK physical-layout
 chain, ZMK source-file inventory, ZMK keymap layer and behavior inventories,
-RMK custom keycode order, the ZMK DTS/overlay status-node inventory, exact RMK
-keymap array shape, and the exact RMK combo inventory. Use
+ZMK include inventory, RMK custom keycode order, the ZMK DTS/overlay status-node
+inventory, exact RMK keymap array shape, and the exact RMK combo inventory. Use
 `--zmk-keymap PATH --require-zmk-source` when the source-backed check must be
 mandatory in another checkout layout. The firmware CI checks out
 `e-sp9/zmk-config-LalaPadGen2` and runs this source-backed gate before building

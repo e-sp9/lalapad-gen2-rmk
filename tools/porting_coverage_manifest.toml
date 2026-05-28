@@ -40,6 +40,13 @@ dts_status_files = [
   { source_file = "boards/shields/lalapadgen2/lalapadgen2_right.overlay", expected = ["&trackpad_listener_R:okay", "&trackpad_listener_L:okay"] },
   { source_file = "boards/shields/lalapadgen2/lalapadgen2_left.overlay", expected = ["&trackpad_split_L:okay", "&trackpad_split_R:disabled"] },
 ]
+include_files = [
+  { source_file = "lalapadgen2.keymap", expected = ["<input/processors.dtsi>", "<dt-bindings/zmk/zip_dynamic_scale.h>", "<behaviors.dtsi>", "<dt-bindings/zmk/bt.h>", "<dt-bindings/zmk/keys.h>", "<dt-bindings/zmk/outputs.h>", "<dt-bindings/zmk/pointing.h>"] },
+  { source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi", expected = ["<dt-bindings/zmk/keys.h>", "<dt-bindings/zmk/matrix_transform.h>", "<dt-bindings/zmk/input_transform.h>", "<dt-bindings/zmk/zip_dynamic_scale.h>", "<zephyr/dt-bindings/input/input-event-codes.h>", "<input/processors.dtsi>", "\"lalapadgen2-layouts.dtsi\""] },
+  { source_file = "boards/shields/lalapadgen2/lalapadgen2-layouts.dtsi", expected = ["<physical_layouts.dtsi>"] },
+  { source_file = "boards/shields/lalapadgen2/lalapadgen2_right.overlay", expected = ["\"lalapadgen2.dtsi\""] },
+  { source_file = "boards/shields/lalapadgen2/lalapadgen2_left.overlay", expected = ["\"lalapadgen2.dtsi\""] },
+]
 
 [layout]
 rows = 7
