@@ -1065,14 +1065,28 @@ id = "combo_kana"
 actions = ["J", "K"]
 output = "Language1"
 layer = 0
-source = "ZMK COMBO_KANA key-positions <16 17>"
+source = "RMK target delta: Kana combo mirrors the direct Language1 key positions even when the checked-out upstream ZMK source has not published COMBO_KANA."
 
 [[combos]]
 id = "combo_eisu"
 actions = ["D", "F"]
 output = "Language2"
 layer = 0
-source = "ZMK COMBO_EUSU key-positions <12 13>"
+source = "RMK target delta: Eisu combo mirrors the direct Language2 key positions even when the checked-out upstream ZMK source has not published COMBO_EUSU."
+
+[[source_combo_deltas]]
+id = "delta_combo_kana"
+actions = ["J", "K"]
+output = "Language1"
+layer = 0
+reason = "RMK preserves the user's established Kana combo as an explicit target-side delta when the canonical ZMK checkout only contains Escape and Tab combos."
+
+[[source_combo_deltas]]
+id = "delta_combo_eisu"
+actions = ["D", "F"]
+output = "Language2"
+layer = 0
+reason = "RMK preserves the user's established Eisu combo as an explicit target-side delta when the canonical ZMK checkout only contains Escape and Tab combos."
 
 [[scenarios]]
 id = "space_tap_is_space"

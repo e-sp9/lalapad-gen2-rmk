@@ -163,8 +163,11 @@ The base keymap is translated from `config/lalapadgen2.keymap`, but some ZMK-spe
   thumb layer-tap keys to resolve as taps during normal typing streaks. The
   thumb layer-tap profile uses hold-on-other-press so it behaves as a reliable
   layer modifier when chorded.
-- Base combos carry the four ZMK reference bindings: `Q+W => Escape`,
-  `A+S => Tab`, `J+K => Language1`, and `D+F => Language2`.
+- Base combos carry the committed ZMK reference bindings `Q+W => Escape` and
+  `A+S => Tab`. RMK also keeps the target-side Kana/Eisu combo deltas
+  `J+K => Language1` and `D+F => Language2` so the host-side keymap preserves
+  the established language switching shortcuts even when the checked-out ZMK
+  source has not published those combos.
   The RMK 0.8.2 combo path used here does not expose ZMK-style
   `require-prior-idle-ms`, so the firmware keeps the upstream ZMK default 50 ms
   combo timeout.
@@ -204,8 +207,9 @@ ZMK Bluetooth and trackpad scale actions.
 
 When the upstream checkout from `metadata.source_repo_hint` is available, the
 gate also parses `config/lalapadgen2.keymap` directly and checks the manifest
-against the raw source keymap cells, the explicitly documented RMK deltas, combo
-definitions, hold-tap timing settings, conditional layer rule, shield
+against the raw source keymap cells, the explicitly documented RMK deltas,
+documented target-side combo deltas, combo definitions, hold-tap timing
+settings, conditional layer rule, shield
 `*.dtsi` / `*.overlay` pins, ZMK `*.conf` values, and RMK Rust constants. Use
 `--zmk-keymap PATH --require-zmk-source` to make that source-backed check
 mandatory in a different checkout layout.
@@ -219,7 +223,8 @@ python3 tools/porting_coverage.py --require-zmk-source
 The firmware GitHub Actions workflow checks out `e-sp9/zmk-config-LalaPadGen2`
 and runs this source-backed gate before building release binaries. With the
 local upstream source checkout present, the current gate reports
-`1103/1103 = 100.00%`. This is a static, source-backed, and scenario-level RMK
+`1103/1103 = 100.00%` against the committed upstream checkout used by CI. This
+is a static, source-backed, and scenario-level RMK
 configuration coverage metric, not a claim that hardware-only IQS9151, BLE,
 storage, or Vial runtime paths have been exhaustively exercised on real devices.
 It is intended to prevent regressions like a visible `LT(...)` binding whose

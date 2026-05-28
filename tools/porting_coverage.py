@@ -1114,7 +1114,25 @@ def check_zmk_source(
                 "ok" if ok else f"manifest missing {expected!r}",
             )
         )
-    extra_combos = manifest_combos - expected_combos
+    allowed_extra_combos = source_combo_delta_set_from_manifest(manifest)
+    for extra in sorted(allowed_extra_combos):
+        ok = extra in manifest_combos
+        source_message = (
+            "source already includes combo"
+            if extra in expected_combos
+            else "documented RMK combo delta"
+        )
+        results.append(
+            Result(
+                f"zmk_source.combo_delta.{combo_id(extra)}",
+                "zmk_source_combo_delta",
+                1 if ok else 0,
+                1,
+                source_message if ok else f"manifest missing documented combo delta {extra!r}",
+            )
+        )
+
+    extra_combos = manifest_combos - expected_combos - allowed_extra_combos
     results.append(
         Result(
             "zmk_source.combo.no_extra_manifest_combos",
@@ -1161,6 +1179,21 @@ def combo_set_from_manifest(manifest: dict[str, Any]) -> set[tuple[tuple[str, ..
         (tuple(combo["actions"]), combo["output"], int(combo["layer"]))
         for combo in manifest.get("combos", [])
     }
+
+
+def source_combo_delta_set_from_manifest(
+    manifest: dict[str, Any],
+) -> set[tuple[tuple[str, ...], str, int]]:
+    return {
+        (tuple(combo["actions"]), combo["output"], int(combo["layer"]))
+        for combo in manifest.get("source_combo_deltas", [])
+    }
+
+
+def combo_id(combo: tuple[tuple[str, ...], str, int]) -> str:
+    actions, output, layer = combo
+    raw = "_".join([*actions, output, f"layer{layer}"]).lower()
+    return re.sub(r"[^a-z0-9]+", "_", raw).strip("_")
 
 
 def default_zmk_keymap_path(manifest: dict[str, Any]) -> Path:
