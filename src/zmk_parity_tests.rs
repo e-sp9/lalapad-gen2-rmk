@@ -380,6 +380,82 @@ print(json.dumps({
     );
 }
 
+#[test]
+fn porting_coverage_parses_arbitrary_named_zmk_combos() {
+    let output = run_python(
+        r#"
+import importlib.util
+import json
+import sys
+
+spec = importlib.util.spec_from_file_location("porting_coverage", "tools/porting_coverage.py")
+pc = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = pc
+spec.loader.exec_module(pc)
+
+source = '''
+/ {
+    combos {
+        compatible = "zmk,combos";
+        plain-escape {
+            bindings = <&kp ESCAPE>;
+            key-positions = <0 1>;
+        };
+        left-escape {
+            bindings = <&kp A>;
+            key-positions = <2 3>;
+        };
+        right-escape {
+            bindings = <&kp B>;
+            key-positions = <4 5>;
+        };
+        labeled_tab: custom_node_name {
+            bindings = <&kp TAB>;
+            key-positions = <10 11>;
+        };
+        metadata {
+            child {
+                bindings = <&kp A>;
+                key-positions = <2 3>;
+            };
+        };
+    };
+};
+'''
+
+combos = pc.zmk_combo_blocks(source)
+print(json.dumps({
+    "names": sorted(combos),
+    "plain_escape": combos["plain-escape"],
+    "left_escape": combos["left-escape"],
+    "right_escape": combos["right-escape"],
+    "labeled_tab": combos["labeled_tab"],
+}))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "combo parser check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(
+        parsed["names"],
+        serde_json::json!(["labeled_tab", "left-escape", "plain-escape", "right-escape"])
+    );
+    assert_eq!(parsed["plain_escape"][0], serde_json::json!([0, 1]));
+    assert_eq!(parsed["plain_escape"][1], "Escape");
+    assert_eq!(parsed["left_escape"][0], serde_json::json!([2, 3]));
+    assert_eq!(parsed["left_escape"][1], "A");
+    assert_eq!(parsed["right_escape"][0], serde_json::json!([4, 5]));
+    assert_eq!(parsed["right_escape"][1], "B");
+    assert_eq!(parsed["labeled_tab"][0], serde_json::json!([10, 11]));
+    assert_eq!(parsed["labeled_tab"][1], "Tab");
+}
+
 fn keymap(value: &toml::Value) -> &Vec<toml::Value> {
     value["layout"]["keymap"].as_array().unwrap()
 }

@@ -736,9 +736,11 @@ def has_top_level_property(block: str, name: str) -> bool:
 def top_level_child_blocks(block: str) -> list[tuple[str | None, str, str]]:
     children: list[tuple[str | None, str, str]] = []
     index = 0
+    node_name = r"[A-Za-z0-9,._+\-]+(?:@[A-Za-z0-9,._+\-]+)?"
     pattern = re.compile(
+        r"(?:^|[;\n])\s*"
         r"(?:(?P<label>[A-Za-z_][A-Za-z0-9_]*)\s*:\s*)?"
-        r"(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*\{"
+        rf"(?P<name>{node_name})\s*\{{"
     )
     while match := pattern.search(block, index):
         body_start = match.end() - 1
@@ -816,22 +818,15 @@ def check_zmk_behavior_inventory(manifest: dict[str, Any], source_text: str) -> 
 
 
 def zmk_combo_blocks(text: str) -> dict[str, tuple[list[int], str]]:
-    combos_block = extract_block(text, "combos")
+    combos_block = extract_block(strip_c_style_comments(text), "combos")
     combos: dict[str, tuple[list[int], str]] = {}
-    for match in re.finditer(r"\b(COMBO_[A-Z0-9_]+|CONBO_[A-Z0-9_]+)\s*\{", combos_block):
-        name = match.group(1)
-        block_start = match.end() - 1
-        depth = 0
-        for index in range(block_start, len(combos_block)):
-            if combos_block[index] == "{":
-                depth += 1
-            elif combos_block[index] == "}":
-                depth -= 1
-                if depth == 0:
-                    block = combos_block[block_start + 1 : index]
-                    break
-        else:
-            raise ValueError(f"combo block {name!r} is not closed")
+    for label, node_name, block in top_level_child_blocks(combos_block):
+        if not (
+            has_top_level_property(block, "key-positions")
+            and has_top_level_property(block, "bindings")
+        ):
+            continue
+        name = label or node_name
         positions = [int(value) for value in extract_angle_property(block, "key-positions").split()]
         output = parse_zmk_bindings(extract_angle_property(block, "bindings"))
         if len(output) != 1:
