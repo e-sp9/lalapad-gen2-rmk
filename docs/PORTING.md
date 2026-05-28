@@ -192,9 +192,10 @@ The base keymap is translated from `config/lalapadgen2.keymap`, but some ZMK-spe
 
 `tools/porting_coverage_manifest.toml` is the machine-readable migration
 contract derived from the upstream ZMK keymap plus documented RMK-specific
-deltas. It covers all configured RMK keymap cells, combo bindings, tri-layer and
-tap-hold behavior settings, and golden thumb-layer scenarios for Space, Enter,
-and the system tri-layer. It also covers source-backed split matrix pins,
+deltas. It covers the exact RMK keymap array shape, all configured RMK keymap
+cells, the exact RMK combo inventory, tri-layer and tap-hold behavior settings,
+and golden thumb-layer scenarios for Space, Enter, and the system tri-layer. It
+also covers source-backed split matrix pins,
 right-central/left-peripheral orientation, BLE TX power, charge pins, RGB pins,
 IQS9151 I2C/IRQ pins, trackpad scaling constants, and selected ZMK driver
 thresholds. Source-backed checks also verify the ZMK global Kconfig flags,
@@ -223,10 +224,11 @@ python3 tools/porting_coverage.py --require-zmk-source
 ```
 
 The firmware GitHub Actions workflow checks out `e-sp9/zmk-config-LalaPadGen2`
-and runs this source-backed gate before building release binaries. With the
-local upstream source checkout present, the current gate reports
-`1103/1103 = 100.00%` against the committed upstream checkout used by CI. This
-is a static, source-backed, and scenario-level RMK
+and runs this source-backed gate before building release binaries. The gate
+must report `100.00%` against the committed upstream checkout used by CI. The
+denominator can grow when upstream source files add classified behavior, so the
+exact count should be read from the command output. This is a static,
+source-backed, and scenario-level RMK
 configuration coverage metric, not a claim that hardware-only IQS9151, BLE,
 storage, or Vial runtime paths have been exhaustively exercised on real devices.
 It is intended to prevent regressions like a visible `LT(...)` binding whose

@@ -221,12 +221,16 @@ def keymap(config: dict[str, Any]) -> list[list[list[str]]]:
     return config["layout"]["keymap"]
 
 
-def combo_set(config: dict[str, Any]) -> set[tuple[tuple[str, ...], str, int]]:
+def combo_list(config: dict[str, Any]) -> list[tuple[tuple[str, ...], str, int]]:
     combos = config["behavior"]["combo"]["combos"]
-    return {
+    return [
         (tuple(combo["actions"]), combo["output"], int(combo["layer"]))
         for combo in combos
-    }
+    ]
+
+
+def combo_set(config: dict[str, Any]) -> set[tuple[tuple[str, ...], str, int]]:
+    return set(combo_list(config))
 
 
 def tap_action(action: str) -> str:
@@ -274,6 +278,60 @@ def check_layout(manifest: dict[str, Any], config: dict[str, Any]) -> list[Resul
             )
         )
     return results
+
+
+def check_keymap_shape(manifest: dict[str, Any], config: dict[str, Any]) -> list[Result]:
+    expected_layers = int(manifest["layout"]["layers"])
+    expected_rows = int(manifest["layout"]["rows"])
+    expected_cols = int(manifest["layout"]["cols"])
+    km = keymap(config)
+
+    passed = 0
+    total = 0
+    messages: list[str] = []
+
+    total += 1
+    if len(km) == expected_layers:
+        passed += 1
+    else:
+        messages.append(f"layers expected {expected_layers}, got {len(km)}")
+
+    for layer in range(expected_layers):
+        if layer >= len(km):
+            total += 1 + expected_rows
+            messages.append(f"layer {layer} missing")
+            continue
+
+        layer_rows = km[layer]
+        total += 1
+        if len(layer_rows) == expected_rows:
+            passed += 1
+        else:
+            messages.append(f"layer {layer} rows expected {expected_rows}, got {len(layer_rows)}")
+
+        for row in range(expected_rows):
+            total += 1
+            if row >= len(layer_rows):
+                messages.append(f"layer {layer} row {row} missing")
+                continue
+
+            actual_cols = len(layer_rows[row])
+            if actual_cols == expected_cols:
+                passed += 1
+            else:
+                messages.append(
+                    f"layer {layer} row {row} cols expected {expected_cols}, got {actual_cols}"
+                )
+
+    return [
+        Result(
+            "keymap_shape_matches_layout",
+            "keymap_shape",
+            passed,
+            total,
+            "ok" if not messages else "; ".join(messages[:8]),
+        )
+    ]
 
 
 def check_keymap_rows(manifest: dict[str, Any], config: dict[str, Any]) -> list[Result]:
@@ -340,7 +398,9 @@ def check_config_values(manifest: dict[str, Any], config: dict[str, Any]) -> lis
 
 def check_combos(manifest: dict[str, Any], config: dict[str, Any]) -> list[Result]:
     results: list[Result] = []
-    actual = combo_set(config)
+    actual_list = combo_list(config)
+    actual = set(actual_list)
+    expected_all = combo_set_from_manifest(manifest)
     for check in manifest.get("combos", []):
         expected = (tuple(check["actions"]), check["output"], int(check["layer"]))
         ok = expected in actual
@@ -353,6 +413,32 @@ def check_combos(manifest: dict[str, Any], config: dict[str, Any]) -> list[Resul
                 "ok" if ok else f"missing {expected!r}",
             )
         )
+
+    missing = expected_all - actual
+    extra = actual - expected_all
+    duplicates = sorted(
+        combo
+        for combo in actual
+        if actual_list.count(combo) > 1
+    )
+    passed = len(expected_all) - len(missing)
+    total = len(expected_all) + len(extra) + len(duplicates)
+    messages: list[str] = []
+    if missing:
+        messages.append(f"missing combos {sorted(missing)!r}")
+    if extra:
+        messages.append(f"unexpected RMK combos {sorted(extra)!r}")
+    if duplicates:
+        messages.append(f"duplicated RMK combos {duplicates!r}")
+    results.append(
+        Result(
+            "rmk_combo_set_matches_manifest",
+            "combo_inventory",
+            passed,
+            total,
+            "ok" if not messages else "; ".join(messages),
+        )
+    )
     return results
 
 
@@ -1370,6 +1456,7 @@ def run(
     keyboard = load_toml(keyboard_path)
     results: list[Result] = []
     results.extend(check_layout(manifest, keyboard))
+    results.extend(check_keymap_shape(manifest, keyboard))
     results.extend(check_keymap_rows(manifest, keyboard))
     results.extend(check_config_values(manifest, keyboard))
     results.extend(check_behavior_values(manifest, keyboard))

@@ -12,19 +12,128 @@ fn vial_json() -> serde_json::Value {
     serde_json::from_str(VIAL_JSON).unwrap()
 }
 
-#[test]
-fn porting_coverage_manifest_is_satisfied() {
-    let output = Command::new("python3")
+fn run_porting_coverage(args: &[&str]) -> std::process::Output {
+    Command::new("python3")
         .arg("tools/porting_coverage.py")
+        .args(args)
         .current_dir(env!("CARGO_MANIFEST_DIR"))
         .output()
-        .unwrap();
+        .unwrap()
+}
+
+#[test]
+fn porting_coverage_manifest_is_satisfied() {
+    let output = run_porting_coverage(&[]);
 
     assert!(
         output.status.success(),
         "porting coverage failed\nstdout:\n{}\nstderr:\n{}",
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn porting_coverage_includes_exact_rmk_inventory_gates() {
+    let output = run_porting_coverage(&["--json"]);
+
+    assert!(
+        output.status.success(),
+        "porting coverage failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let results = parsed["results"].as_array().unwrap();
+    let keyboard = keyboard_toml();
+    let layers = keyboard["layout"]["layers"].as_integer().unwrap();
+    let rows = keyboard["layout"]["rows"].as_integer().unwrap();
+    let expected_keymap_shape_total = 1 + layers + layers * rows;
+    let expected_combo_total = keyboard["behavior"]["combo"]["combos"]
+        .as_array()
+        .unwrap()
+        .len() as i64;
+
+    let keymap_shape = results
+        .iter()
+        .find(|result| result["id"] == "keymap_shape_matches_layout")
+        .expect("keymap shape coverage result is missing");
+    assert_eq!(keymap_shape["kind"], "keymap_shape");
+    assert_eq!(
+        keymap_shape["passed"].as_i64(),
+        Some(expected_keymap_shape_total)
+    );
+    assert_eq!(
+        keymap_shape["total"].as_i64(),
+        Some(expected_keymap_shape_total)
+    );
+    assert_eq!(keymap_shape["ok"], true);
+
+    let combo_inventory = results
+        .iter()
+        .find(|result| result["id"] == "rmk_combo_set_matches_manifest")
+        .expect("RMK combo inventory coverage result is missing");
+    assert_eq!(combo_inventory["kind"], "combo_inventory");
+    assert_eq!(
+        combo_inventory["passed"].as_i64(),
+        Some(expected_combo_total)
+    );
+    assert_eq!(
+        combo_inventory["total"].as_i64(),
+        Some(expected_combo_total)
+    );
+    assert_eq!(combo_inventory["ok"], true);
+}
+
+#[test]
+fn porting_coverage_rejects_duplicate_rmk_combos() {
+    let original =
+        "  { actions = [\"D\", \"F\"], output = \"Language2\", layer = 0 },\n]\n\n[host]";
+    let mutated = "  { actions = [\"D\", \"F\"], output = \"Language2\", layer = 0 },\n  { actions = [\"Q\", \"W\"], output = \"Escape\", layer = 0 },\n]\n\n[host]";
+    let keyboard = KEYBOARD_TOML.replace(original, mutated);
+    assert_ne!(keyboard, KEYBOARD_TOML);
+
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(format!(
+        "lalapad-duplicate-combos-{}.toml",
+        std::process::id()
+    ));
+    std::fs::write(&path, keyboard).unwrap();
+
+    let output = Command::new("python3")
+        .arg("tools/porting_coverage.py")
+        .arg("--keyboard-toml")
+        .arg(&path)
+        .arg("--zmk-keymap")
+        .arg("/nonexistent/lalapadgen2.keymap")
+        .arg("--json")
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .output()
+        .unwrap();
+    std::fs::remove_file(&path).unwrap();
+
+    assert!(
+        !output.status.success(),
+        "duplicate combo coverage unexpectedly passed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let results = parsed["results"].as_array().unwrap();
+    let combo_inventory = results
+        .iter()
+        .find(|result| result["id"] == "rmk_combo_set_matches_manifest")
+        .expect("RMK combo inventory coverage result is missing");
+    assert_eq!(combo_inventory["kind"], "combo_inventory");
+    assert_eq!(combo_inventory["passed"].as_i64(), Some(4));
+    assert_eq!(combo_inventory["total"].as_i64(), Some(5));
+    assert_eq!(combo_inventory["ok"], false);
+    assert!(
+        combo_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("duplicated RMK combos")
     );
 }
 
