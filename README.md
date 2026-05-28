@@ -115,11 +115,18 @@ python3 -m json.tool vial.json >/tmp/lalapad-vial-check.json
 python3 -c 'import tomllib; tomllib.load(open("keyboard.toml", "rb")); tomllib.load(open("Cargo.toml", "rb")); print("toml ok")'
 rmkit get-chip --keyboard-toml-path keyboard.toml
 rmkit get-project-name --keyboard-toml-path keyboard.toml
+python3 tools/porting_coverage.py
 python3 tools/check_flash_layout.py --config-only
 cargo check --release --bin central
 cargo check --release --bin peripheral
 cargo build --release
 ```
+
+`tools/porting_coverage.py` reads `tools/porting_coverage_manifest.toml` and,
+when the upstream ZMK checkout from the manifest is present, also parses
+`config/lalapadgen2.keymap` to verify that the migration contract still matches
+the source firmware. Use `--zmk-keymap PATH --require-zmk-source` when the
+source-backed check must be mandatory in another checkout layout.
 
 Host-side parity tests can be run explicitly with:
 

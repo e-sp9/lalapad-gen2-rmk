@@ -1,0 +1,371 @@
+[metadata]
+source = "ZMK LaLaPad Gen2 config/lalapadgen2.keymap"
+source_repo_hint = "../zmk-config-LalaPadGen2"
+description = "Machine-readable porting target for the RMK migration coverage gate. Expected values describe the RMK target behavior, including documented RMK-specific deltas needed to preserve the user's established thumb layer-tap workflow."
+
+[layout]
+rows = 7
+cols = 12
+layers = 4
+
+[[source_deltas]]
+id = "delta_base_mo1_to_left_ctrl"
+layer = 0
+row = 3
+col = 3
+source_expected = "MO(1)"
+target_expected = "LCtrl"
+reason = "RMK target keeps the user's established left Ctrl position while Space carries the layer-tap."
+
+[[source_deltas]]
+id = "delta_base_space_to_layer_tap"
+layer = 0
+row = 3
+col = 4
+source_expected = "Space"
+target_expected = "LT(1, Space, FAST_LAYER)"
+reason = "RMK target preserves the established Space tap / layer-1 hold thumb behavior."
+
+[[source_deltas]]
+id = "delta_base_enter_to_layer_tap"
+layer = 0
+row = 3
+col = 7
+source_expected = "Enter"
+target_expected = "LT(2, Enter, FAST_LAYER)"
+reason = "RMK target preserves the established Enter tap / layer-2 hold thumb behavior."
+
+[[keymap_rows]]
+id = "layer0_row0"
+layer = 0
+row = 0
+source = "ZMK DEFAULT_LAYER row 0"
+expected = ["Q", "W", "E", "R", "T", "No", "No", "Y", "U", "I", "O", "P"]
+
+[[keymap_rows]]
+id = "layer0_row1"
+layer = 0
+row = 1
+source = "ZMK DEFAULT_LAYER row 1"
+expected = ["A", "S", "D", "F", "G", "No", "No", "H", "J", "K", "L", "TH(Minus, Equal)"]
+
+[[keymap_rows]]
+id = "layer0_row2"
+layer = 0
+row = 2
+source = "ZMK DEFAULT_LAYER row 2"
+expected = ["MT(Z, LShift)", "X", "C", "V", "B", "No", "No", "N", "M", "Comma", "Dot", "Slash"]
+
+[[keymap_rows]]
+id = "layer0_row3"
+layer = 0
+row = 3
+source = "ZMK DEFAULT_LAYER row 3, with RMK thumb layer-tap deltas"
+expected = ["LCtrl", "LGui", "LAlt", "LCtrl", "LT(1, Space, FAST_LAYER)", "LShift", "Backspace", "LT(2, Enter, FAST_LAYER)", "MO(2)", "Language2", "Language1", "Backslash"]
+
+[[keymap_rows]]
+id = "layer0_row4"
+layer = 0
+row = 4
+source = "ZMK DEFAULT_LAYER 5-way switches"
+expected = ["No", "No", "Right", "Down", "Left", "Up", "Up", "Left", "Down", "Right", "No", "No"]
+
+[[keymap_rows]]
+id = "layer0_virtual_trackpad_buttons"
+layer = 0
+row = 5
+source = "ZMK virtual pointing buttons"
+expected = ["MouseBtn1", "MouseBtn2", "MouseBtn3", "No", "No", "No", "No", "No", "No", "MouseBtn1", "MouseBtn2", "MouseBtn3"]
+
+[[keymap_rows]]
+id = "layer0_virtual_trackpad_gestures"
+layer = 0
+row = 6
+source = "ZMK virtual pointing gestures"
+expected = ["MouseBtn4", "MouseBtn5", "WM(Tab, LGui)", "WM(D, LGui)", "LCtrl", "No", "No", "MouseBtn4", "MouseBtn5", "WM(Tab, LGui)", "WM(D, LGui)", "LCtrl"]
+
+[[keymap_rows]]
+id = "layer1_row0"
+layer = 1
+row = 0
+source = "ZMK SECONDARY_LAYER row 0"
+expected = ["Kc1", "Kc2", "Kc3", "Kc4", "Kc5", "No", "No", "NumLock", "Kp7", "Kp8", "Kp9", "KpPlus"]
+
+[[keymap_rows]]
+id = "layer1_row1"
+layer = 1
+row = 1
+source = "ZMK SECONDARY_LAYER row 1"
+expected = ["Kc6", "Kc7", "Kc8", "Kc9", "Kc0", "No", "No", "_", "Kp4", "Kp5", "Kp6", "KpMinus"]
+
+[[keymap_rows]]
+id = "layer1_row2"
+layer = 1
+row = 2
+source = "ZMK SECONDARY_LAYER row 2"
+expected = ["F6", "F7", "F8", "F9", "F10", "No", "No", "_", "Kp1", "Kp2", "Kp3", "KpAsterisk"]
+
+[[keymap_rows]]
+id = "layer1_row3"
+layer = 1
+row = 3
+source = "ZMK SECONDARY_LAYER row 3"
+expected = ["_", "_", "_", "_", "_", "_", "Delete", "_", "_", "Kp0", "KpDot", "KpSlash"]
+
+[[keymap_rows]]
+id = "layer1_row4"
+layer = 1
+row = 4
+source = "ZMK SECONDARY_LAYER 5-way switches"
+expected = ["No", "_", "_", "_", "_", "_", "_", "_", "_", "_", "_", "No"]
+
+[[keymap_rows]]
+id = "layer1_virtual_trackpad_buttons"
+layer = 1
+row = 5
+source = "ZMK virtual pointing buttons"
+expected = ["_", "_", "_", "No", "No", "No", "No", "No", "No", "_", "_", "_"]
+
+[[keymap_rows]]
+id = "layer1_virtual_trackpad_gestures"
+layer = 1
+row = 6
+source = "ZMK virtual pointing gestures"
+expected = ["WM(Left, LCtrl|LGui)", "WM(Right, LCtrl|LGui)", "_", "_", "_", "No", "No", "WM(Left, LCtrl|LGui)", "WM(Right, LCtrl|LGui)", "_", "_", "_"]
+
+[[keymap_rows]]
+id = "layer2_row0"
+layer = 2
+row = 0
+source = "ZMK TERTIARY_LAYER row 0"
+expected = ["SHIFTED(Kc1)", "SHIFTED(Kc2)", "SHIFTED(Kc3)", "SHIFTED(Kc4)", "SHIFTED(Kc5)", "No", "No", "PageUp", "Home", "Up", "End", "PrintScreen"]
+
+[[keymap_rows]]
+id = "layer2_row1"
+layer = 2
+row = 1
+source = "ZMK TERTIARY_LAYER row 1"
+expected = ["SHIFTED(Kc6)", "SHIFTED(Kc7)", "SHIFTED(Kc8)", "SHIFTED(Kc9)", "SHIFTED(Kc0)", "No", "No", "PageDown", "Left", "Down", "Right", "ScrollLock"]
+
+[[keymap_rows]]
+id = "layer2_row2"
+layer = 2
+row = 2
+source = "ZMK TERTIARY_LAYER row 2"
+expected = ["Grave", "Quote", "Semicolon", "LeftBracket", "RightBracket", "No", "No", "_", "MouseBtn4", "_", "MouseBtn5", "Pause"]
+
+[[keymap_rows]]
+id = "layer2_row3"
+layer = 2
+row = 3
+source = "ZMK TERTIARY_LAYER row 3"
+expected = ["_", "_", "_", "_", "_", "_", "_", "_", "_", "_", "_", "_"]
+
+[[keymap_rows]]
+id = "layer2_row4"
+layer = 2
+row = 4
+source = "ZMK TERTIARY_LAYER 5-way switches"
+expected = ["No", "_", "_", "_", "_", "_", "_", "_", "_", "_", "_", "No"]
+
+[[keymap_rows]]
+id = "layer2_virtual_trackpad_buttons"
+layer = 2
+row = 5
+source = "ZMK virtual pointing buttons"
+expected = ["_", "_", "_", "No", "No", "No", "No", "No", "No", "_", "_", "_"]
+
+[[keymap_rows]]
+id = "layer2_virtual_trackpad_gestures"
+layer = 2
+row = 6
+source = "ZMK virtual pointing gestures"
+expected = ["_", "_", "_", "_", "_", "No", "No", "_", "_", "_", "_", "_"]
+
+[[keymap_rows]]
+id = "layer3_row0"
+layer = 3
+row = 0
+source = "ZMK SYSTEM_LAYER row 0"
+expected = ["F1", "F2", "F3", "F4", "F5", "No", "No", "User7", "User0", "User1", "User2", "User3"]
+
+[[keymap_rows]]
+id = "layer3_row1"
+layer = 3
+row = 1
+source = "ZMK SYSTEM_LAYER row 1"
+expected = ["F6", "F7", "F8", "F9", "F10", "No", "No", "Reboot", "Bootloader", "User6", "User8", "_"]
+
+[[keymap_rows]]
+id = "layer3_row2"
+layer = 3
+row = 2
+source = "ZMK SYSTEM_LAYER row 2"
+expected = ["F11", "F12", "F13", "F14", "F15", "No", "No", "User9", "User10", "User11", "User12", "User13"]
+
+[[keymap_rows]]
+id = "layer3_row3"
+layer = 3
+row = 3
+source = "ZMK SYSTEM_LAYER row 3"
+expected = ["_", "_", "_", "_", "_", "_", "_", "_", "_", "_", "_", "_"]
+
+[[keymap_rows]]
+id = "layer3_row4"
+layer = 3
+row = 4
+source = "ZMK SYSTEM_LAYER 5-way switches"
+expected = ["No", "_", "_", "_", "_", "_", "_", "_", "_", "_", "_", "No"]
+
+[[keymap_rows]]
+id = "layer3_virtual_trackpad_buttons"
+layer = 3
+row = 5
+source = "ZMK virtual pointing buttons"
+expected = ["_", "_", "_", "No", "No", "No", "No", "No", "No", "_", "_", "_"]
+
+[[keymap_rows]]
+id = "layer3_virtual_trackpad_gestures"
+layer = 3
+row = 6
+source = "ZMK virtual pointing gestures"
+expected = ["_", "_", "_", "_", "_", "No", "No", "_", "_", "_", "_", "_"]
+
+[[behavior_values]]
+id = "tri_layer_lower"
+path = "behavior.tri_layer.lower"
+expected = 1
+
+[[behavior_values]]
+id = "tri_layer_upper"
+path = "behavior.tri_layer.upper"
+expected = 2
+
+[[behavior_values]]
+id = "tri_layer_adjust"
+path = "behavior.tri_layer.adjust"
+expected = 3
+
+[[behavior_values]]
+id = "flow_tap_disabled_for_thumb_layer_taps"
+path = "behavior.morse.enable_flow_tap"
+expected = false
+source = "RMK-specific guard: ZMK &lt quick-tap-ms is not RMK global flow-tap"
+
+[[behavior_values]]
+id = "morse_prior_idle"
+path = "behavior.morse.prior_idle_time"
+expected = "125ms"
+
+[[behavior_values]]
+id = "morse_normal_mode"
+path = "behavior.morse.normal_mode"
+expected = true
+
+[[behavior_values]]
+id = "fast_layer_hold_on_other_press"
+path = "behavior.morse.profiles.FAST_LAYER.hold_on_other_press"
+expected = true
+
+[[behavior_values]]
+id = "fast_layer_unilateral_tap_disabled"
+path = "behavior.morse.profiles.FAST_LAYER.unilateral_tap"
+expected = false
+
+[[behavior_values]]
+id = "fast_layer_hold_timeout"
+path = "behavior.morse.profiles.FAST_LAYER.hold_timeout"
+expected = "200ms"
+
+[[behavior_values]]
+id = "fast_layer_gap_timeout"
+path = "behavior.morse.profiles.FAST_LAYER.gap_timeout"
+expected = "200ms"
+
+[[zmk_behavior_values]]
+id = "zmk_mt_quick_tap_ms"
+expected = 200
+
+[[zmk_behavior_values]]
+id = "zmk_lt_quick_tap_ms"
+expected = 200
+
+[[zmk_behavior_values]]
+id = "zmk_mt2_flavor"
+expected = "tap-preferred"
+
+[[zmk_behavior_values]]
+id = "zmk_mt2_tapping_term_ms"
+expected = 200
+
+[[zmk_behavior_values]]
+id = "zmk_mt2_quick_tap_ms"
+expected = 200
+
+[[zmk_behavior_values]]
+id = "zmk_mt2_require_prior_idle_ms"
+expected = 125
+
+[[combos]]
+id = "combo_escape"
+actions = ["Q", "W"]
+output = "Escape"
+layer = 0
+source = "ZMK CONBO_ESC key-positions <0 1>"
+
+[[combos]]
+id = "combo_tab"
+actions = ["A", "S"]
+output = "Tab"
+layer = 0
+source = "ZMK COMBO_TAB key-positions <10 11>"
+
+[[combos]]
+id = "combo_kana"
+actions = ["J", "K"]
+output = "Language1"
+layer = 0
+source = "ZMK COMBO_KANA key-positions <16 17>"
+
+[[combos]]
+id = "combo_eisu"
+actions = ["D", "F"]
+output = "Language2"
+layer = 0
+source = "ZMK COMBO_EUSU key-positions <12 13>"
+
+[[scenarios]]
+id = "space_tap_is_space"
+description = "Space thumb tap remains Space."
+tap = { row = 3, col = 4 }
+expected_output = "Space"
+
+[[scenarios]]
+id = "space_hold_y_selects_secondary_layer"
+description = "Space thumb hold activates layer 1 for the Y position."
+hold = { row = 3, col = 4, expected_action = "LT(1, Space, FAST_LAYER)", activates_layer = 1 }
+tap = { row = 0, col = 7 }
+expected_output = "NumLock"
+
+[[scenarios]]
+id = "enter_tap_is_enter"
+description = "Enter thumb tap remains Enter."
+tap = { row = 3, col = 7 }
+expected_output = "Enter"
+
+[[scenarios]]
+id = "enter_hold_y_selects_tertiary_layer"
+description = "Enter thumb hold activates layer 2 for the Y position."
+hold = { row = 3, col = 7, expected_action = "LT(2, Enter, FAST_LAYER)", activates_layer = 2 }
+tap = { row = 0, col = 7 }
+expected_output = "PageUp"
+
+[[scenarios]]
+id = "space_enter_hold_y_selects_system_layer"
+description = "Holding both thumb layer-taps activates the system tri-layer."
+holds = [
+  { row = 3, col = 4, expected_action = "LT(1, Space, FAST_LAYER)", activates_layer = 1 },
+  { row = 3, col = 7, expected_action = "LT(2, Enter, FAST_LAYER)", activates_layer = 2 },
+]
+tap = { row = 0, col = 7 }
+expected_output = "User7"

@@ -17,7 +17,7 @@ keymap = [
         ["Q",              "W",     "E",     "R",        "T",     "No",     "No",        "Y",     "U",        "I",         "O",         "P"],
         ["A",              "S",     "D",     "F",        "G",     "No",     "No",        "H",     "J",        "K",         "L",         "TH(Minus, Equal)"],
         ["MT(Z, LShift)",  "X",     "C",     "V",        "B",     "No",     "No",        "N",     "M",        "Comma",     "Dot",       "Slash"],
-        ["LCtrl",          "LGui",  "LAlt",  "MO(1)",    "Space", "LShift", "Backspace", "Enter", "MO(2)", "Language2", "Language1", "Backslash"],
+        ["LCtrl",          "LGui",  "LAlt",  "LCtrl",    "LT(1, Space, FAST_LAYER)", "LShift", "Backspace", "LT(2, Enter, FAST_LAYER)", "MO(2)", "Language2", "Language1", "Backslash"],
         ["No",             "No",    "Right", "Down",     "Left",  "Up",     "Up",        "Left",  "Down",     "Right",     "No",        "No"],
         ["MouseBtn1",      "MouseBtn2", "MouseBtn3", "No", "No", "No", "No", "No", "No", "MouseBtn1", "MouseBtn2", "MouseBtn3"],
         ["MouseBtn4",      "MouseBtn5", "WM(Tab, LGui)", "WM(D, LGui)", "LCtrl", "No", "No", "MouseBtn4", "MouseBtn5", "WM(Tab, LGui)", "WM(D, LGui)", "LCtrl"],
@@ -26,7 +26,7 @@ keymap = [
         ["Kc1",                 "Kc2",                "Kc3",  "Kc4",  "Kc5",  "No",    "No",     "NumLock",              "Kp7",       "Kp8",    "Kp9",      "KpPlus"],
         ["Kc6",                 "Kc7",                "Kc8",  "Kc9",  "Kc0",  "No",    "No",     "_",                    "Kp4",       "Kp5",    "Kp6",      "KpMinus"],
         ["F6",                  "F7",                 "F8",   "F9",   "F10",  "No",    "No",     "_",                    "Kp1",       "Kp2",    "Kp3",      "KpAsterisk"],
-        ["_",                   "_",                  "_",    "_",    "_",    "_",     "Delete", "_",                    "_",         "_",      "_",        "_"],
+        ["_",                   "_",                  "_",    "_",    "_",    "_",     "Delete", "_",                    "_",         "Kp0",   "KpDot",    "KpSlash"],
         ["No",                  "_",                  "_",    "_",    "_",    "_",     "_",      "_",                    "_",         "_",      "_",        "No"],
         ["_",                   "_",                  "_",    "No",   "No",   "No",    "No",     "No",                   "No",        "_",      "_",        "_"],
         ["WM(Left, LCtrl|LGui)", "WM(Right, LCtrl|LGui)", "_", "_",    "_",    "No",    "No",     "WM(Left, LCtrl|LGui)", "WM(Right, LCtrl|LGui)", "_", "_", "_"],
@@ -73,14 +73,14 @@ lower = 1
 adjust = 3
 
 [behavior.morse]
-enable_flow_tap = true
+enable_flow_tap = false
 prior_idle_time = "125ms"
 normal_mode = true
 hold_timeout = "200ms"
 gap_timeout = "200ms"
 
 [behavior.morse.profiles]
-FAST_LAYER = { normal_mode = true, unilateral_tap = false, hold_timeout = "200ms", gap_timeout = "200ms" }
+FAST_LAYER = { hold_on_other_press = true, unilateral_tap = false, hold_timeout = "200ms", gap_timeout = "200ms" }
 
 [behavior.combo]
 timeout = "50ms"

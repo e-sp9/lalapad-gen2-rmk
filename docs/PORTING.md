@@ -155,9 +155,14 @@ The base keymap is translated from `config/lalapadgen2.keymap`, but some ZMK-spe
   maps `User8` to a ZMK-style `BT_CLR_ALL` all-profile bond clear. Holding
   `User8` still keeps RMK's existing split peer clearing path available.
 - The upstream base layer's `&mo 1` and `&mo 2` thumb keys are represented as
-  `MO(1)` and `MO(2)`. The previous RMK-only Mac layer, semicolon fork, and
-  Space/Enter layer-tap approximation were removed to match the official ZMK
-  source.
+  RMK thumb layer-taps: `LT(1, Space, FAST_LAYER)` and
+  `LT(2, Enter, FAST_LAYER)`. The previous RMK-only Mac layer and semicolon
+  fork were removed to match the official ZMK layer shape, but the Space and
+  Enter thumb keys keep the established RMK tap/hold behavior. RMK flow-tap is
+  intentionally disabled because it is global in RMK 0.8.2 and otherwise forces
+  thumb layer-tap keys to resolve as taps during normal typing streaks. The
+  thumb layer-tap profile uses hold-on-other-press so it behaves as a reliable
+  layer modifier when chorded.
 - Base combos carry the four ZMK reference bindings: `Q+W => Escape`,
   `A+S => Tab`, `J+K => Language1`, and `D+F => Language2`.
   The RMK 0.8.2 combo path used here does not expose ZMK-style
@@ -173,3 +178,31 @@ The base keymap is translated from `config/lalapadgen2.keymap`, but some ZMK-spe
   application/storage overlaps before firmware is flashed.
 - The current recognizer and pointer path support axis inversion/swap settings, but the actual left/right hardware orientation, pointer speed, and thresholds still need tuning after hardware testing.
 - ZMK Studio is approximated by Vial support in this RMK project.
+
+## Porting Coverage Gate
+
+`tools/porting_coverage_manifest.toml` is the machine-readable migration
+contract derived from the upstream ZMK keymap plus documented RMK-specific
+deltas. It covers all configured RMK keymap cells, combo bindings, tri-layer and
+tap-hold behavior settings, and golden thumb-layer scenarios for Space, Enter,
+and the system tri-layer.
+
+When the upstream checkout from `metadata.source_repo_hint` is available, the
+gate also parses `config/lalapadgen2.keymap` directly and checks the manifest
+against the raw source keymap cells, the explicitly documented RMK deltas, combo
+definitions, hold-tap timing settings, and conditional layer rule. Use
+`--zmk-keymap PATH --require-zmk-source` to make that source-backed check
+mandatory in a different checkout layout.
+
+Run:
+
+```sh
+python3 tools/porting_coverage.py
+```
+
+With the local upstream source checkout present, the current gate reports
+`713/713 = 100.00%`. This is a static, source-backed, and scenario-level RMK
+configuration coverage metric, not a claim that hardware-only IQS9151, BLE,
+storage, or Vial runtime paths have been exhaustively exercised on real devices.
+It is intended to prevent regressions like a visible `LT(...)` binding whose
+tap-hold behavior is changed by RMK's global flow-tap setting.

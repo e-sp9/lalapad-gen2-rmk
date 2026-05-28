@@ -13,6 +13,10 @@ dependencies = ["install-llvm-tools", "flip-link", "flash-layout-config"]
 command = "python3"
 args = ["tools/check_flash_layout.py", "--config-only"]
 
+[tasks.porting-coverage]
+command = "python3"
+args = ["tools/porting_coverage.py"]
+
 [tasks.firmware-dirs]
 command = "mkdir"
 args = ["-p", "firmware/normal", "firmware/reset", "firmware/hex"]

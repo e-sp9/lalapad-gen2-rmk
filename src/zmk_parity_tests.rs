@@ -1,4 +1,5 @@
 use crate::iqs9151::{TrackpadButton, TrackpadSide, VirtualKeyPosition, trackpad_button_position};
+use std::process::Command;
 
 const KEYBOARD_TOML: &str = include_str!("../keyboard.toml");
 const VIAL_JSON: &str = include_str!("../vial.json");
@@ -9,6 +10,22 @@ fn keyboard_toml() -> toml::Value {
 
 fn vial_json() -> serde_json::Value {
     serde_json::from_str(VIAL_JSON).unwrap()
+}
+
+#[test]
+fn porting_coverage_manifest_is_satisfied() {
+    let output = Command::new("python3")
+        .arg("tools/porting_coverage.py")
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .output()
+        .unwrap();
+
+    assert!(
+        output.status.success(),
+        "porting coverage failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
 }
 
 fn keymap(value: &toml::Value) -> &Vec<toml::Value> {
@@ -36,11 +53,11 @@ fn keyboard_layers_and_layer_keys_match_upstream_zmk_shape() {
             "LCtrl",
             "LGui",
             "LAlt",
-            "MO(1)",
-            "Space",
+            "LCtrl",
+            "LT(1, Space, FAST_LAYER)",
             "LShift",
             "Backspace",
-            "Enter",
+            "LT(2, Enter, FAST_LAYER)",
             "MO(2)",
             "Language2",
             "Language1",
@@ -52,6 +69,12 @@ fn keyboard_layers_and_layer_keys_match_upstream_zmk_shape() {
         [
             "Kc1", "Kc2", "Kc3", "Kc4", "Kc5", "No", "No", "NumLock", "Kp7", "Kp8", "Kp9",
             "KpPlus",
+        ]
+    );
+    assert_eq!(
+        row_strings(&keymap[1], 3),
+        [
+            "_", "_", "_", "_", "_", "_", "Delete", "_", "_", "Kp0", "KpDot", "KpSlash",
         ]
     );
     assert_eq!(
@@ -93,7 +116,7 @@ fn keyboard_layers_and_layer_keys_match_upstream_zmk_shape() {
     );
     assert_eq!(
         parsed["behavior"]["morse"]["enable_flow_tap"].as_bool(),
-        Some(true)
+        Some(false)
     );
     assert_eq!(
         parsed["behavior"]["morse"]["prior_idle_time"].as_str(),
@@ -101,6 +124,10 @@ fn keyboard_layers_and_layer_keys_match_upstream_zmk_shape() {
     );
     assert_eq!(
         parsed["behavior"]["morse"]["normal_mode"].as_bool(),
+        Some(true)
+    );
+    assert_eq!(
+        parsed["behavior"]["morse"]["profiles"]["FAST_LAYER"]["hold_on_other_press"].as_bool(),
         Some(true)
     );
     assert_eq!(
