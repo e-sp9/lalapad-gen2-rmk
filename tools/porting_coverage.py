@@ -852,6 +852,46 @@ def scalar_property(block: str, name: str) -> str:
     return match.group("value")
 
 
+def top_level_scalar_property(block: str, name: str) -> str | None:
+    match = re.search(
+        rf"(?<![A-Za-z0-9_,]){re.escape(name)}\s*=\s*\"?(?P<value>[^\";\s]+)\"?\s*;",
+        top_level_text(block),
+    )
+    return match.group("value") if match else None
+
+
+def dts_child_blocks(block: str) -> list[tuple[str | None, str, str]]:
+    children: list[tuple[str | None, str, str]] = []
+    index = 0
+    node_name = r"&?[A-Za-z0-9,._+\-]+(?:@[A-Za-z0-9,._+\-]+)?"
+    pattern = re.compile(
+        r"(?:^|[;\n])\s*"
+        r"(?:(?P<label>[A-Za-z_][A-Za-z0-9_]*)\s*:\s*)?"
+        rf"(?P<name>{node_name})\s*\{{"
+    )
+    while match := pattern.search(block, index):
+        body_start = match.end() - 1
+        body_end = matching_block_end(block, body_start)
+        body = block[body_start + 1 : body_end]
+        children.append((match.group("label"), match.group("name"), body))
+        index = body_end + 1
+    return children
+
+
+def dts_status_nodes(text: str) -> list[tuple[str, str]]:
+    found: list[tuple[str, str]] = []
+
+    def visit(block: str) -> None:
+        for label, name, body in dts_child_blocks(block):
+            node = label or name
+            if status := top_level_scalar_property(body, "status"):
+                found.append((node, status))
+            visit(body)
+
+    visit(strip_c_style_comments(text))
+    return found
+
+
 def zmk_pin_to_rmk(controller: str, pin: int) -> str:
     if controller == "xiao_d":
         try:
@@ -1035,6 +1075,42 @@ def check_zmk_config_inventory(manifest: dict[str, Any], zmk_config_dir: Path) -
         results.append(
             Result(
                 f"kconfig_inventory.{source_file}",
+                "zmk_inventory",
+                passed,
+                total,
+                "ok" if not messages else "; ".join(messages),
+            )
+        )
+    return results
+
+
+def check_zmk_dts_status_inventory(manifest: dict[str, Any], zmk_config_dir: Path) -> list[Result]:
+    inventory = manifest.get("source_inventory", {})
+    results: list[Result] = []
+    for check in inventory.get("dts_status_files", []):
+        source_file = check["source_file"]
+        expected = list(check["expected"])
+        actual_list = [
+            f"{node}:{status}"
+            for node, status in dts_status_nodes((zmk_config_dir / source_file).read_text())
+        ]
+        actual = set(actual_list)
+        expected_set = set(expected)
+        missing = sorted(expected_set - actual)
+        extra = sorted(actual - expected_set)
+        duplicates = sorted(item for item in actual if actual_list.count(item) > 1)
+        passed = len(expected_set) - len(missing)
+        total = len(expected_set) + len(extra) + len(duplicates)
+        messages: list[str] = []
+        if missing:
+            messages.append(f"missing status nodes {missing!r}")
+        if extra:
+            messages.append(f"unclassified status nodes {extra!r}")
+        if duplicates:
+            messages.append(f"duplicated status nodes {duplicates!r}")
+        results.append(
+            Result(
+                f"dts_status_inventory.{source_file}",
                 "zmk_inventory",
                 passed,
                 total,
@@ -1548,6 +1624,7 @@ def check_zmk_source(
     results.extend(check_zmk_config_values(manifest, keyboard, zmk_config_dir))
     results.extend(check_zmk_config_mirrors(manifest, zmk_config_dir))
     results.extend(check_zmk_config_inventory(manifest, zmk_config_dir))
+    results.extend(check_zmk_dts_status_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_pin_values(manifest, keyboard, zmk_config_dir))
     results.extend(check_source_regex_values(manifest, zmk_config_dir))
     results.extend(check_zmk_matrix_transform(manifest, zmk_config_dir))

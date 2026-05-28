@@ -381,6 +381,90 @@ print(json.dumps({
 }
 
 #[test]
+fn porting_coverage_rejects_unclassified_zmk_dts_status_nodes() {
+    let output = run_python(
+        r#"
+import importlib.util
+import json
+import sys
+import tempfile
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("porting_coverage", "tools/porting_coverage.py")
+pc = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = pc
+spec.loader.exec_module(pc)
+manifest = {
+    "source_inventory": {
+        "dts_status_files": [{
+            "source_file": "fixture.overlay",
+            "expected": ["&xiao_i2c:okay", "iqs9151:okay"],
+        }],
+    },
+}
+
+def pack(results):
+    return [result.__dict__ | {"ok": result.ok} for result in results]
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    fixture = root / "fixture.overlay"
+    fixture.write_text('''
+    &xiao_i2c {
+        status = "okay";
+        label = "brace { in string }";
+        iqs9151: iqs9151@56 {
+            status = "okay";
+        };
+    };
+    ''')
+    ok = pack(pc.check_zmk_dts_status_inventory(manifest, root))
+
+    fixture.write_text('''
+    &xiao_i2c {
+        status = "okay";
+        iqs9151: iqs9151@56 {
+            status = "okay";
+        };
+        new_listener: listener {
+            status = "okay";
+        };
+    };
+    ''')
+    extra = pack(pc.check_zmk_dts_status_inventory(manifest, root))
+
+print(json.dumps({"ok": ok, "extra": extra}))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "DTS status inventory parser check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let ok_inventory = &parsed["ok"][0];
+    assert_eq!(ok_inventory["kind"], "zmk_inventory");
+    assert_eq!(ok_inventory["passed"].as_i64(), Some(2));
+    assert_eq!(ok_inventory["total"].as_i64(), Some(2));
+    assert_eq!(ok_inventory["ok"], true);
+
+    let extra_inventory = &parsed["extra"][0];
+    assert_eq!(extra_inventory["kind"], "zmk_inventory");
+    assert_eq!(extra_inventory["passed"].as_i64(), Some(2));
+    assert_eq!(extra_inventory["total"].as_i64(), Some(3));
+    assert_eq!(extra_inventory["ok"], false);
+    assert!(
+        extra_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("new_listener:okay")
+    );
+}
+
+#[test]
 fn porting_coverage_parses_arbitrary_named_zmk_combos() {
     let output = run_python(
         r#"

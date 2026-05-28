@@ -21,6 +21,11 @@ kconfig_files = [
   "boards/shields/lalapadgen2/lalapadgen2_left.conf",
   "boards/shields/lalapadgen2/lalapadgen2_right.conf",
 ]
+dts_status_files = [
+  { source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi", expected = ["trackpad_listener_R:disabled", "trackpad_listener_L:disabled", "leds:okay", "easy_charge_indicator:okay", "&xiao_i2c:okay", "iqs9151:okay"] },
+  { source_file = "boards/shields/lalapadgen2/lalapadgen2_right.overlay", expected = ["&trackpad_listener_R:okay", "&trackpad_listener_L:okay"] },
+  { source_file = "boards/shields/lalapadgen2/lalapadgen2_left.overlay", expected = ["&trackpad_split_L:okay", "&trackpad_split_R:disabled"] },
+]
 
 [layout]
 rows = 7
