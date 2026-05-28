@@ -8,6 +8,23 @@ rows = 7
 cols = 12
 layers = 4
 
+vial_custom_keycodes = [
+  "BT0",
+  "BT1",
+  "BT2",
+  "BT3",
+  "NEXT_BT",
+  "PREV_BT",
+  "CLR_BT",
+  "SWITCH",
+  "CLR_PEER",
+  "TP_XY_INC",
+  "TP_XY_DEC",
+  "TP_SC_INC",
+  "TP_SC_DEC",
+  "TP_SCALE_RST",
+]
+
 [[source_deltas]]
 id = "delta_base_mo1_to_left_ctrl"
 layer = 0
@@ -403,6 +420,8 @@ id = "zmk_idle_sleep_timeout"
 source_file = "lalapadgen2.conf"
 key = "CONFIG_ZMK_IDLE_SLEEP_TIMEOUT"
 source_expected = "3600000"
+target_path = "rmk.split_central_sleep_timeout_seconds"
+target_expected = 0
 
 [[zmk_config_values]]
 id = "zmk_settings_enabled"
@@ -427,6 +446,134 @@ id = "zmk_studio_enabled"
 source_file = "lalapadgen2.conf"
 key = "CONFIG_ZMK_STUDIO"
 source_expected = "y"
+
+[[zmk_config_values]]
+id = "zmk_nfct_pins_as_gpios"
+source_file = "lalapadgen2.conf"
+key = "CONFIG_NFCT_PINS_AS_GPIOS"
+source_expected = "y"
+
+[[zmk_config_values]]
+id = "zmk_i2c_enabled"
+source_file = "lalapadgen2.conf"
+key = "CONFIG_I2C"
+source_expected = "y"
+
+[[zmk_config_values]]
+id = "zmk_pointing_enabled"
+source_file = "lalapadgen2.conf"
+key = "CONFIG_ZMK_POINTING"
+source_expected = "y"
+
+[[zmk_config_values]]
+id = "zmk_smooth_scrolling_enabled"
+source_file = "lalapadgen2.conf"
+key = "CONFIG_ZMK_POINTING_SMOOTH_SCROLLING"
+source_expected = "y"
+
+[[zmk_config_values]]
+id = "zmk_iqs9151_enabled"
+source_file = "lalapadgen2.conf"
+key = "CONFIG_INPUT_IQS9151"
+source_expected = "y"
+
+[[zmk_config_values]]
+id = "zmk_input_thread_stack_size"
+source_file = "lalapadgen2.conf"
+key = "CONFIG_INPUT_THREAD_STACK_SIZE"
+source_expected = "4096"
+
+[[zmk_config_values]]
+id = "zmk_settings_save_debounce"
+source_file = "lalapadgen2.conf"
+key = "CONFIG_ZMK_SETTINGS_SAVE_DEBOUNCE"
+source_expected = "2000"
+
+[[zmk_config_values]]
+id = "zmk_idle_timeout"
+source_file = "lalapadgen2.conf"
+key = "CONFIG_ZMK_IDLE_TIMEOUT"
+source_expected = "300000"
+
+[[zmk_config_values]]
+id = "zmk_battery_reporting_enabled"
+source_file = "lalapadgen2.conf"
+key = "CONFIG_ZMK_BATTERY_REPORTING"
+source_expected = "y"
+
+[[zmk_config_values]]
+id = "zmk_split_battery_proxy_enabled"
+source_file = "lalapadgen2.conf"
+key = "CONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_PROXY"
+source_expected = "y"
+
+[[zmk_config_values]]
+id = "zmk_split_battery_fetching_enabled"
+source_file = "lalapadgen2.conf"
+key = "CONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_FETCHING"
+source_expected = "y"
+
+[[zmk_config_values]]
+id = "zmk_rgb_layer_change_enabled"
+source_file = "lalapadgen2.conf"
+key = "CONFIG_RGBLED_WIDGET_SHOW_LAYER_CHANGE"
+source_expected = "y"
+
+[[zmk_config_values]]
+id = "zmk_studio_locking_disabled"
+source_file = "lalapadgen2.conf"
+key = "CONFIG_ZMK_STUDIO_LOCKING"
+source_expected = "n"
+
+[[zmk_config_mirrors]]
+id = "zmk_iqs9151_left_right_config_parity"
+source_files = [
+  "boards/shields/lalapadgen2/lalapadgen2_left.conf",
+  "boards/shields/lalapadgen2/lalapadgen2_right.conf",
+]
+keys = [
+  "CONFIG_INPUT_IQS9151_ROTATE_0",
+  "CONFIG_INPUT_IQS9151_RESOLUTION_X",
+  "CONFIG_INPUT_IQS9151_RESOLUTION_Y",
+  "CONFIG_INPUT_IQS9151_ATI_TARGETCOUNT",
+  "CONFIG_INPUT_IQS9151_DYNAMIC_FILTER_BOTTOM_SPEED",
+  "CONFIG_INPUT_IQS9151_DYNAMIC_FILTER_TOP_SPEED",
+  "CONFIG_INPUT_IQS9151_DYNAMIC_FILTER_BOTTOM_BETA",
+  "CONFIG_INPUT_IQS9151_1F_TAP_ENABLE",
+  "CONFIG_INPUT_IQS9151_1F_TAP_MAX_MS",
+  "CONFIG_INPUT_IQS9151_1F_TAP_MOVE",
+  "CONFIG_INPUT_IQS9151_1F_PRESSHOLD_ENABLE",
+  "CONFIG_INPUT_IQS9151_1F_TAPDRAG_GAP_MAX_MS",
+  "CONFIG_INPUT_IQS9151_CURSOR_INERTIA_ENABLE",
+  "CONFIG_INPUT_IQS9151_CURSOR_INERTIA_DECAY",
+  "CONFIG_INPUT_IQS9151_CURSOR_INERTIA_RECENT_WINDOW_MS",
+  "CONFIG_INPUT_IQS9151_CURSOR_INERTIA_STALE_GAP_MS",
+  "CONFIG_INPUT_IQS9151_CURSOR_INERTIA_MIN_SAMPLES",
+  "CONFIG_INPUT_IQS9151_CURSOR_INERTIA_MIN_AVG_SPEED",
+  "CONFIG_INPUT_IQS9151_2F_TAP_ENABLE",
+  "CONFIG_INPUT_IQS9151_2F_TAP_MAX_MS",
+  "CONFIG_INPUT_IQS9151_2F_TAP_MOVE",
+  "CONFIG_INPUT_IQS9151_2F_PRESSHOLD_ENABLE",
+  "CONFIG_INPUT_IQS9151_2F_TAPDRAG_GAP_MAX_MS",
+  "CONFIG_INPUT_IQS9151_SCROLL_Y_ENABLE",
+  "CONFIG_INPUT_IQS9151_SCROLL_X_ENABLE",
+  "CONFIG_INPUT_IQS9151_2F_SCROLL_START_MOVE",
+  "CONFIG_INPUT_IQS9151_SCROLL_INERTIA_ENABLE",
+  "CONFIG_INPUT_IQS9151_SCROLL_INERTIA_DECAY",
+  "CONFIG_INPUT_IQS9151_SCROLL_INERTIA_RECENT_WINDOW_MS",
+  "CONFIG_INPUT_IQS9151_SCROLL_INERTIA_STALE_GAP_MS",
+  "CONFIG_INPUT_IQS9151_SCROLL_INERTIA_MIN_SAMPLES",
+  "CONFIG_INPUT_IQS9151_SCROLL_INERTIA_MIN_AVG_SPEED",
+  "CONFIG_INPUT_IQS9151_2F_PINCH_ENABLE",
+  "CONFIG_INPUT_IQS9151_2F_PINCH_START_DISTANCE",
+  "CONFIG_INPUT_IQS9151_2F_PINCH_WHEEL_GAIN_X10",
+  "CONFIG_INPUT_IQS9151_3F_TAP_ENABLE",
+  "CONFIG_INPUT_IQS9151_3F_TAP_MAX_MS",
+  "CONFIG_INPUT_IQS9151_3F_TAP_MOVE",
+  "CONFIG_INPUT_IQS9151_3F_PRESSHOLD_ENABLE",
+  "CONFIG_INPUT_IQS9151_3F_TAPDRAG_GAP_MAX_MS",
+  "CONFIG_INPUT_IQS9151_3F_SWIPE_THRESHOLD",
+]
 
 [[zmk_pin_values]]
 id = "zmk_matrix_row_pins"
@@ -526,6 +673,61 @@ id = "zmk_dynamic_scalers_track_remainders"
 source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi"
 pattern = 'zip_dynamic_xy_scaler:.*?track-remainders;.*?zip_dynamic_scroll_scaler:.*?track-remainders;'
 
+[[source_regex_values]]
+id = "zmk_trackpad_low_speed_layers"
+source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi"
+pattern = 'lowspeedmode\s*\{.*?layers\s*=\s*<1>\s*,\s*<2>;'
+
+[[source_regex_values]]
+id = "zmk_trackpad_listener_r_processor_order"
+source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi"
+pattern = 'trackpad_listener_R:.*?input-processors\s*=\s*<&trackpad_key_behaviors_R>,\s*<&zip_xy_scaler 1 5>,\s*<&zip_scroll_scaler 1 12>,\s*<&zip_dynamic_xy_scaler>,\s*<&zip_dynamic_scroll_scaler>;.*?lowspeedmode\s*\{.*?input-processors\s*=\s*<&trackpad_key_behaviors_R>,\s*<&zip_xy_scaler 1 15>,\s*<&zip_scroll_scaler 1 40>,\s*<&zip_dynamic_xy_scaler>,\s*<&zip_dynamic_scroll_scaler>;'
+
+[[source_regex_values]]
+id = "zmk_trackpad_listener_l_processor_order"
+source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi"
+pattern = 'trackpad_listener_L:.*?input-processors\s*=\s*<&trackpad_key_behaviors_L>,\s*<&zip_xy_scaler 1 5>,\s*<&zip_scroll_scaler 1 12>,\s*<&zip_dynamic_xy_scaler>,\s*<&zip_dynamic_scroll_scaler>;.*?lowspeedmode\s*\{.*?input-processors\s*=\s*<&trackpad_key_behaviors_L>,\s*<&zip_xy_scaler 1 15>,\s*<&zip_scroll_scaler 1 40>,\s*<&zip_dynamic_xy_scaler>,\s*<&zip_dynamic_scroll_scaler>;'
+
+[[source_regex_values]]
+id = "zmk_matrix_rows_active_high_pulldown"
+source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi"
+pattern = 'row-gpios\s*=\s*<&xiao_d 10 \(GPIO_ACTIVE_HIGH \| GPIO_PULL_DOWN\)>.*?<&xiao_d 9 \(GPIO_ACTIVE_HIGH \| GPIO_PULL_DOWN\)>.*?<&xiao_d 8 \(GPIO_ACTIVE_HIGH \| GPIO_PULL_DOWN\)>.*?<&xiao_d 7 \(GPIO_ACTIVE_HIGH \| GPIO_PULL_DOWN\)>.*?<&gpio1\s+1 \(GPIO_ACTIVE_HIGH \| GPIO_PULL_DOWN\)>'
+
+[[source_regex_values]]
+id = "zmk_iqs9151_irq_active_low_pullup"
+source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi"
+pattern = 'irq-gpios\s*=\s*<&xiao_d 6 \(GPIO_ACTIVE_LOW \| GPIO_PULL_UP\)>;'
+
+[[source_regex_values]]
+id = "zmk_rgb_leds_active_low"
+source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi"
+pattern = 'led0:.*?gpios\s*=\s*<&gpio1 3 GPIO_ACTIVE_LOW>;.*?led1:.*?gpios\s*=\s*<&gpio1 5 GPIO_ACTIVE_LOW>;.*?led2:.*?gpios\s*=\s*<&gpio1 7 GPIO_ACTIVE_LOW>;'
+
+[[source_regex_values]]
+id = "zmk_charge_pins_active_low_and_open_drain"
+source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi"
+pattern = 'charge-gpios\s*=\s*<&gpio0 17 GPIO_ACTIVE_LOW>;.*?led-gpios\s*=\s*<&gpio0 10 \(GPIO_ACTIVE_LOW \| GPIO_OPEN_DRAIN\)>;'
+
+[[source_regex_values]]
+id = "zmk_right_trackpad_direct_iqs9151"
+source_file = "boards/shields/lalapadgen2/lalapadgen2_right.overlay"
+pattern = '&trackpad_listener_R\s*\{.*?status\s*=\s*"okay";.*?device\s*=\s*<&iqs9151>;'
+
+[[source_regex_values]]
+id = "zmk_right_trackpad_left_split_listener_enabled"
+source_file = "boards/shields/lalapadgen2/lalapadgen2_right.overlay"
+pattern = '&trackpad_listener_L\s*\{.*?status\s*=\s*"okay";'
+
+[[source_regex_values]]
+id = "zmk_left_trackpad_split_source_enabled"
+source_file = "boards/shields/lalapadgen2/lalapadgen2_left.overlay"
+pattern = '&trackpad_split_L\s*\{.*?status\s*=\s*"okay";.*?device\s*=\s*<&iqs9151>;'
+
+[[source_regex_values]]
+id = "zmk_left_trackpad_right_split_source_disabled"
+source_file = "boards/shields/lalapadgen2/lalapadgen2_left.overlay"
+pattern = '&trackpad_split_R\s*\{.*?status\s*=\s*"disabled";.*?device\s*=\s*<&iqs9151>;'
+
 [[rust_const_values]]
 id = "iqs9151_i2c_address"
 target_file = "src/iqs9151.rs"
@@ -579,6 +781,78 @@ source_key = "CONFIG_INPUT_IQS9151_DYNAMIC_FILTER_BOTTOM_BETA"
 target_file = "src/iqs9151.rs"
 target_const = "DEFAULT_DYNAMIC_FILTER_BOTTOM_BETA"
 expected = 20
+
+[[rust_const_values]]
+id = "iqs9151_one_finger_tap_max_ms"
+source_file = "boards/shields/lalapadgen2/lalapadgen2_right.conf"
+source_key = "CONFIG_INPUT_IQS9151_1F_TAP_MAX_MS"
+target_file = "src/iqs9151.rs"
+target_const = "DEFAULT_ONE_FINGER_TAP_MAX_MS"
+expected = 250
+
+[[rust_const_values]]
+id = "iqs9151_one_finger_tap_move"
+source_file = "boards/shields/lalapadgen2/lalapadgen2_right.conf"
+source_key = "CONFIG_INPUT_IQS9151_1F_TAP_MOVE"
+target_file = "src/iqs9151.rs"
+target_const = "DEFAULT_ONE_FINGER_TAP_MOVE"
+expected = 50
+
+[[rust_const_values]]
+id = "iqs9151_two_finger_tap_max_ms"
+source_file = "boards/shields/lalapadgen2/lalapadgen2_right.conf"
+source_key = "CONFIG_INPUT_IQS9151_2F_TAP_MAX_MS"
+target_file = "src/iqs9151.rs"
+target_const = "DEFAULT_TWO_FINGER_TAP_MAX_MS"
+expected = 250
+
+[[rust_const_values]]
+id = "iqs9151_two_finger_tap_move"
+source_file = "boards/shields/lalapadgen2/lalapadgen2_right.conf"
+source_key = "CONFIG_INPUT_IQS9151_2F_TAP_MOVE"
+target_file = "src/iqs9151.rs"
+target_const = "DEFAULT_TWO_FINGER_TAP_MOVE"
+expected = 50
+
+[[rust_const_values]]
+id = "iqs9151_two_finger_tapdrag_gap"
+source_file = "boards/shields/lalapadgen2/lalapadgen2_right.conf"
+source_key = "CONFIG_INPUT_IQS9151_2F_TAPDRAG_GAP_MAX_MS"
+target_file = "src/iqs9151.rs"
+target_const = "DEFAULT_TWO_FINGER_DRAG_HOLD_MS"
+expected = 200
+
+[[rust_const_values]]
+id = "iqs9151_three_finger_tap_max_ms"
+source_file = "boards/shields/lalapadgen2/lalapadgen2_right.conf"
+source_key = "CONFIG_INPUT_IQS9151_3F_TAP_MAX_MS"
+target_file = "src/iqs9151.rs"
+target_const = "DEFAULT_THREE_FINGER_TAP_MAX_MS"
+expected = 200
+
+[[rust_const_values]]
+id = "iqs9151_three_finger_tap_move"
+source_file = "boards/shields/lalapadgen2/lalapadgen2_right.conf"
+source_key = "CONFIG_INPUT_IQS9151_3F_TAP_MOVE"
+target_file = "src/iqs9151.rs"
+target_const = "DEFAULT_THREE_FINGER_TAP_MOVE"
+expected = 35
+
+[[rust_const_values]]
+id = "iqs9151_three_finger_tapdrag_gap"
+source_file = "boards/shields/lalapadgen2/lalapadgen2_right.conf"
+source_key = "CONFIG_INPUT_IQS9151_3F_TAPDRAG_GAP_MAX_MS"
+target_file = "src/iqs9151.rs"
+target_const = "DEFAULT_THREE_FINGER_DRAG_HOLD_MS"
+expected = 200
+
+[[rust_const_values]]
+id = "iqs9151_three_finger_swipe_threshold"
+source_file = "boards/shields/lalapadgen2/lalapadgen2_right.conf"
+source_key = "CONFIG_INPUT_IQS9151_3F_SWIPE_THRESHOLD"
+target_file = "src/iqs9151.rs"
+target_const = "DEFAULT_THREE_FINGER_SWIPE_MOVE"
+expected = 200
 
 [[rust_const_values]]
 id = "trackpad_normal_xy_divisor"
@@ -759,6 +1033,11 @@ needles = ["p.P1_03", "p.P1_05", "p.P1_07", "RgbLedWidget::new(red, green, blue,
 id = "peripheral_rgb_pins_without_layer_indicator"
 file = "src/peripheral.rs"
 needles = ["p.P1_03", "p.P1_05", "p.P1_07", "RgbLedWidget::new(red, green, blue, true, false)"]
+
+[[code_contains]]
+id = "rmk_low_speed_includes_tri_layer_delta"
+file = "src/iqs9151.rs"
+needles = ["matches!(layer, 1 | 2 | 3)"]
 
 [[combos]]
 id = "combo_escape"

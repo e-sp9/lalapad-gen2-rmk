@@ -78,7 +78,16 @@ pub const DEFAULT_SCROLL_LOW_SPEED_THRESHOLD: i16 = 0;
 pub const DEFAULT_SCROLL_INERTIA_DIVISOR: u16 = 12;
 pub const DEFAULT_SCROLL_MAX_STEP: i16 = i16::MAX;
 pub const DEFAULT_SCROLL_INERTIA_MAX_STEP: i16 = i16::MAX;
+pub const DEFAULT_ONE_FINGER_TAP_MAX_MS: u32 = 250;
+pub const DEFAULT_ONE_FINGER_TAP_MOVE: u16 = 50;
 pub const DEFAULT_ONE_FINGER_DRAG_HOLD_MS: u32 = 160;
+pub const DEFAULT_TWO_FINGER_TAP_MAX_MS: u32 = 250;
+pub const DEFAULT_TWO_FINGER_TAP_MOVE: u16 = 50;
+pub const DEFAULT_TWO_FINGER_DRAG_HOLD_MS: u32 = 200;
+pub const DEFAULT_THREE_FINGER_TAP_MAX_MS: u32 = 200;
+pub const DEFAULT_THREE_FINGER_TAP_MOVE: u16 = 35;
+pub const DEFAULT_THREE_FINGER_DRAG_HOLD_MS: u32 = 200;
+pub const DEFAULT_THREE_FINGER_SWIPE_MOVE: u16 = 200;
 pub const DEFAULT_CURSOR_INERTIA_ENABLED: bool = true;
 pub const DEFAULT_DYNAMIC_SCALE_X10: u16 = 10;
 pub const MIN_DYNAMIC_SCALE_X10: u16 = 2;
@@ -2787,14 +2796,14 @@ pub struct TrackpadGestureConfig {
 impl Default for TrackpadGestureConfig {
     fn default() -> Self {
         Self {
-            one_finger_tap_max_ms: 250,
+            one_finger_tap_max_ms: DEFAULT_ONE_FINGER_TAP_MAX_MS,
             one_finger_drag_hold_ms: DEFAULT_ONE_FINGER_DRAG_HOLD_MS,
-            one_finger_tap_move: 50,
-            two_finger_tap_max_ms: 250,
-            two_finger_tap_move: 50,
-            three_finger_tap_max_ms: 200,
-            three_finger_tap_move: 35,
-            three_finger_swipe_move: 200,
+            one_finger_tap_move: DEFAULT_ONE_FINGER_TAP_MOVE,
+            two_finger_tap_max_ms: DEFAULT_TWO_FINGER_TAP_MAX_MS,
+            two_finger_tap_move: DEFAULT_TWO_FINGER_TAP_MOVE,
+            three_finger_tap_max_ms: DEFAULT_THREE_FINGER_TAP_MAX_MS,
+            three_finger_tap_move: DEFAULT_THREE_FINGER_TAP_MOVE,
+            three_finger_swipe_move: DEFAULT_THREE_FINGER_SWIPE_MOVE,
             axis_transform: TrackpadAxisTransform::default(),
         }
     }
@@ -4135,9 +4144,9 @@ struct FingerHistory {
 }
 
 const TAP_REENTRY_WINDOW_MS: u32 = 30;
-const ONE_FINGER_TAPDRAG_GAP_MAX_MS: u32 = 160;
-const TWO_FINGER_TAPDRAG_GAP_MAX_MS: u32 = 200;
-const THREE_FINGER_TAPDRAG_GAP_MAX_MS: u32 = 200;
+const ONE_FINGER_TAPDRAG_GAP_MAX_MS: u32 = DEFAULT_ONE_FINGER_DRAG_HOLD_MS;
+const TWO_FINGER_TAPDRAG_GAP_MAX_MS: u32 = DEFAULT_TWO_FINGER_DRAG_HOLD_MS;
+const THREE_FINGER_TAPDRAG_GAP_MAX_MS: u32 = DEFAULT_THREE_FINGER_DRAG_HOLD_MS;
 const TWO_FINGER_RELEASE_PENDING_MAX_MS: u32 = 150;
 const THREE_FINGER_RELEASE_PENDING_MAX_MS: u32 = 150;
 const TWO_FINGER_ONE_LEAD_MAX_MS: u32 = 120;
@@ -4663,7 +4672,16 @@ mod tests {
         assert_eq!(TWO_FINGER_SCROLL_START_MOVE, 50);
         assert_eq!(TWO_FINGER_PINCH_START_DISTANCE, 100);
         assert_eq!(TWO_FINGER_PINCH_WHEEL_GAIN_X10, 40);
+        assert_eq!(DEFAULT_ONE_FINGER_TAP_MAX_MS, 250);
+        assert_eq!(DEFAULT_ONE_FINGER_TAP_MOVE, 50);
         assert_eq!(DEFAULT_ONE_FINGER_DRAG_HOLD_MS, 160);
+        assert_eq!(DEFAULT_TWO_FINGER_TAP_MAX_MS, 250);
+        assert_eq!(DEFAULT_TWO_FINGER_TAP_MOVE, 50);
+        assert_eq!(DEFAULT_TWO_FINGER_DRAG_HOLD_MS, 200);
+        assert_eq!(DEFAULT_THREE_FINGER_TAP_MAX_MS, 200);
+        assert_eq!(DEFAULT_THREE_FINGER_TAP_MOVE, 35);
+        assert_eq!(DEFAULT_THREE_FINGER_DRAG_HOLD_MS, 200);
+        assert_eq!(DEFAULT_THREE_FINGER_SWIPE_MOVE, 200);
         assert!(DEFAULT_CURSOR_INERTIA_ENABLED);
     }
 

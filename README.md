@@ -126,8 +126,11 @@ cargo build --release
 when the upstream ZMK checkout from the manifest is present, also parses
 `config/lalapadgen2.keymap`, shield overlays, ZMK Kconfig values, and selected
 RMK Rust constants to verify that the migration contract still matches the
-source firmware. Use `--zmk-keymap PATH --require-zmk-source` when the
-source-backed check must be mandatory in another checkout layout.
+source firmware. It also checks left/right IQS9151 Kconfig parity and the
+ZMK trackpad listener routing shape, plus Vial's matrix positions and RMK
+custom keycode order. Use
+`--zmk-keymap PATH --require-zmk-source` when the source-backed check must be
+mandatory in another checkout layout.
 
 Host-side parity tests can be run explicitly with:
 

@@ -198,6 +198,10 @@ def load_toml(path: Path) -> dict[str, Any]:
         return tomllib.load(f)
 
 
+def load_json(path: Path) -> Any:
+    return json.loads(path.read_text())
+
+
 def path_get(root: dict[str, Any], dotted: str) -> Any:
     value: Any = root
     for part in dotted.split("."):
@@ -711,6 +715,39 @@ def check_zmk_config_values(
     return results
 
 
+def check_zmk_config_mirrors(manifest: dict[str, Any], zmk_config_dir: Path) -> list[Result]:
+    results: list[Result] = []
+    for check in manifest.get("zmk_config_mirrors", []):
+        source_files = [zmk_config_dir / source_file for source_file in check["source_files"]]
+        configs = [parse_kconfig(source_file) for source_file in source_files]
+        passed = 0
+        total = 0
+        messages: list[str] = []
+
+        for key in check["keys"]:
+            total += 1
+            values = [config.get(key) for config in configs]
+            if all(value is not None for value in values) and len(set(values)) == 1:
+                passed += 1
+            else:
+                joined = ", ".join(
+                    f"{source_file.name}={value!r}"
+                    for source_file, value in zip(source_files, values, strict=True)
+                )
+                messages.append(f"{key}: {joined}")
+
+        results.append(
+            Result(
+                check["id"],
+                "zmk_config_mirror",
+                passed,
+                total,
+                "ok" if not messages else "; ".join(messages),
+            )
+        )
+    return results
+
+
 def check_zmk_pin_values(
     manifest: dict[str, Any],
     keyboard: dict[str, Any],
@@ -808,6 +845,102 @@ def check_code_contains(manifest: dict[str, Any], project_root: Path) -> list[Re
                 "ok" if not missing else f"missing {missing!r}",
             )
         )
+    return results
+
+
+def collect_vial_positions(value: Any) -> list[tuple[int, int]]:
+    positions: list[tuple[int, int]] = []
+    if isinstance(value, str):
+        if match := re.fullmatch(r"(\d+),(\d+)", value):
+            positions.append((int(match.group(1)), int(match.group(2))))
+    elif isinstance(value, list):
+        for item in value:
+            positions.extend(collect_vial_positions(item))
+    elif isinstance(value, dict):
+        for item in value.values():
+            positions.extend(collect_vial_positions(item))
+    return positions
+
+
+def zmk_json_positions(value: dict[str, Any]) -> list[tuple[int, int]]:
+    layout = value["layouts"]["default_layout"]["layout"]
+    return [(int(item["row"]), int(item["col"])) for item in layout]
+
+
+def check_vial_layout(manifest: dict[str, Any], project_root: Path, zmk_config_dir: Path) -> list[Result]:
+    vial = load_json(project_root / "vial.json")
+    zmk_layout = load_json(zmk_config_dir / "lalapadgen2.json")
+    results: list[Result] = []
+
+    expected_layout = manifest["layout"]
+    matrix_checks = [
+        ("rows", vial["matrix"].get("rows"), expected_layout["rows"]),
+        ("cols", vial["matrix"].get("cols"), expected_layout["cols"]),
+    ]
+    passed = sum(1 for _, actual, expected in matrix_checks if actual == expected)
+    messages = [
+        f"{name} expected {expected!r}, got {actual!r}"
+        for name, actual, expected in matrix_checks
+        if actual != expected
+    ]
+    results.append(
+        Result(
+            "vial_matrix_shape",
+            "vial",
+            passed,
+            len(matrix_checks),
+            "ok" if not messages else "; ".join(messages),
+        )
+    )
+
+    expected_positions = zmk_json_positions(zmk_layout)
+    actual_positions = collect_vial_positions(vial["layouts"]["keymap"])
+    position_total = max(len(expected_positions), len(actual_positions))
+    position_passed = 0
+    mismatches: list[str] = []
+    for index in range(position_total):
+        expected = expected_positions[index] if index < len(expected_positions) else None
+        actual = actual_positions[index] if index < len(actual_positions) else None
+        if actual == expected:
+            position_passed += 1
+        else:
+            mismatches.append(f"p{index}: expected {expected!r}, got {actual!r}")
+    results.append(
+        Result(
+            "vial_positions_match_zmk_layout_json",
+            "vial",
+            position_passed,
+            position_total,
+            "ok" if not mismatches else "; ".join(mismatches[:8]),
+        )
+    )
+
+    expected_names = list(
+        manifest.get(
+            "vial_custom_keycodes",
+            manifest.get("layout", {}).get("vial_custom_keycodes", []),
+        )
+    )
+    actual_names = [item.get("name") for item in vial.get("customKeycodes", [])]
+    custom_total = max(len(expected_names), len(actual_names))
+    custom_passed = 0
+    custom_mismatches: list[str] = []
+    for index in range(custom_total):
+        expected = expected_names[index] if index < len(expected_names) else None
+        actual = actual_names[index] if index < len(actual_names) else None
+        if actual == expected:
+            custom_passed += 1
+        else:
+            custom_mismatches.append(f"c{index}: expected {expected!r}, got {actual!r}")
+    results.append(
+        Result(
+            "vial_custom_keycodes_match_user_key_order",
+            "vial",
+            custom_passed,
+            custom_total,
+            "ok" if not custom_mismatches else "; ".join(custom_mismatches),
+        )
+    )
     return results
 
 
@@ -967,9 +1100,11 @@ def check_zmk_source(
         )
     )
     results.extend(check_zmk_config_values(manifest, keyboard, zmk_config_dir))
+    results.extend(check_zmk_config_mirrors(manifest, zmk_config_dir))
     results.extend(check_zmk_pin_values(manifest, keyboard, zmk_config_dir))
     results.extend(check_source_regex_values(manifest, zmk_config_dir))
     results.extend(check_rust_const_values(manifest, zmk_config_dir, project_root))
+    results.extend(check_vial_layout(manifest, project_root, zmk_config_dir))
     return results
 
 
