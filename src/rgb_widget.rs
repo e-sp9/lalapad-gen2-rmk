@@ -1,5 +1,14 @@
 use embedded_hal::digital::OutputPin;
+#[cfg(target_arch = "arm")]
 use rmk::{
+    channel::{CONTROLLER_CHANNEL, ControllerSub},
+    controller::{Controller, PollingController},
+    event::ControllerEvent,
+};
+
+#[cfg(not(target_arch = "arm"))]
+use crate::host_test_stubs::rmk::{
+    self,
     channel::{CONTROLLER_CHANNEL, ControllerSub},
     controller::{Controller, PollingController},
     event::ControllerEvent,
@@ -263,5 +272,349 @@ fn set_pin<P: OutputPin>(pin: &mut P, low_active: bool, active: bool) {
         pin.set_low().ok();
     } else {
         pin.set_high().ok();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use core::{
+        convert::Infallible,
+        future::Future,
+        pin::pin,
+        task::{Context, Poll, Waker},
+    };
+
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    enum PinLevel {
+        Low,
+        High,
+    }
+
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    struct MockPin {
+        level: PinLevel,
+    }
+
+    struct PendingOnce {
+        pending: bool,
+    }
+
+    impl Future for PendingOnce {
+        type Output = u8;
+
+        fn poll(mut self: core::pin::Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+            if self.pending {
+                self.pending = false;
+                Poll::Pending
+            } else {
+                Poll::Ready(7)
+            }
+        }
+    }
+
+    impl MockPin {
+        const fn new() -> Self {
+            Self {
+                level: PinLevel::High,
+            }
+        }
+    }
+
+    impl embedded_hal::digital::ErrorType for MockPin {
+        type Error = Infallible;
+    }
+
+    impl OutputPin for MockPin {
+        fn set_low(&mut self) -> Result<(), Self::Error> {
+            self.level = PinLevel::Low;
+            Ok(())
+        }
+
+        fn set_high(&mut self) -> Result<(), Self::Error> {
+            self.level = PinLevel::High;
+            Ok(())
+        }
+    }
+
+    fn block_on<F: Future>(future: F) -> F::Output {
+        let waker = Waker::noop();
+        let mut cx = Context::from_waker(&waker);
+        let mut future = pin!(future);
+        loop {
+            if let Poll::Ready(output) = future.as_mut().poll(&mut cx) {
+                return output;
+            }
+        }
+    }
+
+    #[test]
+    fn block_on_polls_again_after_pending() {
+        assert_eq!(block_on(PendingOnce { pending: true }), 7);
+    }
+
+    #[test]
+    fn battery_color_matches_upstream_thresholds() {
+        assert_eq!(
+            RgbLedWidget::<MockPin, MockPin, MockPin>::battery_color(30),
+            RgbColor::Green
+        );
+        assert_eq!(
+            RgbLedWidget::<MockPin, MockPin, MockPin>::battery_color(20),
+            RgbColor::Yellow
+        );
+        assert_eq!(
+            RgbLedWidget::<MockPin, MockPin, MockPin>::battery_color(10),
+            RgbColor::Red
+        );
+    }
+
+    #[test]
+    fn active_low_color_drives_xiao_rgb_pins_low_when_on() {
+        let mut widget =
+            RgbLedWidget::new(MockPin::new(), MockPin::new(), MockPin::new(), true, true);
+
+        widget.apply_color(RgbColor::Cyan);
+
+        assert_eq!(widget.red.level, PinLevel::High);
+        assert_eq!(widget.green.level, PinLevel::Low);
+        assert_eq!(widget.blue.level, PinLevel::Low);
+    }
+
+    #[test]
+    fn active_high_color_drives_channels_high_when_on() {
+        let mut widget =
+            RgbLedWidget::new(MockPin::new(), MockPin::new(), MockPin::new(), false, true);
+
+        widget.apply_color(RgbColor::Magenta);
+
+        assert_eq!(widget.red.level, PinLevel::High);
+        assert_eq!(widget.green.level, PinLevel::Low);
+        assert_eq!(widget.blue.level, PinLevel::High);
+    }
+
+    #[test]
+    fn color_channel_table_covers_all_status_colors() {
+        assert_eq!(RgbColor::Off.channels(), (false, false, false));
+        assert_eq!(RgbColor::Red.channels(), (true, false, false));
+        assert_eq!(RgbColor::Green.channels(), (false, true, false));
+        assert_eq!(RgbColor::Yellow.channels(), (true, true, false));
+        assert_eq!(RgbColor::Blue.channels(), (false, false, true));
+        assert_eq!(RgbColor::Magenta.channels(), (true, false, true));
+        assert_eq!(RgbColor::Cyan.channels(), (false, true, true));
+        assert_eq!(RgbColor::White.channels(), (true, true, true));
+    }
+
+    #[test]
+    fn battery_event_blinks_then_returns_to_idle() {
+        let mut widget =
+            RgbLedWidget::new(MockPin::new(), MockPin::new(), MockPin::new(), true, true);
+
+        block_on(widget.process_event(ControllerEvent::Battery(30)));
+
+        assert_eq!(widget.current_color, RgbColor::Green);
+        assert_eq!(
+            widget.mode,
+            WidgetMode::Blink {
+                color: RgbColor::Green,
+                ticks_left: BATTERY_BLINK_TICKS
+            }
+        );
+
+        for _ in 0..=BATTERY_BLINK_TICKS {
+            block_on(widget.update());
+        }
+
+        assert_eq!(widget.mode, WidgetMode::Idle);
+        assert_eq!(widget.current_color, RgbColor::Off);
+    }
+
+    #[test]
+    fn critical_battery_requeues_after_first_battery_report() {
+        let mut widget =
+            RgbLedWidget::new(MockPin::new(), MockPin::new(), MockPin::new(), true, true);
+
+        block_on(widget.process_event(ControllerEvent::Battery(30)));
+        block_on(widget.process_event(ControllerEvent::Battery(25)));
+        assert_eq!(widget.current_color, RgbColor::Green);
+
+        block_on(widget.process_event(ControllerEvent::Battery(10)));
+
+        assert_eq!(widget.current_color, RgbColor::Red);
+        assert_eq!(
+            widget.mode,
+            WidgetMode::Blink {
+                color: RgbColor::Red,
+                ticks_left: BATTERY_BLINK_TICKS
+            }
+        );
+    }
+
+    #[test]
+    fn layer_change_debounces_then_blinks_cyan() {
+        let mut widget =
+            RgbLedWidget::new(MockPin::new(), MockPin::new(), MockPin::new(), true, true);
+
+        block_on(widget.process_event(ControllerEvent::Layer(2)));
+        assert_eq!(
+            widget.mode,
+            WidgetMode::LayerDelay {
+                layer: 2,
+                ticks_left: LAYER_DEBOUNCE_TICKS
+            }
+        );
+
+        block_on(widget.update());
+        assert_eq!(
+            widget.mode,
+            WidgetMode::LayerDelay {
+                layer: 2,
+                ticks_left: 0
+            }
+        );
+
+        block_on(widget.update());
+        assert_eq!(
+            widget.mode,
+            WidgetMode::LayerBlink {
+                phases_left: 4,
+                phase_ticks_left: LAYER_BLINK_PHASE_TICKS,
+                on: true,
+            }
+        );
+
+        block_on(widget.update());
+        assert_eq!(widget.current_color, RgbColor::Cyan);
+
+        block_on(widget.process_event(ControllerEvent::Layer(0)));
+        assert_eq!(widget.mode, WidgetMode::Idle);
+        assert_eq!(widget.current_color, RgbColor::Off);
+    }
+
+    #[test]
+    fn connection_and_sleep_events_map_to_status_colors() {
+        let mut widget =
+            RgbLedWidget::new(MockPin::new(), MockPin::new(), MockPin::new(), true, true);
+
+        block_on(widget.process_event(ControllerEvent::BleState(0, rmk::ble::BleState::Connected)));
+        assert_eq!(widget.current_color, RgbColor::Blue);
+
+        block_on(widget.process_event(ControllerEvent::BleState(
+            0,
+            rmk::ble::BleState::Advertising,
+        )));
+        assert_eq!(widget.current_color, RgbColor::Yellow);
+
+        block_on(widget.process_event(ControllerEvent::BleState(0, rmk::ble::BleState::None)));
+        assert_eq!(widget.current_color, RgbColor::Red);
+
+        block_on(widget.process_event(ControllerEvent::SplitPeripheral(0, true)));
+        assert_eq!(widget.current_color, RgbColor::Blue);
+
+        block_on(widget.process_event(ControllerEvent::SplitCentral(false)));
+        assert_eq!(widget.current_color, RgbColor::Red);
+
+        block_on(widget.process_event(ControllerEvent::Sleep(true)));
+        assert_eq!(widget.mode, WidgetMode::Idle);
+        assert_eq!(widget.current_color, RgbColor::Off);
+    }
+
+    #[test]
+    fn ignored_events_and_idle_layer_edges_do_not_change_status() {
+        let mut widget =
+            RgbLedWidget::new(MockPin::new(), MockPin::new(), MockPin::new(), true, false);
+
+        block_on(widget.update());
+        assert_eq!(widget.mode, WidgetMode::Idle);
+        assert_eq!(widget.current_color, RgbColor::Off);
+
+        block_on(widget.process_event(ControllerEvent::Other));
+        block_on(widget.process_event(ControllerEvent::Sleep(false)));
+        block_on(widget.process_event(ControllerEvent::Layer(1)));
+        assert_eq!(widget.mode, WidgetMode::Idle);
+        assert_eq!(widget.layer, 0);
+
+        let mut widget =
+            RgbLedWidget::new(MockPin::new(), MockPin::new(), MockPin::new(), true, true);
+        block_on(widget.process_event(ControllerEvent::Layer(2)));
+        block_on(widget.process_event(ControllerEvent::Layer(2)));
+        assert_eq!(
+            widget.mode,
+            WidgetMode::LayerDelay {
+                layer: 2,
+                ticks_left: LAYER_DEBOUNCE_TICKS
+            }
+        );
+    }
+
+    #[test]
+    fn layer_blink_handles_long_phase_and_done_phase() {
+        let mut widget =
+            RgbLedWidget::new(MockPin::new(), MockPin::new(), MockPin::new(), true, true);
+
+        widget.mode = WidgetMode::LayerBlink {
+            phases_left: 2,
+            phase_ticks_left: 2,
+            on: true,
+        };
+        block_on(widget.update());
+        assert_eq!(
+            widget.mode,
+            WidgetMode::LayerBlink {
+                phases_left: 2,
+                phase_ticks_left: 1,
+                on: true,
+            }
+        );
+        assert_eq!(widget.current_color, RgbColor::Cyan);
+
+        widget.mode = WidgetMode::LayerBlink {
+            phases_left: 2,
+            phase_ticks_left: 2,
+            on: false,
+        };
+        block_on(widget.update());
+        assert_eq!(
+            widget.mode,
+            WidgetMode::LayerBlink {
+                phases_left: 2,
+                phase_ticks_left: 1,
+                on: false,
+            }
+        );
+        assert_eq!(widget.current_color, RgbColor::Off);
+
+        widget.mode = WidgetMode::LayerBlink {
+            phases_left: 2,
+            phase_ticks_left: 1,
+            on: false,
+        };
+        block_on(widget.update());
+        assert_eq!(
+            widget.mode,
+            WidgetMode::LayerBlink {
+                phases_left: 1,
+                phase_ticks_left: LAYER_BLINK_PHASE_TICKS,
+                on: true,
+            }
+        );
+        assert_eq!(widget.current_color, RgbColor::Off);
+
+        widget.mode = WidgetMode::LayerBlink {
+            phases_left: 0,
+            phase_ticks_left: 1,
+            on: false,
+        };
+        block_on(widget.update());
+        assert_eq!(widget.mode, WidgetMode::Idle);
+        assert_eq!(widget.current_color, RgbColor::Off);
+    }
+
+    #[test]
+    #[should_panic(expected = "host test controller subscriber is not implemented")]
+    fn next_message_uses_controller_subscription() {
+        let mut widget =
+            RgbLedWidget::new(MockPin::new(), MockPin::new(), MockPin::new(), true, true);
+        let _ = block_on(widget.next_message());
     }
 }

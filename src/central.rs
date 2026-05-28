@@ -7,7 +7,7 @@ use rmk::macros::rmk_central;
 mod keyboard_central {
     use lalapad_gen2_rmk::iqs9151::{
         Iqs9151InputDevice, Iqs9151KeyboardController, Iqs9151MotionOutput, Iqs9151ReadyPin,
-        Iqs9151SplitEventController, TrackpadSide,
+        Iqs9151SplitEventController, TrackpadLayerController, TrackpadSide,
     };
     use lalapad_gen2_rmk::rgb_widget::RgbLedWidget;
     use rmk::controller::PollingController;
@@ -16,6 +16,11 @@ mod keyboard_central {
     #[controller(event)]
     fn split_trackpad_events() {
         Iqs9151SplitEventController::new()
+    }
+
+    #[controller(event)]
+    fn trackpad_layer_state() {
+        TrackpadLayerController::new()
     }
 
     #[controller(poll)]

@@ -167,6 +167,7 @@ pub(crate) enum BleProfileAction {
     PreviousProfile,
     NextProfile,
     ClearProfile,
+    ClearAllProfiles,
     ToggleConnection,
 }
 
@@ -360,6 +361,22 @@ impl<'a, C: Controller + ControllerCmdAsync<LeSetPhy>, P: PacketPool> ProfileMan
             .await;
     }
 
+    /// Clear bonding information of all BLE profile slots.
+    pub async fn clear_all_bonds(&mut self) {
+        info!("Clearing bonding information on all profiles");
+
+        for bond_info in self.bonded_devices.iter_mut() {
+            bond_info.removed = true;
+        }
+
+        self.update_stack_bonds();
+
+        #[cfg(feature = "storage")]
+        FLASH_CHANNEL
+            .send(crate::storage::FlashOperationMessage::ClearAllSlots)
+            .await;
+    }
+
     /// Switch to the specified profile, return true if the profile is switched
     pub async fn switch_profile(&mut self, profile: u8) -> bool {
         let current = ACTIVE_PROFILE.load(core::sync::atomic::Ordering::SeqCst);
@@ -427,6 +444,9 @@ impl<'a, C: Controller + ControllerCmdAsync<LeSetPhy>, P: PacketPool> ProfileMan
                         BleProfileAction::ClearProfile => {
                             let profile = ACTIVE_PROFILE.load(Ordering::SeqCst);
                             self.clear_bond(profile).await;
+                        }
+                        BleProfileAction::ClearAllProfiles => {
+                            self.clear_all_bonds().await;
                         }
                         BleProfileAction::ToggleConnection => {
                             let current = CONNECTION_TYPE.load(Ordering::SeqCst);

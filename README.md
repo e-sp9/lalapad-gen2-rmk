@@ -46,17 +46,14 @@ Enter, Escape, and Backspace are captured by the firmware and are not sent as
 normal host keypresses.
 
 On the default keymap, use the numeric layer for digit entry. The left side has
-`1`-`5` on the first row and `6`-`0` on the second row. The right side remains
-transparent on the numeric layer so punctuation and letters still pass through
-while Space is held.
+`1`-`5` on the first row and `6`-`0` on the second row. The right side matches
+the upstream ZMK numpad block on the secondary layer.
 
-The adjust/Bluetooth layer provides OS default-layer selectors: Windows selects
-layer 0 and Mac selects layer 1. The Mac base layer maps the positions that are
-Ctrl on Windows to Cmd.
-
-Space and Enter layer-tap keys use a fast hold-on-other-press profile. Holding
-Enter and then pressing `Y` emits `-` without waiting for the normal tap-hold
-timeout.
+The system layer is selected by holding both secondary and tertiary layer keys.
+It exposes Bluetooth profile selection, output toggle, reset/bootloader, and
+the trackpad dynamic-scale controls.
+While the secondary, tertiary, or system tri-layer is active, the trackpad uses
+the upstream ZMK low-speed divisors for cursor and scroll movement.
 
 ### Web Flasher
 
@@ -122,6 +119,12 @@ python3 tools/check_flash_layout.py --config-only
 cargo check --release --bin central
 cargo check --release --bin peripheral
 cargo build --release
+```
+
+Host-side parity tests can be run explicitly with:
+
+```shell
+cargo test --lib --target x86_64-unknown-linux-gnu
 ```
 
 Run `cargo make uf2 --release` when changing release artifacts or flashing behavior.

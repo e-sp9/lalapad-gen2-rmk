@@ -11,38 +11,29 @@ chip = "nrf52840"
 # Rows 5..6 are non-scanned virtual positions for IQS9151 trackpad events.
 rows = 7
 cols = 12
-layers = 5
+layers = 4
 keymap = [
     [
         ["Q",              "W",     "E",     "R",        "T",     "No",     "No",        "Y",     "U",        "I",         "O",         "P"],
         ["A",              "S",     "D",     "F",        "G",     "No",     "No",        "H",     "J",        "K",         "L",         "TH(Minus, Equal)"],
         ["MT(Z, LShift)",  "X",     "C",     "V",        "B",     "No",     "No",        "N",     "M",        "Comma",     "Dot",       "Slash"],
-        ["LCtrl",          "LGui",  "LAlt",  "LCtrl",    "LT(2, Space, FAST_LAYER)", "LShift", "Backspace", "LT(3, Enter, FAST_LAYER)", "WM(M, LAlt)", "Language2", "Language1", "Backslash"],
+        ["LCtrl",          "LGui",  "LAlt",  "MO(1)",    "Space", "LShift", "Backspace", "Enter", "MO(2)", "Language2", "Language1", "Backslash"],
         ["No",             "No",    "Right", "Down",     "Left",  "Up",     "Up",        "Left",  "Down",     "Right",     "No",        "No"],
         ["MouseBtn1",      "MouseBtn2", "MouseBtn3", "No", "No", "No", "No", "No", "No", "MouseBtn1", "MouseBtn2", "MouseBtn3"],
         ["MouseBtn4",      "MouseBtn5", "WM(Tab, LGui)", "WM(D, LGui)", "LCtrl", "No", "No", "MouseBtn4", "MouseBtn5", "WM(Tab, LGui)", "WM(D, LGui)", "LCtrl"],
     ],
     [
-        ["Q",              "W",     "E",     "R",        "T",     "No",     "No",        "Y",     "U",        "I",         "O",         "P"],
-        ["A",              "S",     "D",     "F",        "G",     "No",     "No",        "H",     "J",        "K",         "L",         "TH(Minus, Equal)"],
-        ["MT(Z, LShift)",  "X",     "C",     "V",        "B",     "No",     "No",        "N",     "M",        "Comma",     "Dot",       "Slash"],
-        ["LGui",           "LGui",  "LAlt",  "LGui",     "LT(2, Space, FAST_LAYER)", "LShift", "Backspace", "LT(3, Enter, FAST_LAYER)", "WM(M, LAlt)", "Language2", "Language1", "Backslash"],
-        ["No",             "No",    "Right", "Down",     "Left",  "Up",     "Up",        "Left",  "Down",     "Right",     "No",        "No"],
-        ["MouseBtn1",      "MouseBtn2", "MouseBtn3", "No", "No", "No", "No", "No", "No", "MouseBtn1", "MouseBtn2", "MouseBtn3"],
-        ["MouseBtn4",      "MouseBtn5", "WM(Tab, LGui)", "WM(D, LGui)", "LGui", "No", "No", "MouseBtn4", "MouseBtn5", "WM(Tab, LGui)", "WM(D, LGui)", "LGui"],
-    ],
-    [
-        ["Kc1",                 "Kc2",                "Kc3",  "Kc4",  "Kc5",  "No",    "No",     "_",                    "_",         "_",      "_",        "_"],
-        ["Kc6",                 "Kc7",                "Kc8",  "Kc9",  "Kc0",  "No",    "No",     "_",                    "_",         "_",      "_",        "_"],
-        ["F6",                  "F7",                 "F8",   "F9",   "F10",  "No",    "No",     "_",                    "_",         "_",      "_",        "_"],
+        ["Kc1",                 "Kc2",                "Kc3",  "Kc4",  "Kc5",  "No",    "No",     "NumLock",              "Kp7",       "Kp8",    "Kp9",      "KpPlus"],
+        ["Kc6",                 "Kc7",                "Kc8",  "Kc9",  "Kc0",  "No",    "No",     "_",                    "Kp4",       "Kp5",    "Kp6",      "KpMinus"],
+        ["F6",                  "F7",                 "F8",   "F9",   "F10",  "No",    "No",     "_",                    "Kp1",       "Kp2",    "Kp3",      "KpAsterisk"],
         ["_",                   "_",                  "_",    "_",    "_",    "_",     "Delete", "_",                    "_",         "_",      "_",        "_"],
         ["No",                  "_",                  "_",    "_",    "_",    "_",     "_",      "_",                    "_",         "_",      "_",        "No"],
         ["_",                   "_",                  "_",    "No",   "No",   "No",    "No",     "No",                   "No",        "_",      "_",        "_"],
         ["WM(Left, LCtrl|LGui)", "WM(Right, LCtrl|LGui)", "_", "_",    "_",    "No",    "No",     "WM(Left, LCtrl|LGui)", "WM(Right, LCtrl|LGui)", "_", "_", "_"],
     ],
     [
-        ["SHIFTED(Kc1)",  "SHIFTED(Kc2)", "SHIFTED(Kc3)", "SHIFTED(Kc4)",        "SHIFTED(Kc5)",        "No", "No", "Minus",    "Home",      "Up",        "End",    "PrintScreen"],
-        ["SHIFTED(Kc6)",  "SHIFTED(Kc7)", "SHIFTED(Kc8)", "SHIFTED(Kc9)",        "SHIFTED(Kc0)",        "No", "No", "WM(Equal, LShift)", "Left",      "Down",      "Right",  "ScrollLock"],
+        ["SHIFTED(Kc1)",  "SHIFTED(Kc2)", "SHIFTED(Kc3)", "SHIFTED(Kc4)",        "SHIFTED(Kc5)",        "No", "No", "PageUp",   "Home",      "Up",        "End",    "PrintScreen"],
+        ["SHIFTED(Kc6)",  "SHIFTED(Kc7)", "SHIFTED(Kc8)", "SHIFTED(Kc9)",        "SHIFTED(Kc0)",        "No", "No", "PageDown", "Left",      "Down",      "Right",  "ScrollLock"],
         ["Grave",         "Quote",        "Semicolon",    "LeftBracket",         "RightBracket",        "No", "No", "_",        "MouseBtn4", "_",         "MouseBtn5", "Pause"],
         ["_",             "_",            "_",            "_",                   "_",                   "_",  "_",  "_",        "_",         "_",         "_",      "_"],
         ["No",            "_",            "_",            "_",                   "_",                   "_",  "_",  "_",        "_",         "_",         "_",      "No"],
@@ -51,9 +42,9 @@ keymap = [
     ],
     [
         ["F1",   "F2",   "F3",   "F4",   "F5",   "No", "No", "User7",      "User0",      "User1",      "User2",      "User3"],
-        ["F6",   "F7",   "F8",   "F9",   "F10",  "No", "No", "Reboot",     "Bootloader",  "User6",      "DF(0)",      "DF(1)"],
+        ["F6",   "F7",   "F8",   "F9",   "F10",  "No", "No", "Reboot",     "Bootloader",  "User6",      "User8",      "_"],
         ["F11",  "F12",  "F13",  "F14",  "F15",  "No", "No", "User9",      "User10",     "User11",     "User12",     "User13"],
-        ["_",    "_",    "_",    "_",    "_",    "_",  "_",  "_",          "_",           "_",          "_",          "ClearEeprom"],
+        ["_",    "_",    "_",    "_",    "_",    "_",  "_",  "_",          "_",           "_",          "_",          "_"],
         ["No",   "_",    "_",    "_",    "_",    "_",  "_",  "_",          "_",           "_",          "_",          "No"],
         ["_",    "_",    "_",    "No",   "No",   "No", "No", "No",         "No",          "_",          "_",          "_"],
         ["_",    "_",    "_",    "_",    "_",    "No", "No", "_",          "_",           "_",          "_",          "_"],
@@ -78,29 +69,26 @@ low_active = true
 
 [behavior.tri_layer]
 upper = 2
-lower = 3
-adjust = 4
-
-[behavior.fork]
-forks = [
-  { trigger = "Semicolon", negative_output = "WM(Semicolon, LShift)", positive_output = "Semicolon", match_any = "LShift|RShift" },
-]
+lower = 1
+adjust = 3
 
 [behavior.morse]
-hold_timeout = "120ms"
-permissive_hold = true
-hold_on_other_press = true
+enable_flow_tap = true
+prior_idle_time = "125ms"
+normal_mode = true
+hold_timeout = "200ms"
+gap_timeout = "200ms"
 
 [behavior.morse.profiles]
-FAST_LAYER = { hold_on_other_press = true, unilateral_tap = false, hold_timeout = "120ms", gap_timeout = "120ms" }
+FAST_LAYER = { normal_mode = true, unilateral_tap = false, hold_timeout = "200ms", gap_timeout = "200ms" }
 
 [behavior.combo]
 timeout = "50ms"
 combos = [
   { actions = ["Q", "W"], output = "Escape", layer = 0 },
   { actions = ["A", "S"], output = "Tab", layer = 0 },
-  { actions = ["F", "D"], output = "Language2", layer = 0 },
   { actions = ["J", "K"], output = "Language1", layer = 0 },
+  { actions = ["D", "F"], output = "Language2", layer = 0 },
 ]
 
 [host]

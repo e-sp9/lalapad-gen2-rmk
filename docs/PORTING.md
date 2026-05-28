@@ -106,12 +106,12 @@ RMK-side groundwork now lives in `src/iqs9151.rs`:
 - a coordinate-frame recognizer for one-finger tap/drag, two-finger tap/drag/scroll/pinch, three-finger tap/drag, and three-finger swipe events
 - relative cursor movement from the IQS9151 `relative_x` / `relative_y` fields through HID mouse reports
 - two-finger vertical/horizontal scroll from centroid movement through HID mouse `wheel` / `pan` reports
-- two-finger pinch is routed as a ZMK-style frame result: the upstream `INPUT_BTN_7` virtual key is pressed first, pinch wheel deltas are emitted while it is held, and the key is released on pinch end. RMK custom events keep that key/wheel ordering across both the central and split paths so pinch does not degrade into plain scroll when the wheel report reaches the host before the virtual key. The RMK port intentionally reverses the pinch wheel direction from the first hardware-test build and caps pinch output to one wheel unit per report with much lower source gain, because Ctrl+wheel zoom was too abrupt with the upstream-derived wheel gain.
-- two-finger mode selection keeps ambiguous early movement pending until either centroid movement clearly dominates as scroll or distance change reaches the pinch threshold. This avoids leaking an initial plain scroll frame during a pinch gesture.
+- two-finger pinch is routed as a ZMK-style frame result: the upstream `INPUT_BTN_7` virtual key is pressed first, pinch wheel deltas are emitted while it is held, and the key is released on pinch end. RMK custom events keep that key/wheel ordering across both the central and split paths so pinch does not degrade into plain scroll when the wheel report reaches the host before the virtual key. Pinch wheel direction, divisor, and gain now follow the upstream normal-mode processor shape rather than the earlier capped/reversed hardware-test approximation.
+- two-finger mode selection follows the upstream driver: once scroll or pinch mode is selected, the mode stays fixed until the two-finger session ends.
 - a split transport shim for left-half pointer movement and scroll, using RMK custom events from peripheral to central
-- ZMK-style dynamic cursor and scroll scaling groups. The adjust layer maps `User9..User13` to XY +, XY -, scroll +, scroll -, and reset-all controls, and a local RMK vendor hook forwards those user actions to the central trackpad report path. The scaler uses the upstream x10 defaults and bounds (`10`, `2..50`) with per-axis remainders; unlike ZMK settings-backed scalers, the current RMK port does not persist scale changes across reset.
+- ZMK-style dynamic cursor and scroll scaling groups. The system layer maps `User9..User13` to XY +, XY -, scroll +, scroll -, and reset-all controls, and a local RMK vendor hook forwards those user actions to the central trackpad report path. The scaler uses the upstream x10 defaults and bounds (`10`, `2..50`) with per-axis remainders. The local RMK storage patch persists the cursor and scroll scale x10 values and restores them on boot.
 - ZMK-derived cursor gating: relative cursor reports are emitted only for one-finger frames with `TP_MOVEMENT_DETECTED`
-- ZMK-derived cursor scaling with remainder accumulation so small deltas are not dropped. The upstream ZMK config uses `zip_xy_scaler 1 5`; the current RMK default divisor is `3`, after IQS9151 initialization made divisor `1` too aggressive while divisor `5` was previously too slow before the startup sequence existed.
+- ZMK-derived cursor scaling with remainder accumulation so small deltas are not dropped. The upstream ZMK normal-speed config uses `zip_xy_scaler 1 5`; the RMK default cursor divisor is now `5`. When layer 1 or 2 is active, a local RMK layer-state controller switches the cursor divisor to the upstream `lowspeedmode` value `15`. RMK 0.8 reports only the highest active layer to controllers, so the system tri-layer is also treated as low-speed because it is reached by holding layers 1 and 2 together.
 - hardware-tested cursor orientation: X and Y are left unchanged by default. The earlier X inversion was reversed on hardware.
 - a generic RMK `InputDevice` wrapper that waits for the IQS9151 active-low RDY pin, reads the ZMK-matched 28-byte coordinate frame, and emits virtual-key press/release events
 - a ZMK-derived IQS9151 startup sequence before frame reads: product-number check, software reset, show-reset wait, reset ACK, Azoteq configuration block writes, resolution / ATI target / dynamic-filter overrides, ATI request, and event-mode enable. The RMK port treats show-reset timeout as non-fatal because this firmware currently has no always-visible logging path and must avoid remaining permanently silent on hardware whose RDY/show-reset timing differs from the ZMK driver.
@@ -122,9 +122,8 @@ RMK-side groundwork now lives in `src/iqs9151.rs`:
 - continuous cursor motion is not fixed-rate throttled by default. After a motion frame is read, the driver returns to the bounded runtime RDY wait; an explicit motion interval remains available only as a tuning override.
 - BLE latency is tuned as a public-firmware balance rather than an absolute minimum: the host link requests a 15 ms interval with peripheral latency 1, the split link requests a 7.5 ms interval with peripheral latency 1, and the PHY stays on 1M for broader Windows adapter compatibility.
 - RMK 0.8.2 is patched locally under `vendor/rmk-0.8.2` so the composite mouse HID report map can advertise high-resolution vertical wheel and horizontal AC Pan via HID Resolution Multiplier. BLE hosts can cache the old HID report map, so remove the old pairing before validating this change over Bluetooth.
-- USB and BLE pointer reports use a small transport compensation stage after dynamic scaling. USB cursor motion is reduced to 75% and USB wheel/pan output to 50% to avoid coarse wired scroll jumps, while BLE cursor motion is raised to 133% and BLE wheel/pan output to 150% to offset the slower wireless host path.
-- cursor release inertia is implemented behind a runtime flag but defaults to off. When enabled, it uses the upstream ZMK recent-history gate shape: 10 ms interval, 0.95 decay, 60 ms recent window, 35 ms stale gap, 2 minimum samples, 10 minimum average speed, and a 3 second max duration. Cursor inertia is started only from normal cursor motion releases, not tap/click/scroll/pinch gesture releases.
-- two-finger scroll mode starts when centroid movement crosses the ZMK-derived threshold, with a relative-motion fallback when the IQS9151 reports two fingers and movement but the absolute finger confidence bits are temporarily unavailable. The upstream LaLaPad Gen2 normal-mode setting was `zip_scroll_scaler 1 12`; after adding HID Resolution Multiplier support to the RMK composite mouse report, the RMK port uses divisor 8 with a 3-step per-report cap because each wheel/pan unit is now advertised as a high-resolution fraction. Low-speed scroll deltas at or below 48 raw units use divisor 16 to keep slow continuous movement responsive without making fast scrolls jumpy. Active scroll deltas are smoothed with a small EMA before scaling, using rounded fixed-point output so sub-unit continuous movement still reaches the scroll remainder. Zero-delta frames reset the smoothing tail instead of continuing to scroll while the fingers are held still. Vertical scroll output is inverted for natural scrolling, while horizontal pan follows the current hardware-tested sign. Per-frame scroll amount follows finger speed because it is derived from centroid or fallback relative step distance, but stationary frames do not drain accumulated scroll remainder and over-cap scroll remainder is discarded instead of being drained through later frames; this avoids a small subsequent movement causing a burst from an earlier sensor spike. Release inertia uses the upstream ZMK recent-history gate shape, but is damped for RMK HID output: 10 ms interval, 0.90 decay, 60 ms recent window, 35 ms stale gap, 2 minimum samples, 4 minimum average speed, divisor 16, and a 2-step per-report cap.
+- cursor release inertia defaults to on and uses the upstream ZMK recent-history gate shape: 10 ms interval, 0.95 decay, 60 ms recent window, 35 ms stale gap, 2 minimum samples, 10 minimum average speed, and a 3 second max duration. Cursor inertia is started only from normal cursor motion releases, not tap/click/scroll/pinch gesture releases.
+- two-finger scroll mode starts when centroid movement crosses the upstream threshold, with a relative-motion fallback when the IQS9151 reports two fingers and movement but the absolute finger confidence bits are temporarily unavailable. The upstream LaLaPad Gen2 normal-mode setting was `zip_scroll_scaler 1 12`; the RMK default scroll and scroll-inertia divisors are now both `12`, and layer 1, layer 2, or their system tri-layer selects the upstream `lowspeedmode` scroll divisor `40`. There is no per-report step cap before HID reporting. Active scroll deltas are smoothed with a small EMA before scaling, using rounded fixed-point output so sub-unit continuous movement still reaches the scroll remainder. Zero-delta frames reset the smoothing tail instead of continuing to scroll while the fingers are held still. Vertical scroll output is inverted for natural scrolling, while horizontal pan follows the current hardware-tested sign. Per-frame scroll amount follows finger speed because it is derived from centroid or fallback relative step distance, but stationary frames do not drain accumulated scroll remainder. Release inertia uses the upstream ZMK recent-history gate shape: 10 ms interval, 0.98 decay, 60 ms recent window, 35 ms stale gap, 1 minimum sample, 4 minimum average speed, and divisor 12 in normal mode or 40 in low-speed mode.
 - tap recognition now follows the upstream driver's per-finger state model more closely: one-finger, two-finger, and three-finger sessions keep separate tap candidates, previous-frame coordinates, finger-count history, tap re-entry windows, and two-finger release-pending suppression.
 - deferred tap-drag press-hold follows the upstream driver's timing model: one-finger taps hold button 1 for a 160 ms re-entry window, while two- and three-finger taps hold buttons 2 and 3 for 200 ms. A second touch inside that window keeps the button held for drag, and a second tap releases the hold before emitting a click.
 - tap movement tracking follows the upstream driver's coordinate-validity checks and previous-frame fallback: finger coordinates are used only when the corresponding confidence bit is set and the coordinate is not `0xffff`; otherwise the last valid coordinate is retained while the touch remains active.
@@ -135,7 +134,7 @@ RMK-side groundwork now lives in `src/iqs9151.rs`:
 - optional axis transform settings for hardware tuning
 - central/peripheral controller adapters that instantiate the right and left IQS9151 devices on `TWISPI0`, `P0_04` SDA, `P0_05` SCL, and `P1_11` RDY
 - upstream BLE-related board settings that have RMK equivalents are represented in `keyboard.toml`: BLE TX power is set to +8 dBm, charge-state input is `P0_17` active-low, and charge LED output is `P0_10` active-low.
-- the upstream RGBLED widget is approximated by a local RMK polling controller on the XIAO BLE RGB pins: red `P1_03`, green `P1_05`, and blue `P1_07`, all active-low. It blinks battery level using the upstream LaLaPad thresholds (`high = 30`, critical = `10`), blinks BLE/split connection state, and shows central-side layer changes as the upstream cyan blink sequence.
+- the upstream RGBLED widget is approximated by a local RMK polling controller on the XIAO BLE RGB pins: red `P1_03`, green `P1_05`, and blue `P1_07`, all active-low. It blinks battery level using the upstream LaLaPad threshold override (`high = 30`) plus the zmk-rgbled-widget defaults for low (`20`) and critical (`10`), blinks BLE/split connection state, and shows central-side layer changes as the upstream cyan blink sequence.
 
 Likely next steps:
 
@@ -148,28 +147,23 @@ Likely next steps:
 The base keymap is translated from `config/lalapadgen2.keymap`, but some ZMK-specific behaviors are approximated:
 
 - ZMK conditional layer `1 + 2 => 3` is mapped to RMK tri-layer. RMK layers
-  `0` and `1` are Windows and Mac base-layer variants, so the shared numeric,
-  symbol, and adjust layers live at `2`, `3`, and `4`.
+  `0..3` now mirror the upstream Default, Secondary, Tertiary, and System
+  layers.
 - ZMK Bluetooth controls are mapped to RMK user keys for four BLE profiles:
   `User0..User3` select profiles, `User4`/`User5` move next/previous, `User6`
-  clears the current profile, `User7` toggles output, and `User8` remains
-  available for RMK split peer clearing. The adjust/Bluetooth layer also maps
-  `DF(0)` and `DF(1)` as Windows/Mac OS selectors; the Mac base layer replaces
-  the Windows Ctrl positions with Cmd.
-- Semicolon and colon are swapped by an RMK fork: an unmodified `Semicolon`
-  position emits `Shift+Semicolon` (`:`), while holding Shift suppresses the
-  incoming Shift and emits plain `Semicolon` (`;`).
-- Space and Enter layer-tap keys use a dedicated hold-on-other-press profile so
-  layer output is selected as soon as the next non-tap-hold key is pressed.
-  Enter-layer `Y` emits `Minus`, so the normal `Enter` tap decision does not
-  delay that common symbol. The Space numeric layer keeps the central/right half
-  transparent so punctuation such as comma and dot still comes from the base
-  layer while Space is held. Base combos remain restricted to layer 0. Letting
-  them follow the duplicated Mac base layer made normal Japanese romanization
-  rolls such as `s` then `a` trigger the `A+S` Tab combo. The RMK 0.8.2 combo
-  path used here does not expose ZMK-style `require-prior-idle-ms`, so the
-  firmware also keeps the upstream ZMK default 50 ms combo timeout.
-- ZMK dynamic trackpad sensitivity controls are mapped to `User9..User13` and handled by the local RMK vendor hook described above. Scale changes are runtime-only for now.
+  clears the current profile, `User7` toggles output, and the local RMK patch
+  maps `User8` to a ZMK-style `BT_CLR_ALL` all-profile bond clear. Holding
+  `User8` still keeps RMK's existing split peer clearing path available.
+- The upstream base layer's `&mo 1` and `&mo 2` thumb keys are represented as
+  `MO(1)` and `MO(2)`. The previous RMK-only Mac layer, semicolon fork, and
+  Space/Enter layer-tap approximation were removed to match the official ZMK
+  source.
+- Base combos carry the four ZMK reference bindings: `Q+W => Escape`,
+  `A+S => Tab`, `J+K => Language1`, and `D+F => Language2`.
+  The RMK 0.8.2 combo path used here does not expose ZMK-style
+  `require-prior-idle-ms`, so the firmware keeps the upstream ZMK default 50 ms
+  combo timeout.
+- ZMK dynamic trackpad sensitivity controls are mapped to `User9..User13` and handled by the local RMK vendor hook described above. Scale changes are persisted in RMK storage as a LaLaPad-specific record.
 - ZMK trackpad virtual positions `52..67` are represented in the RMK keymap as rows `5..6`, and IQS9151 runtime instances are wired into the central and peripheral firmware entrypoints.
 - ZMK's RGBLED widget is represented by a local RMK controller rather than the ZMK module. Battery, connection, and central layer-change indications are preserved, but on-demand `&ind_bat` / `&ind_con` keymap behaviors are not exposed as RMK keycodes.
 - RMK storage is pinned to `0x000E0000` for 8 nRF flash sectors. The default

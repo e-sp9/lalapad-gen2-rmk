@@ -7,11 +7,16 @@ use rmk::macros::rmk_peripheral;
 mod keyboard_peripheral {
     use lalapad_gen2_rmk::iqs9151::{
         Iqs9151InputDevice, Iqs9151KeyboardController, Iqs9151MotionOutput, Iqs9151ReadyPin,
-        TrackpadSide,
+        TrackpadLayerController, TrackpadSide,
     };
     use lalapad_gen2_rmk::rgb_widget::RgbLedWidget;
     use rmk::controller::PollingController;
     use static_cell::StaticCell;
+
+    #[controller(event)]
+    fn trackpad_layer_state() {
+        TrackpadLayerController::new()
+    }
 
     #[controller(poll)]
     fn rgb_led_widget() {

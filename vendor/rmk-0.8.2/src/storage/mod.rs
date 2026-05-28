@@ -50,6 +50,8 @@ pub(crate) enum FlashOperationMessage {
     ResetLayout,
     // Clear info of given slot number
     ClearSlot(u8),
+    // Clear bonding info for all BLE slots
+    ClearAllSlots,
     // Layout option
     LayoutOptions(u32),
     // Default layer number
@@ -71,6 +73,8 @@ pub(crate) enum FlashOperationMessage {
     PriorIdleTime(u16),
     // Default morse profile containing all morse/tap-hold settings (mode, timeouts, unilateral_tap)
     MorseDefaultProfile(MorseProfile),
+    // LaLaPad Gen2 trackpad dynamic scale state.
+    LalapadDynamicScale { cursor_x10: u16, scroll_x10: u16 },
 }
 
 /// StorageKeys is the prefix digit stored in the flash, it's used to identify the type of the stored data.
@@ -95,6 +99,7 @@ pub(crate) enum StorageKeys {
     ForkData = 8,
     #[cfg(feature = "host")]
     MorseData = 9,
+    LalapadDynamicScale = 10,
     #[cfg(all(feature = "_ble", feature = "split"))]
     PeerAddress = 0xED,
     #[cfg(feature = "_ble")]
@@ -122,6 +127,7 @@ impl StorageKeys {
             8 => Some(StorageKeys::ForkData),
             #[cfg(feature = "host")]
             9 => Some(StorageKeys::MorseData),
+            10 => Some(StorageKeys::LalapadDynamicScale),
             #[cfg(all(feature = "_ble", feature = "split"))]
             0xED => Some(StorageKeys::PeerAddress),
             #[cfg(feature = "_ble")]
@@ -149,6 +155,7 @@ pub(crate) enum StorageData {
     BondInfo(ProfileInfo),
     #[cfg(feature = "_ble")]
     ActiveBleProfile(u8),
+    LalapadDynamicScale(LalapadDynamicScaleConfig),
 }
 
 /// Get the key to retrieve the keymap key from the storage.
@@ -243,6 +250,7 @@ impl StorageData {
             Self::BondInfo(_) => StorageKeys::BleBondInfo as u32,
             #[cfg(feature = "_ble")]
             Self::ActiveBleProfile(_) => StorageKeys::ActiveBleProfile as u32,
+            Self::LalapadDynamicScale(_) => StorageKeys::LalapadDynamicScale as u32,
             #[cfg(feature = "host")]
             Self::VialData(d) => match d {
                 KeymapData::Macro(_) => StorageKeys::MacroData as u32,
@@ -273,6 +281,7 @@ impl Value<'_> for StorageData {
             Self::BondInfo(d) => ser_storage_variant!(buffer, StorageKeys::BleBondInfo, d),
             #[cfg(feature = "_ble")]
             Self::ActiveBleProfile(d) => ser_storage_variant!(buffer, StorageKeys::ActiveBleProfile, d),
+            Self::LalapadDynamicScale(d) => ser_storage_variant!(buffer, StorageKeys::LalapadDynamicScale, d),
             #[cfg(feature = "host")]
             Self::VialData(vial_data) => vial_data.serialize_into(buffer),
         }
@@ -334,6 +343,12 @@ impl Value<'_> for StorageData {
                 let size = buffer.len() - unused.len();
                 Ok((Self::ActiveBleProfile(data), size))
             }
+            StorageKeys::LalapadDynamicScale => {
+                let (data, unused) =
+                    postcard::take_from_bytes(&buffer[1..]).map_err(postcard_error_to_serialization_error)?;
+                let size = buffer.len() - unused.len();
+                Ok((Self::LalapadDynamicScale(data), size))
+            }
             #[cfg(feature = "host")]
             StorageKeys::KeymapConfig
             | StorageKeys::MacroData
@@ -379,6 +394,13 @@ pub(crate) struct BehaviorConfig {
     // Interval for tapping capslock.
     // macOS has special processing of capslock, when tapping capslock, the tap interval should be another value
     pub(crate) tap_capslock_interval: u16,
+}
+
+#[derive(Clone, Copy, Debug, serde::Serialize, serde::Deserialize, postcard::experimental::max_size::MaxSize)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub(crate) struct LalapadDynamicScaleConfig {
+    pub(crate) cursor_x10: u16,
+    pub(crate) scroll_x10: u16,
 }
 
 pub fn async_flash_wrapper<F: NorFlash>(flash: F) -> BlockingAsync<F> {
@@ -530,6 +552,18 @@ impl<F: AsyncNorFlash, const ROW: usize, const COL: usize, const NUM_LAYER: usiz
                 let encoder_map = encoder_map.as_ref().map(|m| &**m);
                 let _ = storage.reset_layout_only(keymap, &encoder_map, behavior_config).await;
             }
+        }
+
+        if let Ok(Some(StorageData::LalapadDynamicScale(scale))) = fetch_item::<u32, StorageData, _>(
+            &mut storage.flash,
+            storage.storage_range.clone(),
+            &mut NoCache::new(),
+            &mut storage.buffer,
+            &(StorageKeys::LalapadDynamicScale as u32),
+        )
+        .await
+        {
+            crate::keyboard::queue_lalapad_dynamic_scale_state(scale.cursor_x10, scale.scroll_x10);
         }
 
         storage
@@ -719,6 +753,48 @@ impl<F: AsyncNorFlash, const ROW: usize, const COL: usize, const NUM_LAYER: usiz
                     .await
                 }
                 #[cfg(feature = "_ble")]
+                FlashOperationMessage::ClearAllSlots => {
+                    use bt_hci::param::BdAddr;
+                    use trouble_host::prelude::{CCCD, CccdTable, SecurityLevel};
+                    use trouble_host::{BondInformation, Identity, LongTermKey};
+
+                    use crate::NUM_BLE_PROFILE;
+                    use crate::ble::ble_server::CCCD_TABLE_SIZE;
+
+                    let mut result = Ok(());
+                    for slot_num in 0..NUM_BLE_PROFILE as u8 {
+                        info!("Clearing bond info slot_num: {}", slot_num);
+                        let empty = ProfileInfo {
+                            removed: true,
+                            slot_num,
+                            info: BondInformation::new(
+                                Identity {
+                                    bd_addr: BdAddr::new([0; 6]),
+                                    irk: None,
+                                },
+                                LongTermKey::from_le_bytes([0; 16]),
+                                SecurityLevel::NoEncryption,
+                                false,
+                            ),
+                            cccd_table: CccdTable::new([(0u16, CCCD::default()); CCCD_TABLE_SIZE]),
+                        };
+                        let data = StorageData::BondInfo(empty);
+                        result = store_item::<u32, StorageData, _>(
+                            &mut self.flash,
+                            self.storage_range.clone(),
+                            &mut storage_cache,
+                            &mut self.buffer,
+                            &get_bond_info_key(slot_num),
+                            &data,
+                        )
+                        .await;
+                        if result.is_err() {
+                            break;
+                        }
+                    }
+                    result
+                }
+                #[cfg(feature = "_ble")]
                 FlashOperationMessage::ProfileInfo(b) => {
                     debug!("Saving profile info: {:?}", b);
                     let data = StorageData::BondInfo(b.clone());
@@ -781,6 +857,24 @@ impl<F: AsyncNorFlash, const ROW: usize, const COL: usize, const NUM_LAYER: usiz
                         morse_default_profile,
                         self.storage_range.clone()
                     )
+                }
+                FlashOperationMessage::LalapadDynamicScale {
+                    cursor_x10,
+                    scroll_x10,
+                } => {
+                    let data = StorageData::LalapadDynamicScale(LalapadDynamicScaleConfig {
+                        cursor_x10,
+                        scroll_x10,
+                    });
+                    store_item::<u32, StorageData, _>(
+                        &mut self.flash,
+                        self.storage_range.clone(),
+                        &mut storage_cache,
+                        &mut self.buffer,
+                        &(StorageKeys::LalapadDynamicScale as u32),
+                        &data,
+                    )
+                    .await
                 }
                 #[cfg(not(feature = "_ble"))]
                 _ => Ok(()),

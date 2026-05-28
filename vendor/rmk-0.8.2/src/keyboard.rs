@@ -1,5 +1,7 @@
 use core::cell::RefCell;
 use core::fmt::Debug;
+#[cfg(all(feature = "split", feature = "_ble"))]
+use core::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 
 use embassy_futures::select::{Either, select};
 use embassy_futures::yield_now;
@@ -51,6 +53,26 @@ const LALAPAD_ZDS_RST: u8 = 3;
 const LALAPAD_ZDS_XY: u8 = 0;
 const LALAPAD_ZDS_SC: u8 = 1;
 const LALAPAD_ZDS_ALL: u8 = 2;
+const LALAPAD_DYNAMIC_SCALE_STATE_EVENT_TYPE: u8 = 4;
+const LALAPAD_DEFAULT_DYNAMIC_SCALE_X10: u16 = 10;
+const LALAPAD_MIN_DYNAMIC_SCALE_X10: u16 = 2;
+const LALAPAD_MAX_DYNAMIC_SCALE_X10: u16 = 50;
+#[cfg(all(feature = "split", feature = "_ble"))]
+static LALAPAD_USER8_CLEAR_PEER_SENT: AtomicBool = AtomicBool::new(false);
+static LALAPAD_CURSOR_SCALE_X10: core::sync::atomic::AtomicU16 =
+    core::sync::atomic::AtomicU16::new(LALAPAD_DEFAULT_DYNAMIC_SCALE_X10);
+static LALAPAD_SCROLL_SCALE_X10: core::sync::atomic::AtomicU16 =
+    core::sync::atomic::AtomicU16::new(LALAPAD_DEFAULT_DYNAMIC_SCALE_X10);
+
+const fn clamp_lalapad_dynamic_scale(scale_x10: u16) -> u16 {
+    if scale_x10 < LALAPAD_MIN_DYNAMIC_SCALE_X10 {
+        LALAPAD_MIN_DYNAMIC_SCALE_X10
+    } else if scale_x10 > LALAPAD_MAX_DYNAMIC_SCALE_X10 {
+        LALAPAD_MAX_DYNAMIC_SCALE_X10
+    } else {
+        scale_x10
+    }
+}
 
 fn queue_lalapad_dynamic_scale_event(group: u8, action: u8) {
     let mut payload = [0u8; 16];
@@ -63,6 +85,63 @@ fn queue_lalapad_dynamic_scale_event(group: u8, action: u8) {
         let _ = EVENT_CHANNEL.try_receive();
     }
     let _ = EVENT_CHANNEL.try_send(Event::Custom(payload));
+}
+
+pub(crate) fn queue_lalapad_dynamic_scale_state(cursor_x10: u16, scroll_x10: u16) {
+    let cursor_x10 = clamp_lalapad_dynamic_scale(cursor_x10);
+    let scroll_x10 = clamp_lalapad_dynamic_scale(scroll_x10);
+    LALAPAD_CURSOR_SCALE_X10.store(cursor_x10, core::sync::atomic::Ordering::Relaxed);
+    LALAPAD_SCROLL_SCALE_X10.store(scroll_x10, core::sync::atomic::Ordering::Relaxed);
+
+    let mut payload = [0u8; 16];
+    payload[0..4].copy_from_slice(&LALAPAD_DYNAMIC_SCALE_EVENT_PREFIX);
+    payload[4] = LALAPAD_DYNAMIC_SCALE_STATE_EVENT_TYPE;
+    payload[5..7].copy_from_slice(&cursor_x10.to_le_bytes());
+    payload[7..9].copy_from_slice(&scroll_x10.to_le_bytes());
+
+    if EVENT_CHANNEL.is_full() {
+        let _ = EVENT_CHANNEL.try_receive();
+    }
+    let _ = EVENT_CHANNEL.try_send(Event::Custom(payload));
+}
+
+fn apply_lalapad_dynamic_scale_action(group: u8, action: u8) -> (u16, u16) {
+    let mut cursor_x10 = LALAPAD_CURSOR_SCALE_X10.load(core::sync::atomic::Ordering::Relaxed);
+    let mut scroll_x10 = LALAPAD_SCROLL_SCALE_X10.load(core::sync::atomic::Ordering::Relaxed);
+
+    let apply_delta = |scale_x10: &mut u16| match action {
+        LALAPAD_ZDS_INC => *scale_x10 = scale_x10.saturating_add(1),
+        LALAPAD_ZDS_DEC => *scale_x10 = scale_x10.saturating_sub(1),
+        LALAPAD_ZDS_RST => *scale_x10 = LALAPAD_DEFAULT_DYNAMIC_SCALE_X10,
+        _ => {}
+    };
+
+    match group {
+        LALAPAD_ZDS_XY => apply_delta(&mut cursor_x10),
+        LALAPAD_ZDS_SC => apply_delta(&mut scroll_x10),
+        LALAPAD_ZDS_ALL => {
+            apply_delta(&mut cursor_x10);
+            apply_delta(&mut scroll_x10);
+        }
+        _ => {}
+    }
+
+    cursor_x10 = clamp_lalapad_dynamic_scale(cursor_x10);
+    scroll_x10 = clamp_lalapad_dynamic_scale(scroll_x10);
+    queue_lalapad_dynamic_scale_state(cursor_x10, scroll_x10);
+    (cursor_x10, scroll_x10)
+}
+
+async fn process_lalapad_dynamic_scale_user_action(group: u8, action: u8) {
+    queue_lalapad_dynamic_scale_event(group, action);
+    let (cursor_x10, scroll_x10) = apply_lalapad_dynamic_scale_action(group, action);
+    #[cfg(feature = "storage")]
+    crate::channel::FLASH_CHANNEL
+        .send(crate::storage::FlashOperationMessage::LalapadDynamicScale {
+            cursor_x10,
+            scroll_x10,
+        })
+        .await;
 }
 
 // Timestamp of the last key action, the value is the number of seconds since the boot
@@ -1834,6 +1913,7 @@ impl<'a, const ROW: usize, const COL: usize, const NUM_LAYER: usize, const NUM_E
                                 // Timeout reached, send clear peer message
                                 #[cfg(feature = "controller")]
                                 send_controller_event(&mut self.controller_pub, ControllerEvent::ClearPeer);
+                                LALAPAD_USER8_CLEAR_PEER_SENT.store(true, AtomicOrdering::Relaxed);
                                 info!("Clear peer");
                             }
                             Either::Second(e) => {
@@ -1863,16 +1943,25 @@ impl<'a, const ROW: usize, const COL: usize, const NUM_LAYER: usize, const NUM_E
                 } else if id == NUM_BLE_PROFILE as u8 + 3 {
                     // Toggle default output mode
                     BLE_PROFILE_CHANNEL.send(BleProfileAction::ToggleConnection).await;
+                } else if id == NUM_BLE_PROFILE as u8 + 4 {
+                    // Clear all BLE profiles
+                    #[cfg(all(feature = "split", feature = "_ble"))]
+                    if LALAPAD_USER8_CLEAR_PEER_SENT.swap(false, AtomicOrdering::Relaxed) {
+                        return;
+                    }
+                    BLE_PROFILE_CHANNEL
+                        .send(BleProfileAction::ClearAllProfiles)
+                        .await;
                 } else if id == NUM_BLE_PROFILE as u8 + 5 {
-                    queue_lalapad_dynamic_scale_event(LALAPAD_ZDS_XY, LALAPAD_ZDS_INC);
+                    process_lalapad_dynamic_scale_user_action(LALAPAD_ZDS_XY, LALAPAD_ZDS_INC).await;
                 } else if id == NUM_BLE_PROFILE as u8 + 6 {
-                    queue_lalapad_dynamic_scale_event(LALAPAD_ZDS_XY, LALAPAD_ZDS_DEC);
+                    process_lalapad_dynamic_scale_user_action(LALAPAD_ZDS_XY, LALAPAD_ZDS_DEC).await;
                 } else if id == NUM_BLE_PROFILE as u8 + 7 {
-                    queue_lalapad_dynamic_scale_event(LALAPAD_ZDS_SC, LALAPAD_ZDS_INC);
+                    process_lalapad_dynamic_scale_user_action(LALAPAD_ZDS_SC, LALAPAD_ZDS_INC).await;
                 } else if id == NUM_BLE_PROFILE as u8 + 8 {
-                    queue_lalapad_dynamic_scale_event(LALAPAD_ZDS_SC, LALAPAD_ZDS_DEC);
+                    process_lalapad_dynamic_scale_user_action(LALAPAD_ZDS_SC, LALAPAD_ZDS_DEC).await;
                 } else if id == NUM_BLE_PROFILE as u8 + 9 {
-                    queue_lalapad_dynamic_scale_event(LALAPAD_ZDS_ALL, LALAPAD_ZDS_RST);
+                    process_lalapad_dynamic_scale_user_action(LALAPAD_ZDS_ALL, LALAPAD_ZDS_RST).await;
                 }
             }
         }
