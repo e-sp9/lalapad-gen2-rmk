@@ -1180,6 +1180,149 @@ def check_zmk_include_inventory(manifest: dict[str, Any], zmk_config_dir: Path) 
     return results
 
 
+def ordered_inventory_result(
+    result_id: str,
+    kind: str,
+    expected: list[str],
+    actual: list[str],
+) -> Result:
+    total = max(len(expected), len(actual))
+    passed = 0
+    mismatches: list[str] = []
+    for index in range(total):
+        want = expected[index] if index < len(expected) else None
+        got = actual[index] if index < len(actual) else None
+        if want == got:
+            passed += 1
+        else:
+            mismatches.append(f"i{index}: expected {want!r}, got {got!r}")
+    return Result(
+        result_id,
+        kind,
+        passed,
+        total,
+        "ok" if not mismatches else "; ".join(mismatches),
+    )
+
+
+def kconfig_entry_inventory(text: str) -> list[str]:
+    entries: list[str] = []
+    current: str | None = None
+    emitted_current = False
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if match := re.fullmatch(r"config\s+([A-Za-z0-9_]+)", line):
+            if current is not None and not emitted_current:
+                entries.append(f"{current}:defined")
+            current = match.group(1)
+            emitted_current = False
+            continue
+        if current is None:
+            continue
+        if match := re.fullmatch(r"(default|def_bool)\s+(.+)", line):
+            entries.append(f"{current}:{match.group(1)} {match.group(2).strip()}")
+            emitted_current = True
+    if current is not None and not emitted_current:
+        entries.append(f"{current}:defined")
+    return entries
+
+
+def check_zmk_kconfig_entry_inventory(manifest: dict[str, Any], zmk_config_dir: Path) -> list[Result]:
+    results: list[Result] = []
+    for check in manifest.get("source_inventory", {}).get("kconfig_entries", []):
+        source_file = check["source_file"]
+        expected = list(check["expected"])
+        source_path = zmk_config_dir / source_file
+        if not source_path.exists():
+            results.append(
+                Result(
+                    f"zmk_source.kconfig_entries.{source_file}",
+                    "zmk_inventory",
+                    0,
+                    max(1, len(expected)),
+                    f"missing Kconfig source file {source_file!r}",
+                )
+            )
+            continue
+        actual = kconfig_entry_inventory(source_path.read_text())
+        results.append(
+            ordered_inventory_result(
+                f"zmk_source.kconfig_entries.{source_file}",
+                "zmk_inventory",
+                expected,
+                actual,
+            )
+        )
+    return results
+
+
+def west_manifest_inventory(text: str) -> list[str]:
+    items: list[str] = []
+    section: str | None = None
+    current: dict[str, str] | None = None
+
+    def flush() -> None:
+        nonlocal current
+        if not current or section is None:
+            current = None
+            return
+        if section == "remotes":
+            items.append(f"remote:{current.get('name')}:url-base={current.get('url-base')}")
+        elif section == "projects":
+            item = (
+                f"project:{current.get('name')}:remote={current.get('remote')}:"
+                f"revision={current.get('revision')}"
+            )
+            if "import" in current:
+                item += f":import={current['import']}"
+            items.append(item)
+        current = None
+
+    for raw_line in text.splitlines():
+        if match := re.fullmatch(r"\s{2}(remotes|projects|self):\s*", raw_line):
+            flush()
+            section = match.group(1)
+            continue
+        if re.fullmatch(r"\s{2}[A-Za-z0-9_-]+:\s*", raw_line):
+            flush()
+            section = None
+            continue
+        if section in {"remotes", "projects"}:
+            if match := re.fullmatch(r"\s{4}-\s+name:\s+(.+?)\s*", raw_line):
+                flush()
+                current = {"name": match.group(1)}
+                continue
+            if current is not None and (
+                match := re.fullmatch(r"\s{6}([A-Za-z0-9_-]+):\s+(.+?)\s*", raw_line)
+            ):
+                current[match.group(1)] = match.group(2)
+                continue
+        elif section == "self":
+            if match := re.fullmatch(r"\s{4}path:\s+(.+?)\s*", raw_line):
+                items.append(f"self:path={match.group(1)}")
+    flush()
+    return items
+
+
+def check_west_manifest_inventory(manifest: dict[str, Any], zmk_config_dir: Path) -> list[Result]:
+    expected = list(manifest.get("source_inventory", {}).get("west_manifest", []))
+    source_path = zmk_config_dir / "west.yml"
+    if not source_path.exists():
+        return [
+            Result(
+                "zmk_source.west_manifest",
+                "zmk_inventory",
+                0,
+                max(1, len(expected)),
+                "missing west manifest 'west.yml'",
+            )
+        ]
+    actual = west_manifest_inventory(source_path.read_text())
+    return [ordered_inventory_result("zmk_source.west_manifest", "zmk_inventory", expected, actual)]
+
+
 def check_zmk_dts_status_inventory(manifest: dict[str, Any], zmk_config_dir: Path) -> list[Result]:
     inventory = manifest.get("source_inventory", {})
     results: list[Result] = []
@@ -1721,6 +1864,8 @@ def check_zmk_source(
     results.extend(check_zmk_config_mirrors(manifest, zmk_config_dir))
     results.extend(check_zmk_source_file_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_include_inventory(manifest, zmk_config_dir))
+    results.extend(check_zmk_kconfig_entry_inventory(manifest, zmk_config_dir))
+    results.extend(check_west_manifest_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_config_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_dts_status_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_pin_values(manifest, keyboard, zmk_config_dir))

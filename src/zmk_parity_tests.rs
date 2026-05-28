@@ -178,6 +178,40 @@ fn porting_coverage_includes_exact_rmk_inventory_gates() {
             assert_eq!(include_inventory["total"].as_i64(), Some(expected_includes));
             assert_eq!(include_inventory["ok"], true);
         }
+
+        for kconfig_file in porting_coverage_manifest_toml()["source_inventory"]["kconfig_entries"]
+            .as_array()
+            .unwrap()
+        {
+            let source_file = kconfig_file["source_file"].as_str().unwrap();
+            let expected_entries = kconfig_file["expected"].as_array().unwrap().len() as i64;
+            let kconfig_inventory = results
+                .iter()
+                .find(|result| result["id"] == format!("zmk_source.kconfig_entries.{source_file}"))
+                .unwrap_or_else(|| {
+                    panic!(
+                        "ZMK Kconfig entry inventory coverage result is missing for {source_file}"
+                    )
+                });
+            assert_eq!(kconfig_inventory["kind"], "zmk_inventory");
+            assert_eq!(kconfig_inventory["passed"].as_i64(), Some(expected_entries));
+            assert_eq!(kconfig_inventory["total"].as_i64(), Some(expected_entries));
+            assert_eq!(kconfig_inventory["ok"], true);
+        }
+
+        let west_inventory = results
+            .iter()
+            .find(|result| result["id"] == "zmk_source.west_manifest")
+            .expect("ZMK west manifest inventory coverage result is missing");
+        let expected_west_items =
+            porting_coverage_manifest_toml()["source_inventory"]["west_manifest"]
+                .as_array()
+                .unwrap()
+                .len() as i64;
+        assert_eq!(west_inventory["kind"], "zmk_inventory");
+        assert_eq!(west_inventory["passed"].as_i64(), Some(expected_west_items));
+        assert_eq!(west_inventory["total"].as_i64(), Some(expected_west_items));
+        assert_eq!(west_inventory["ok"], true);
     }
 }
 
@@ -703,6 +737,211 @@ print(json.dumps({
             .as_str()
             .unwrap()
             .contains("missing include source file")
+    );
+}
+
+#[test]
+fn porting_coverage_rejects_unclassified_zmk_kconfig_entries() {
+    let output = run_python(
+        r#"
+import importlib.util
+import json
+import sys
+import tempfile
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("porting_coverage", "tools/porting_coverage.py")
+pc = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = pc
+spec.loader.exec_module(pc)
+
+manifest = {
+    "source_inventory": {
+        "kconfig_entries": [{
+            "source_file": "Kconfig.defconfig",
+            "expected": ["ZMK_SPLIT:default y", "BT_MAX_CONN:default 5"],
+        }],
+    },
+}
+
+def pack(results):
+    return [result.__dict__ | {"ok": result.ok} for result in results]
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    fixture = root / "Kconfig.defconfig"
+    fixture.write_text('''
+    config ZMK_SPLIT
+        default y
+
+    config BT_MAX_CONN
+        default 5
+    ''')
+    ok = pack(pc.check_zmk_kconfig_entry_inventory(manifest, root))
+
+    fixture.write_text('''
+    config ZMK_SPLIT
+        default y
+
+    config BT_MAX_CONN
+        default 6
+
+    config NEW_SOURCE_SETTING
+        default y
+    ''')
+    changed = pack(pc.check_zmk_kconfig_entry_inventory(manifest, root))
+    fixture.unlink()
+    missing_file = pack(pc.check_zmk_kconfig_entry_inventory(manifest, root))
+
+print(json.dumps({"ok": ok, "changed": changed, "missing_file": missing_file}))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "Kconfig entry inventory parser check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let ok_inventory = &parsed["ok"][0];
+    assert_eq!(ok_inventory["kind"], "zmk_inventory");
+    assert_eq!(ok_inventory["passed"].as_i64(), Some(2));
+    assert_eq!(ok_inventory["total"].as_i64(), Some(2));
+    assert_eq!(ok_inventory["ok"], true);
+
+    let changed_inventory = &parsed["changed"][0];
+    assert_eq!(changed_inventory["kind"], "zmk_inventory");
+    assert_eq!(changed_inventory["passed"].as_i64(), Some(1));
+    assert_eq!(changed_inventory["total"].as_i64(), Some(3));
+    assert_eq!(changed_inventory["ok"], false);
+    assert!(
+        changed_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("NEW_SOURCE_SETTING")
+    );
+
+    let missing_file_inventory = &parsed["missing_file"][0];
+    assert_eq!(missing_file_inventory["kind"], "zmk_inventory");
+    assert_eq!(missing_file_inventory["passed"].as_i64(), Some(0));
+    assert_eq!(missing_file_inventory["total"].as_i64(), Some(2));
+    assert_eq!(missing_file_inventory["ok"], false);
+    assert!(
+        missing_file_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("missing Kconfig source file")
+    );
+}
+
+#[test]
+fn porting_coverage_rejects_unclassified_zmk_west_manifest_items() {
+    let output = run_python(
+        r#"
+import importlib.util
+import json
+import sys
+import tempfile
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("porting_coverage", "tools/porting_coverage.py")
+pc = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = pc
+spec.loader.exec_module(pc)
+
+manifest = {
+    "source_inventory": {
+        "west_manifest": [
+            "remote:zmkfirmware:url-base=https://github.com/zmkfirmware",
+            "project:zmk:remote=zmkfirmware:revision=v0.3.0:import=app/west.yml",
+            "self:path=config",
+        ],
+    },
+}
+
+def pack(results):
+    return [result.__dict__ | {"ok": result.ok} for result in results]
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    fixture = root / "west.yml"
+    fixture.write_text('''
+manifest:
+  remotes:
+    - name: zmkfirmware
+      url-base: https://github.com/zmkfirmware
+  projects:
+    - name: zmk
+      remote: zmkfirmware
+      revision: v0.3.0
+      import: app/west.yml
+  self:
+    path: config
+    ''')
+    ok = pack(pc.check_west_manifest_inventory(manifest, root))
+
+    fixture.write_text('''
+manifest:
+  remotes:
+    - name: zmkfirmware
+      url-base: https://github.com/zmkfirmware
+  projects:
+    - name: zmk
+      remote: zmkfirmware
+      revision: v0.3.1
+      import: app/west.yml
+    - name: zmk-new-module
+      remote: zmkfirmware
+      revision: main
+  self:
+    path: config
+    ''')
+    changed = pack(pc.check_west_manifest_inventory(manifest, root))
+    fixture.unlink()
+    missing_file = pack(pc.check_west_manifest_inventory(manifest, root))
+
+print(json.dumps({"ok": ok, "changed": changed, "missing_file": missing_file}))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "west manifest inventory parser check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let ok_inventory = &parsed["ok"][0];
+    assert_eq!(ok_inventory["kind"], "zmk_inventory");
+    assert_eq!(ok_inventory["passed"].as_i64(), Some(3));
+    assert_eq!(ok_inventory["total"].as_i64(), Some(3));
+    assert_eq!(ok_inventory["ok"], true);
+
+    let changed_inventory = &parsed["changed"][0];
+    assert_eq!(changed_inventory["kind"], "zmk_inventory");
+    assert_eq!(changed_inventory["passed"].as_i64(), Some(1));
+    assert_eq!(changed_inventory["total"].as_i64(), Some(4));
+    assert_eq!(changed_inventory["ok"], false);
+    assert!(
+        changed_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("zmk-new-module")
+    );
+
+    let missing_file_inventory = &parsed["missing_file"][0];
+    assert_eq!(missing_file_inventory["kind"], "zmk_inventory");
+    assert_eq!(missing_file_inventory["passed"].as_i64(), Some(0));
+    assert_eq!(missing_file_inventory["total"].as_i64(), Some(3));
+    assert_eq!(missing_file_inventory["ok"], false);
+    assert!(
+        missing_file_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("missing west manifest")
     );
 }
 

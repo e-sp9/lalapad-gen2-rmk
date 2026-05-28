@@ -47,6 +47,20 @@ include_files = [
   { source_file = "boards/shields/lalapadgen2/lalapadgen2_right.overlay", expected = ["\"lalapadgen2.dtsi\""] },
   { source_file = "boards/shields/lalapadgen2/lalapadgen2_left.overlay", expected = ["\"lalapadgen2.dtsi\""] },
 ]
+kconfig_entries = [
+  { source_file = "boards/shields/lalapadgen2/Kconfig.defconfig", expected = ["ZMK_KEYBOARD_NAME:default \"LalapadGen2\"", "ZMK_SPLIT_ROLE_CENTRAL:default y", "ZMK_SPLIT_BLE_CENTRAL_PERIPHERALS:default 1", "BT_MAX_CONN:default 5", "ZMK_SPLIT:default y"] },
+  { source_file = "boards/shields/lalapadgen2/Kconfig.shield", expected = ["SHIELD_LALAPADGEN2_LEFT:def_bool $(shields_list_contains,lalapadgen2_left)", "SHIELD_LALAPADGEN2_RIGHT:def_bool $(shields_list_contains,lalapadgen2_right)"] },
+]
+west_manifest = [
+  "remote:zmkfirmware:url-base=https://github.com/zmkfirmware",
+  "remote:ShiniNet:url-base=https://github.com/ShiniNet/",
+  "remote:caksoylar:url-base=https://github.com/caksoylar",
+  "project:zmk:remote=zmkfirmware:revision=v0.3.0:import=app/west.yml",
+  "project:zmk-driver-iqs9151:remote=ShiniNet:revision=main",
+  "project:zmk-easy-charge-indicator:remote=ShiniNet:revision=main",
+  "project:zmk-rgbled-widget:remote=caksoylar:revision=v0.3",
+  "self:path=config",
+]
 
 [layout]
 rows = 7

@@ -207,8 +207,10 @@ upstream ZMK layout JSON, verifies that ZMK's `default_transform` matrix map
 matches that same layout order, confirms the active ZMK physical layout points
 at that transform, checks the ZMK source-file inventory, checks the ZMK keymap
 layer and behavior inventories, checks ZMK `#include` dependencies, checks the
-ZMK `*.dtsi` / `*.overlay` status-node inventory, and checks the RMK custom
-keycode order used for the ZMK Bluetooth and trackpad scale actions.
+ZMK `Kconfig.*` shield/default entries, checks the `west.yml` ZMK module
+inventory, checks the ZMK `*.dtsi` / `*.overlay` status-node inventory, and
+checks the RMK custom keycode order used for the ZMK Bluetooth and trackpad
+scale actions.
 
 When the upstream checkout from `metadata.source_repo_hint` is available, the
 gate also parses `config/lalapadgen2.keymap` directly and checks the manifest
