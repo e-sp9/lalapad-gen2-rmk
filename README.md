@@ -117,6 +117,7 @@ rmkit get-chip --keyboard-toml-path keyboard.toml
 rmkit get-project-name --keyboard-toml-path keyboard.toml
 python3 tools/porting_coverage.py --coverage-baseline tools/porting_coverage_baseline.toml --require-zmk-source --require-porting-complete
 python3 tools/migration_status.py --coverage-baseline tools/porting_coverage_baseline.toml --hardware-baseline tools/hardware_validation_baseline.toml --require-zmk-source --require-software-complete --require-hardware-classified
+cargo make migration-status-report
 python3 tools/hardware_validation.py --hardware-baseline tools/hardware_validation_baseline.toml --require-classified
 python3 tools/hardware_validation.py --markdown
 python3 tools/hardware_validation.py --evidence-template
@@ -274,6 +275,12 @@ cargo-make task is:
 
 ```shell
 HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-final
+```
+
+For a local Markdown dashboard matching the CI summary, run:
+
+```shell
+cargo make migration-status-report
 ```
 
 Host-side parity tests can be run explicitly with:

@@ -16,7 +16,9 @@ const PORTING_COVERAGE_BASELINE_TOML: &str =
     include_str!("../tools/porting_coverage_baseline.toml");
 const PORTING_COVERAGE_MANIFEST_TOML: &str =
     include_str!("../tools/porting_coverage_manifest.toml");
+const PORTING_MD: &str = include_str!("../docs/PORTING.md");
 const PULL_REQUEST_TEMPLATE_MD: &str = include_str!("../.github/PULL_REQUEST_TEMPLATE.md");
+const README_MD: &str = include_str!("../README.md");
 const RELEASE_MD: &str = include_str!("../docs/RELEASE.md");
 const VIAL_JSON: &str = include_str!("../vial.json");
 
@@ -75,6 +77,20 @@ fn write_temp_file(name: &str, contents: &str) -> std::path::PathBuf {
     let path = std::env::temp_dir().join(format!("lalapad-{name}-{}.toml", std::process::id()));
     std::fs::write(&path, contents).unwrap();
     path
+}
+
+fn makefile_task_block(task: &str) -> &str {
+    let marker = format!("[tasks.{task}]");
+    let start = MAKEFILE_TOML
+        .find(&marker)
+        .unwrap_or_else(|| panic!("Makefile.toml is missing {marker}"));
+    let after_marker = start + marker.len();
+    let rest = &MAKEFILE_TOML[after_marker..];
+    let end = rest
+        .find("\n[tasks.")
+        .map(|offset| after_marker + offset)
+        .unwrap_or(MAKEFILE_TOML.len());
+    &MAKEFILE_TOML[start..end]
 }
 
 fn complete_hardware_evidence_overlay(firmware_ref: &str) -> String {
@@ -1537,6 +1553,14 @@ artifact_or_notes = "duplicate"
 
 #[test]
 fn local_validation_entrypoints_match_ci_gates() {
+    let migration_status_task = makefile_task_block("migration-status");
+    let migration_status_report_task = makefile_task_block("migration-status-report");
+    let migration_status_final_task = makefile_task_block("migration-status-final");
+    let hardware_validation_task = makefile_task_block("hardware-validation");
+    let hardware_validation_report_task = makefile_task_block("hardware-validation-report");
+    let hardware_validation_template_task =
+        makefile_task_block("hardware-validation-evidence-template");
+
     assert!(
         MAKEFILE_TOML.contains("--coverage-baseline")
             && MAKEFILE_TOML.contains("tools/porting_coverage_baseline.toml")
@@ -1544,40 +1568,52 @@ fn local_validation_entrypoints_match_ci_gates() {
         "cargo make porting-coverage should require complete implementation status and a stable denominator baseline"
     );
     assert!(
-        MAKEFILE_TOML.contains("[tasks.migration-status]")
-            && MAKEFILE_TOML.contains("tools/migration_status.py")
-            && MAKEFILE_TOML.contains("--coverage-baseline")
-            && MAKEFILE_TOML.contains("--hardware-baseline")
-            && MAKEFILE_TOML.contains("tools/hardware_validation_baseline.toml")
-            && MAKEFILE_TOML.contains("--require-software-complete")
-            && MAKEFILE_TOML.contains("--require-hardware-classified"),
+        migration_status_task.contains("tools/migration_status.py")
+            && migration_status_task.contains("--coverage-baseline")
+            && migration_status_task.contains("--hardware-baseline")
+            && migration_status_task.contains("tools/hardware_validation_baseline.toml")
+            && migration_status_task.contains("--require-software-complete")
+            && migration_status_task.contains("--require-hardware-classified"),
         "cargo make migration-status should expose the combined release dashboard gate"
     );
     assert!(
-        MAKEFILE_TOML.contains("[tasks.migration-status-final]")
-            && MAKEFILE_TOML.contains("HARDWARE_EVIDENCE")
-            && MAKEFILE_TOML.contains("FIRMWARE_REF")
-            && MAKEFILE_TOML
+        migration_status_report_task.contains("tools/migration_status.py")
+            && migration_status_report_task.contains("--coverage-baseline")
+            && migration_status_report_task.contains("--hardware-baseline")
+            && migration_status_report_task.contains("--require-zmk-source")
+            && migration_status_report_task.contains("--require-software-complete")
+            && migration_status_report_task.contains("--require-hardware-classified")
+            && migration_status_report_task.contains("--markdown")
+            && migration_status_report_task.contains("--zmk-keymap")
+            && migration_status_report_task
+                .contains("zmk-config-LalaPadGen2/config/lalapadgen2.keymap")
+            && migration_status_report_task
+                .contains("../zmk-config-LalaPadGen2/config/lalapadgen2.keymap"),
+        "cargo make migration-status-report should expose the combined Markdown migration dashboard"
+    );
+    assert!(
+        migration_status_final_task.contains("HARDWARE_EVIDENCE")
+            && migration_status_final_task.contains("FIRMWARE_REF")
+            && migration_status_final_task
                 .contains("--hardware-baseline tools/hardware_validation_baseline.toml")
-            && MAKEFILE_TOML.contains("--require-hardware-validated")
-            && MAKEFILE_TOML.contains("--require-firmware-ref \"$FIRMWARE_REF\""),
+            && migration_status_final_task.contains("--require-hardware-validated")
+            && migration_status_final_task.contains("--require-firmware-ref \"$FIRMWARE_REF\""),
         "cargo make migration-status-final should require evidence and firmware_ref for complete validation claims"
     );
     assert!(
-        MAKEFILE_TOML.contains("[tasks.hardware-validation]")
-            && MAKEFILE_TOML.contains("tools/hardware_validation.py")
-            && MAKEFILE_TOML.contains("--hardware-baseline")
-            && MAKEFILE_TOML.contains("--require-classified"),
+        hardware_validation_task.contains("tools/hardware_validation.py")
+            && hardware_validation_task.contains("--hardware-baseline")
+            && hardware_validation_task.contains("--require-classified"),
         "Makefile.toml should expose the hardware validation classification gate"
     );
     assert!(
-        MAKEFILE_TOML.contains("[tasks.hardware-validation-report]")
-            && MAKEFILE_TOML.contains("--markdown"),
+        hardware_validation_report_task.contains("tools/hardware_validation.py")
+            && hardware_validation_report_task.contains("--markdown"),
         "Makefile.toml should expose a hardware validation markdown report"
     );
     assert!(
-        MAKEFILE_TOML.contains("[tasks.hardware-validation-evidence-template]")
-            && MAKEFILE_TOML.contains("--evidence-template"),
+        hardware_validation_template_task.contains("tools/hardware_validation.py")
+            && hardware_validation_template_task.contains("--evidence-template"),
         "Makefile.toml should expose a full hardware evidence template generator"
     );
     assert!(
@@ -1588,6 +1624,7 @@ fn local_validation_entrypoints_match_ci_gates() {
         "--require-porting-complete",
         "tools/porting_coverage.py --coverage-baseline tools/porting_coverage_baseline.toml --require-zmk-source --require-porting-complete",
         "tools/migration_status.py --coverage-baseline tools/porting_coverage_baseline.toml --hardware-baseline tools/hardware_validation_baseline.toml --require-zmk-source --require-software-complete --require-hardware-classified",
+        "cargo make migration-status-report",
         "tools/migration_status.py --coverage-baseline tools/porting_coverage_baseline.toml --hardware-baseline tools/hardware_validation_baseline.toml --evidence path/to/evidence.toml --require-software-complete --require-hardware-classified --require-hardware-validated --require-firmware-ref <tag-or-commit>",
         "HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-final",
         "tools/hardware_validation.py --hardware-baseline tools/hardware_validation_baseline.toml --require-classified",
@@ -1625,6 +1662,11 @@ fn local_validation_entrypoints_match_ci_gates() {
             && FIRMWARE_WORKFLOW_YAML.contains("--require-hardware-classified")
             && FIRMWARE_WORKFLOW_YAML.contains("--markdown >> \"$GITHUB_STEP_SUMMARY\""),
         "firmware CI should publish the combined migration status dashboard"
+    );
+    assert!(
+        README_MD.contains("cargo make migration-status-report")
+            && PORTING_MD.contains("cargo make migration-status-report"),
+        "README and porting notes should document the local Markdown migration dashboard"
     );
     assert!(
         FIRMWARE_WORKFLOW_YAML.contains(".github/workflows/auto-tag.yml"),

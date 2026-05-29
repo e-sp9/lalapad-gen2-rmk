@@ -351,6 +351,13 @@ The same final gate is available as:
 HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-final
 ```
 
+For the same Markdown dashboard that CI appends to the GitHub Actions summary,
+run:
+
+```sh
+cargo make migration-status-report
+```
+
 ## Real-Hardware Validation Gate
 
 `tools/hardware_validation_manifest.toml` is the separate tracker for evidence

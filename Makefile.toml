@@ -53,6 +53,33 @@ args = [
     "--require-hardware-classified",
 ]
 
+[tasks.migration-status-report]
+script = '''
+zmk_keymap="${ZMK_KEYMAP:-}"
+if [ -z "$zmk_keymap" ]; then
+  if [ -f zmk-config-LalaPadGen2/config/lalapadgen2.keymap ]; then
+    zmk_keymap="zmk-config-LalaPadGen2/config/lalapadgen2.keymap"
+  elif [ -f ../zmk-config-LalaPadGen2/config/lalapadgen2.keymap ]; then
+    zmk_keymap="../zmk-config-LalaPadGen2/config/lalapadgen2.keymap"
+  fi
+fi
+
+set -- \
+  tools/migration_status.py \
+  --coverage-baseline tools/porting_coverage_baseline.toml \
+  --hardware-baseline tools/hardware_validation_baseline.toml \
+  --require-zmk-source \
+  --require-software-complete \
+  --require-hardware-classified \
+  --markdown
+
+if [ -n "$zmk_keymap" ]; then
+  set -- "$@" --zmk-keymap "$zmk_keymap"
+fi
+
+python3 "$@"
+'''
+
 [tasks.migration-status-final]
 script = '''
 : "${HARDWARE_EVIDENCE:?set HARDWARE_EVIDENCE=path/to/evidence.toml}"
