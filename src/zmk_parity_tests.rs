@@ -111,6 +111,9 @@ fn porting_coverage_complete_gate_accepts_explicit_status_completion() {
         String::from_utf8_lossy(&output.stderr)
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Porting coverage by kind:"));
+    assert!(stdout.contains("- scenario:"));
+    assert!(stdout.contains("- zmk_source_cell:"));
     assert!(stdout.contains("Porting status: 69/69 = 100.00% implemented"));
 }
 
@@ -839,6 +842,43 @@ fn porting_coverage_includes_exact_rmk_inventory_gates() {
 
     let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     let results = parsed["results"].as_array().unwrap();
+    let by_kind = parsed["by_kind"].as_object().unwrap();
+    let mut expected_by_kind: BTreeMap<String, (i64, i64)> = BTreeMap::new();
+    for result in results {
+        let kind = result["kind"].as_str().unwrap().to_string();
+        let entry = expected_by_kind.entry(kind).or_insert((0, 0));
+        entry.0 += result["passed"].as_i64().unwrap();
+        entry.1 += result["total"].as_i64().unwrap();
+    }
+    assert_eq!(
+        by_kind.len(),
+        expected_by_kind.len(),
+        "JSON coverage summary should include every result kind"
+    );
+    for (kind, (passed, total)) in expected_by_kind {
+        let summary = by_kind
+            .get(&kind)
+            .unwrap_or_else(|| panic!("missing by_kind summary for {kind}"));
+        assert_eq!(
+            summary["passed"].as_i64(),
+            Some(passed),
+            "by_kind passed total drifted for {kind}"
+        );
+        assert_eq!(
+            summary["total"].as_i64(),
+            Some(total),
+            "by_kind total drifted for {kind}"
+        );
+        if total == 0 {
+            assert!(summary["rate"].is_null());
+        } else {
+            let expected_rate = passed as f64 / total as f64;
+            assert!(
+                (summary["rate"].as_f64().unwrap() - expected_rate).abs() < 1e-12,
+                "by_kind rate drifted for {kind}"
+            );
+        }
+    }
     let manifest = porting_coverage_manifest_toml();
     let status_counts = manifest_status_counts(&manifest);
     let expected_status_total: i64 = status_counts.values().sum();

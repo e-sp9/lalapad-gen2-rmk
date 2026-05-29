@@ -271,6 +271,11 @@ implemented, while `not_ported` entries are the remaining software-porting
 items to burn down toward a true 100% implementation status. CI uses
 `--require-porting-complete`, so any future non-implemented status is a release
 blocker.
+The text and JSON reports also include a `by_kind` breakdown of the same
+coverage results, so a regression can be traced to RMK keymap/config checks,
+ZMK source inventories, Kconfig/DTS mirrors, Rust constants, IQS9151 byte
+arrays, or firmware code-needle checks instead of treating the total percentage
+as a black box.
 It is intended to prevent regressions like a visible `LT(...)` binding whose
 tap-hold behavior is changed by RMK's global flow-tap setting.
 

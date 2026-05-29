@@ -140,6 +140,9 @@ source firmware. It reports both migration-contract coverage and an explicit
 IQS9151 symbol implementation status summary. `--require-porting-complete`
 makes both metrics hard gates, so release builds fail if any source item is
 unclassified or any explicit implementation status is non-implemented. The
+text and JSON reports also include coverage grouped by result kind, making it
+clear whether a regression is in RMK keymap/config checks, ZMK source
+inventory, DTS/Kconfig mirrors, Rust constants, or firmware code needles. The
 Rust checks cover the RMK-side IQS9151 register-address
 inventory, upstream IQS9151 register and bit-flag porting classifications,
 product/register address values, reset/gesture bits, IQS9151 feature-enable

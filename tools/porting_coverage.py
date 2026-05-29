@@ -208,6 +208,13 @@ class PortingStatusSummary:
     remaining: list[dict[str, str]]
 
 
+@dataclass
+class CoverageBucket:
+    passed: int
+    total: int
+    rate: float | None
+
+
 def load_toml(path: Path) -> dict[str, Any]:
     with path.open("rb") as f:
         return tomllib.load(f)
@@ -2839,6 +2846,17 @@ def porting_status_summary(manifest: dict[str, Any]) -> PortingStatusSummary:
     )
 
 
+def coverage_by_kind(results: list[Result]) -> dict[str, CoverageBucket]:
+    by_kind: dict[str, CoverageBucket] = {}
+    for result in results:
+        bucket = by_kind.setdefault(result.kind, CoverageBucket(0, 0, None))
+        bucket.passed += result.passed
+        bucket.total += result.total
+    for bucket in by_kind.values():
+        bucket.rate = None if bucket.total == 0 else bucket.passed / bucket.total
+    return dict(sorted(by_kind.items()))
+
+
 def check_code_contains(manifest: dict[str, Any], project_root: Path) -> list[Result]:
     results: list[Result] = []
     for check in manifest.get("code_contains", []):
@@ -3428,6 +3446,14 @@ def print_text(results: list[Result], status_summary: PortingStatusSummary) -> N
     total = sum(result.total for result in results)
     rate = 100.0 if total == 0 else passed * 100.0 / total
     print(f"Porting coverage: {passed}/{total} = {rate:.2f}%")
+    by_kind = coverage_by_kind(results)
+    if by_kind:
+        print("Porting coverage by kind:")
+        for kind, bucket in by_kind.items():
+            bucket_rate = (
+                "n/a" if bucket.rate is None else f"{bucket.rate * 100.0:.2f}%"
+            )
+            print(f"- {kind}: {bucket.passed}/{bucket.total} = {bucket_rate}")
     if status_summary.rate is not None:
         status_rate = status_summary.rate * 100.0
         status_parts = ", ".join(
@@ -3473,6 +3499,7 @@ def main(argv: list[str]) -> int:
     status_summary = porting_status_summary(manifest)
     passed = sum(result.passed for result in results)
     total = sum(result.total for result in results)
+    by_kind = coverage_by_kind(results)
     if args.json:
         print(
             json.dumps(
@@ -3480,6 +3507,14 @@ def main(argv: list[str]) -> int:
                     "passed": passed,
                     "total": total,
                     "rate": None if total == 0 else passed / total,
+                    "by_kind": {
+                        kind: {
+                            "passed": bucket.passed,
+                            "total": bucket.total,
+                            "rate": bucket.rate,
+                        }
+                        for kind, bucket in by_kind.items()
+                    },
                     "porting_status": {
                         "total": status_summary.total,
                         "implemented": status_summary.implemented,
