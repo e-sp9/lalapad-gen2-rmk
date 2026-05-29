@@ -135,10 +135,12 @@ input_listeners = [
   { source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi", source_block = "trackpad_listener_L", expected = ["device=&trackpad_split_L", "input-processors:&trackpad_key_behaviors_L", "input-processors:&zip_xy_scaler 1 5", "input-processors:&zip_scroll_scaler 1 12", "input-processors:&zip_dynamic_xy_scaler", "input-processors:&zip_dynamic_scroll_scaler", "lowspeed.layers=1,2", "lowspeed.input-processors:&trackpad_key_behaviors_L", "lowspeed.input-processors:&zip_xy_scaler 1 15", "lowspeed.input-processors:&zip_scroll_scaler 1 40", "lowspeed.input-processors:&zip_dynamic_xy_scaler", "lowspeed.input-processors:&zip_dynamic_scroll_scaler"] },
 ]
 dts_properties = [
+  { source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi", source_block = "kscan0", expected = ["compatible=\"zmk,kscan-gpio-matrix\"", "wakeup-source", "diode-direction=\"col2row\"", "row-gpios=<&xiao_d 10 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)> , <&xiao_d 9 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)> , <&xiao_d 8 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)> , <&xiao_d 7 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)> , <&gpio1 1 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>"] },
   { source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi", source_block = "trackpad_split_R", expected = ["compatible=\"zmk,input-split\"", "reg=<0>"] },
   { source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi", source_block = "trackpad_split_L", expected = ["compatible=\"zmk,input-split\"", "reg=<1>"] },
   { source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi", source_block = "zip_dynamic_xy_scaler", expected = ["compatible=\"zmk,input-processor-dynamic-scaler\"", "#input-processor-cells=<0>", "type=<INPUT_EV_REL>", "codes=<INPUT_REL_X INPUT_REL_Y>", "scale-group=<ZDS_XY>", "track-remainders"] },
   { source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi", source_block = "zip_dynamic_scroll_scaler", expected = ["compatible=\"zmk,input-processor-dynamic-scaler\"", "#input-processor-cells=<0>", "type=<INPUT_EV_REL>", "codes=<INPUT_REL_WHEEL INPUT_REL_HWHEEL>", "scale-group=<ZDS_SC>", "track-remainders"] },
+  { source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi", source_block = "iqs9151", expected = ["compatible=\"azoteq,iqs9151\"", "reg=<0x56>", "status=\"okay\"", "irq-gpios=<&xiao_d 6 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>"] },
   { source_file = "boards/shields/lalapadgen2/lalapadgen2_right.overlay", source_block = "&default_transform", expected = ["col-offset=<6>"] },
   { source_file = "boards/shields/lalapadgen2/lalapadgen2_right.overlay", source_block = "&trackpad_listener_R", expected = ["status=\"okay\"", "device=<&iqs9151>"] },
   { source_file = "boards/shields/lalapadgen2/lalapadgen2_right.overlay", source_block = "&trackpad_listener_L", expected = ["status=\"okay\""] },
@@ -806,91 +808,6 @@ source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi"
 source_block = "led2"
 source_property = "gpios"
 expected = ["P1_07"]
-
-[[source_regex_values]]
-id = "zmk_iqs9151_address"
-source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi"
-pattern = 'iqs9151@56\s*\{.*?reg\s*=\s*<0x56>'
-
-[[source_regex_values]]
-id = "zmk_trackpad_normal_xy_scaler"
-source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi"
-pattern = 'zip_xy_scaler\s+1\s+5'
-
-[[source_regex_values]]
-id = "zmk_trackpad_normal_scroll_scaler"
-source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi"
-pattern = 'zip_scroll_scaler\s+1\s+12'
-
-[[source_regex_values]]
-id = "zmk_trackpad_lowspeed_xy_scaler"
-source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi"
-pattern = 'zip_xy_scaler\s+1\s+15'
-
-[[source_regex_values]]
-id = "zmk_trackpad_lowspeed_scroll_scaler"
-source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi"
-pattern = 'zip_scroll_scaler\s+1\s+40'
-
-[[source_regex_values]]
-id = "zmk_dynamic_scalers_track_remainders"
-source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi"
-pattern = 'zip_dynamic_xy_scaler:.*?track-remainders;.*?zip_dynamic_scroll_scaler:.*?track-remainders;'
-
-[[source_regex_values]]
-id = "zmk_trackpad_low_speed_layers"
-source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi"
-pattern = 'lowspeedmode\s*\{.*?layers\s*=\s*<1>\s*,\s*<2>;'
-
-[[source_regex_values]]
-id = "zmk_trackpad_listener_r_processor_order"
-source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi"
-pattern = 'trackpad_listener_R:.*?input-processors\s*=\s*<&trackpad_key_behaviors_R>,\s*<&zip_xy_scaler 1 5>,\s*<&zip_scroll_scaler 1 12>,\s*<&zip_dynamic_xy_scaler>,\s*<&zip_dynamic_scroll_scaler>;.*?lowspeedmode\s*\{.*?input-processors\s*=\s*<&trackpad_key_behaviors_R>,\s*<&zip_xy_scaler 1 15>,\s*<&zip_scroll_scaler 1 40>,\s*<&zip_dynamic_xy_scaler>,\s*<&zip_dynamic_scroll_scaler>;'
-
-[[source_regex_values]]
-id = "zmk_trackpad_listener_l_processor_order"
-source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi"
-pattern = 'trackpad_listener_L:.*?input-processors\s*=\s*<&trackpad_key_behaviors_L>,\s*<&zip_xy_scaler 1 5>,\s*<&zip_scroll_scaler 1 12>,\s*<&zip_dynamic_xy_scaler>,\s*<&zip_dynamic_scroll_scaler>;.*?lowspeedmode\s*\{.*?input-processors\s*=\s*<&trackpad_key_behaviors_L>,\s*<&zip_xy_scaler 1 15>,\s*<&zip_scroll_scaler 1 40>,\s*<&zip_dynamic_xy_scaler>,\s*<&zip_dynamic_scroll_scaler>;'
-
-[[source_regex_values]]
-id = "zmk_matrix_rows_active_high_pulldown"
-source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi"
-pattern = 'row-gpios\s*=\s*<&xiao_d 10 \(GPIO_ACTIVE_HIGH \| GPIO_PULL_DOWN\)>.*?<&xiao_d 9 \(GPIO_ACTIVE_HIGH \| GPIO_PULL_DOWN\)>.*?<&xiao_d 8 \(GPIO_ACTIVE_HIGH \| GPIO_PULL_DOWN\)>.*?<&xiao_d 7 \(GPIO_ACTIVE_HIGH \| GPIO_PULL_DOWN\)>.*?<&gpio1\s+1 \(GPIO_ACTIVE_HIGH \| GPIO_PULL_DOWN\)>'
-
-[[source_regex_values]]
-id = "zmk_iqs9151_irq_active_low_pullup"
-source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi"
-pattern = 'irq-gpios\s*=\s*<&xiao_d 6 \(GPIO_ACTIVE_LOW \| GPIO_PULL_UP\)>;'
-
-[[source_regex_values]]
-id = "zmk_rgb_leds_active_low"
-source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi"
-pattern = 'led0:.*?gpios\s*=\s*<&gpio1 3 GPIO_ACTIVE_LOW>;.*?led1:.*?gpios\s*=\s*<&gpio1 5 GPIO_ACTIVE_LOW>;.*?led2:.*?gpios\s*=\s*<&gpio1 7 GPIO_ACTIVE_LOW>;'
-
-[[source_regex_values]]
-id = "zmk_charge_pins_active_low_and_open_drain"
-source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi"
-pattern = 'charge-gpios\s*=\s*<&gpio0 17 GPIO_ACTIVE_LOW>;.*?led-gpios\s*=\s*<&gpio0 10 \(GPIO_ACTIVE_LOW \| GPIO_OPEN_DRAIN\)>;'
-
-[[source_regex_values]]
-id = "zmk_right_trackpad_direct_iqs9151"
-source_file = "boards/shields/lalapadgen2/lalapadgen2_right.overlay"
-pattern = '&trackpad_listener_R\s*\{.*?status\s*=\s*"okay";.*?device\s*=\s*<&iqs9151>;'
-
-[[source_regex_values]]
-id = "zmk_right_trackpad_left_split_listener_enabled"
-source_file = "boards/shields/lalapadgen2/lalapadgen2_right.overlay"
-pattern = '&trackpad_listener_L\s*\{.*?status\s*=\s*"okay";'
-
-[[source_regex_values]]
-id = "zmk_left_trackpad_split_source_enabled"
-source_file = "boards/shields/lalapadgen2/lalapadgen2_left.overlay"
-pattern = '&trackpad_split_L\s*\{.*?status\s*=\s*"okay";.*?device\s*=\s*<&iqs9151>;'
-
-[[source_regex_values]]
-id = "zmk_left_trackpad_right_split_source_disabled"
-source_file = "boards/shields/lalapadgen2/lalapadgen2_left.overlay"
-pattern = '&trackpad_split_R\s*\{.*?status\s*=\s*"disabled";.*?device\s*=\s*<&iqs9151>;'
 
 [[rust_const_values]]
 id = "iqs9151_i2c_address"

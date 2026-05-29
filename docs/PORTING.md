@@ -215,7 +215,8 @@ normal/low-speed input-processor chains, checks selected ZMK DTS properties for
 split input, dynamic scaling, right-half column offset, and overlay trackpad
 routing overrides, checks source GPIO pin flags, checks the ZMK `*.dtsi` /
 `*.overlay` status-node inventory, and checks the RMK custom keycode order used
-for the ZMK Bluetooth and trackpad scale actions.
+for the ZMK Bluetooth and trackpad scale actions. These high-risk ZMK source
+checks are represented as structured inventories rather than regex-only checks.
 
 When the upstream checkout from `metadata.source_repo_hint` is available, the
 gate also parses `config/lalapadgen2.keymap` directly and checks the manifest

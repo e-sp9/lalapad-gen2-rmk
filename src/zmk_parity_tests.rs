@@ -67,6 +67,17 @@ fn porting_coverage_includes_exact_rmk_inventory_gates() {
 
     let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     let results = parsed["results"].as_array().unwrap();
+    let manifest = porting_coverage_manifest_toml();
+    assert!(
+        manifest.get("source_regex_values").is_none(),
+        "ZMK source coverage should use structured inventory gates instead of regex-only checks"
+    );
+    assert!(
+        results
+            .iter()
+            .all(|result| result["kind"] != "zmk_source_regex"),
+        "porting coverage emitted regex-only ZMK source checks"
+    );
     let keyboard = keyboard_toml();
     let layers = keyboard["layout"]["layers"].as_integer().unwrap();
     let rows = keyboard["layout"]["rows"].as_integer().unwrap();
