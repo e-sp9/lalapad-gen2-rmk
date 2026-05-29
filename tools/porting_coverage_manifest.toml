@@ -2714,6 +2714,23 @@ script_contains = [
   "--firmware-ref-template \"$firmware_ref\"",
 ]
 
+[[makefile_task_invariants]]
+id = "makefile_current_migration_final_uses_clean_git_ref"
+task = "migration-status-final-current"
+script_contains = [
+  "HARDWARE_EVIDENCE",
+  "git status --porcelain --untracked-files=normal",
+  "git describe --tags --exact-match",
+  "git rev-parse --short=12 HEAD",
+  "tools/migration_status.py",
+  "--evidence \"$HARDWARE_EVIDENCE\"",
+  "--require-zmk-source",
+  "--require-software-complete",
+  "--require-hardware-classified",
+  "--require-hardware-validated",
+  "--require-firmware-ref \"$firmware_ref\"",
+]
+
 [[file_contains_invariants]]
 id = "firmware_workflow_dfu_and_release_artifacts"
 file = ".github/workflows/firmware.yml"

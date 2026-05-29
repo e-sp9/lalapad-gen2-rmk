@@ -354,6 +354,14 @@ The same final gate is available as:
 HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-final
 ```
 
+For evidence captured from the current clean commit, the current-ref variant
+derives the exact tag or short commit automatically and refuses tracked or
+untracked non-ignored changes:
+
+```sh
+HARDWARE_EVIDENCE=hardware-validation-evidence.local.toml cargo make migration-status-final-current
+```
+
 For the same Markdown dashboard that CI appends to the GitHub Actions summary,
 run:
 

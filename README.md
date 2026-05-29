@@ -288,6 +288,14 @@ cargo-make task is:
 HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-final
 ```
 
+For hardware evidence collected from the current clean commit, this variant
+derives the exact tag or short commit automatically and refuses tracked or
+untracked non-ignored changes before running the same final gate:
+
+```shell
+HARDWARE_EVIDENCE=hardware-validation-evidence.local.toml cargo make migration-status-final-current
+```
+
 For a local Markdown dashboard matching the CI summary, run:
 
 ```shell

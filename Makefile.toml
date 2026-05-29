@@ -151,6 +151,42 @@ fi
 python3 "$@"
 '''
 
+[tasks.migration-status-final-current]
+script = '''
+: "${HARDWARE_EVIDENCE:?set HARDWARE_EVIDENCE=path/to/evidence.toml}"
+if [ -n "$(git status --porcelain --untracked-files=normal)" ]; then
+  echo "working tree has tracked or untracked non-ignored changes; commit or stash them, or pass FIRMWARE_REF manually" >&2
+  exit 1
+fi
+
+firmware_ref="$(git describe --tags --exact-match 2>/dev/null || git rev-parse --short=12 HEAD)"
+zmk_keymap="${ZMK_KEYMAP:-}"
+if [ -z "$zmk_keymap" ]; then
+  if [ -f ../zmk-config-LalaPadGen2/config/lalapadgen2.keymap ]; then
+    zmk_keymap="../zmk-config-LalaPadGen2/config/lalapadgen2.keymap"
+  elif [ -f zmk-config-LalaPadGen2/config/lalapadgen2.keymap ]; then
+    zmk_keymap="zmk-config-LalaPadGen2/config/lalapadgen2.keymap"
+  fi
+fi
+
+set -- \
+  tools/migration_status.py \
+  --coverage-baseline tools/porting_coverage_baseline.toml \
+  --hardware-baseline tools/hardware_validation_baseline.toml \
+  --evidence "$HARDWARE_EVIDENCE" \
+  --require-zmk-source \
+  --require-software-complete \
+  --require-hardware-classified \
+  --require-hardware-validated \
+  --require-firmware-ref "$firmware_ref"
+
+if [ -n "$zmk_keymap" ]; then
+  set -- "$@" --zmk-keymap "$zmk_keymap"
+fi
+
+python3 "$@"
+'''
+
 [tasks.firmware-dirs]
 command = "mkdir"
 args = ["-p", "firmware/normal", "firmware/reset", "firmware/hex"]

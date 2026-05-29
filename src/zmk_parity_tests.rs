@@ -197,7 +197,7 @@ fn porting_coverage_complete_gate_accepts_explicit_status_completion() {
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("Porting coverage by kind:"));
-    assert!(stdout.contains("- build_task: 33/33 = 100.00%"));
+    assert!(stdout.contains("- build_task: 35/35 = 100.00%"));
     assert!(stdout.contains("- code_topology: 28/28 = 100.00%"));
     assert!(stdout.contains("- dependency: 21/21 = 100.00%"));
     assert!(stdout.contains("- gpio_flag_mirror: 36/36 = 100.00%"));
@@ -294,8 +294,8 @@ ported = 1
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("porting coverage baseline drift:"));
-    assert!(stderr.contains("coverage.total: expected baseline 1, got 3057"));
-    assert!(stderr.contains("coverage.result_count: expected baseline 1, got 503"));
+    assert!(stderr.contains("coverage.total: expected baseline 1, got 3059"));
+    assert!(stderr.contains("coverage.result_count: expected baseline 1, got 504"));
     assert!(stderr.contains("coverage.result_inventory_sha256: expected baseline bad"));
     assert!(
         stderr.contains("coverage.by_kind.behavior: actual report kind is missing from baseline")
@@ -583,7 +583,7 @@ fn migration_status_combines_software_and_hardware_progress() {
     );
     let stdout = String::from_utf8_lossy(&markdown.stdout);
     assert!(stdout.contains("## RMK Migration Status"));
-    assert!(stdout.contains("| Software coverage | 3057 | 3057 | 100.00% |"));
+    assert!(stdout.contains("| Software coverage | 3059 | 3059 | 100.00% |"));
     assert!(stdout.contains("### Hardware Progress By Area"));
     assert!(stdout.contains("| trackpad | 0 | 7 | 0.00% |"));
     assert!(stdout.contains("### Hardware Progress By Side"));
@@ -642,7 +642,7 @@ print(migration_status.markdown_table([
 fn migration_status_rejects_coverage_baseline_drift() {
     let bad_baseline = r#"
 [coverage]
-passed = 3057
+passed = 3059
 total = 1
 result_count = 1
 result_inventory_sha256 = "bad"
@@ -679,8 +679,8 @@ ported_by_config_image = 6
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("Software failures:"));
-    assert!(stdout.contains("coverage.total: expected baseline 1, got 3057"));
-    assert!(stdout.contains("coverage.result_count: expected baseline 1, got 503"));
+    assert!(stdout.contains("coverage.total: expected baseline 1, got 3059"));
+    assert!(stdout.contains("coverage.result_count: expected baseline 1, got 504"));
     assert!(stdout.contains("coverage.result_inventory_sha256: expected baseline bad"));
 }
 
@@ -1789,6 +1789,7 @@ fn local_validation_entrypoints_match_ci_gates() {
     let migration_status_task = makefile_task_block("migration-status");
     let migration_status_report_task = makefile_task_block("migration-status-report");
     let migration_status_final_task = makefile_task_block("migration-status-final");
+    let migration_status_final_current_task = makefile_task_block("migration-status-final-current");
     let hardware_validation_task = makefile_task_block("hardware-validation");
     let hardware_validation_report_task = makefile_task_block("hardware-validation-report");
     let hardware_validation_checklist_task = makefile_task_block("hardware-validation-checklist");
@@ -1801,6 +1802,10 @@ fn local_validation_entrypoints_match_ci_gates() {
         migration_status_report_task,
     );
     assert_task_prefers_sibling_zmk_checkout("migration-status-final", migration_status_final_task);
+    assert_task_prefers_sibling_zmk_checkout(
+        "migration-status-final-current",
+        migration_status_final_current_task,
+    );
 
     assert!(
         MAKEFILE_TOML.contains("--coverage-baseline")
@@ -1860,6 +1865,22 @@ fn local_validation_entrypoints_match_ci_gates() {
         "cargo make migration-status-final should require ZMK source, evidence, and firmware_ref for complete validation claims"
     );
     assert!(
+        migration_status_final_current_task.contains("HARDWARE_EVIDENCE")
+            && migration_status_final_current_task
+                .contains("git status --porcelain --untracked-files=normal")
+            && migration_status_final_current_task.contains("git describe --tags --exact-match")
+            && migration_status_final_current_task.contains("git rev-parse --short=12 HEAD")
+            && migration_status_final_current_task.contains("tools/migration_status.py")
+            && migration_status_final_current_task.contains("--evidence \"$HARDWARE_EVIDENCE\"")
+            && migration_status_final_current_task.contains("--require-zmk-source")
+            && migration_status_final_current_task.contains("--require-software-complete")
+            && migration_status_final_current_task.contains("--require-hardware-classified")
+            && migration_status_final_current_task.contains("--require-hardware-validated")
+            && migration_status_final_current_task
+                .contains("--require-firmware-ref \"$firmware_ref\""),
+        "cargo make migration-status-final-current should derive the final hardware gate firmware_ref from a clean current git ref"
+    );
+    assert!(
         hardware_validation_task.contains("tools/hardware_validation.py")
             && hardware_validation_task.contains("--hardware-baseline")
             && hardware_validation_task.contains("--require-classified"),
@@ -1905,6 +1926,7 @@ fn local_validation_entrypoints_match_ci_gates() {
         "HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-report",
         "tools/migration_status.py --coverage-baseline tools/porting_coverage_baseline.toml --hardware-baseline tools/hardware_validation_baseline.toml --zmk-keymap zmk-config-LalaPadGen2/config/lalapadgen2.keymap --evidence path/to/evidence.toml --require-zmk-source --require-software-complete --require-hardware-classified --require-hardware-validated --require-firmware-ref <tag-or-commit>",
         "HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-final",
+        "HARDWARE_EVIDENCE=hardware-validation-evidence.local.toml cargo make migration-status-final-current",
         "tools/hardware_validation.py --hardware-baseline tools/hardware_validation_baseline.toml --require-classified",
         "tools/hardware_validation.py --markdown",
         "tools/hardware_validation.py --checklist",
@@ -1953,11 +1975,13 @@ fn local_validation_entrypoints_match_ci_gates() {
         README_MD.contains("cargo make migration-status-report")
             && README_MD.contains("cargo make rmk-behavior-tests")
             && README_MD.contains("cargo make hardware-validation-evidence-template-current")
+            && README_MD.contains("HARDWARE_EVIDENCE=hardware-validation-evidence.local.toml cargo make migration-status-final-current")
             && README_MD.contains("HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-report")
             && PORTING_MD.contains("cargo make migration-status-report")
             && PORTING_MD.contains("cargo make rmk-behavior-tests")
-            && PORTING_MD.contains("cargo make hardware-validation-evidence-template-current"),
-        "README and porting notes should document the local Markdown migration dashboard, RMK behavior regression suite, and current-ref evidence template"
+            && PORTING_MD.contains("cargo make hardware-validation-evidence-template-current")
+            && PORTING_MD.contains("HARDWARE_EVIDENCE=hardware-validation-evidence.local.toml cargo make migration-status-final-current"),
+        "README and porting notes should document the local Markdown migration dashboard, RMK behavior regression suite, current-ref evidence template, and current-ref final gate"
     );
     assert!(
         PORTING_MD.contains("HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-report"),
@@ -4652,6 +4676,14 @@ with tempfile.TemporaryDirectory() as tempdir:
     )
     bad_current_template_task = pc.check_makefile_task_invariants(manifest, root)
 
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    (root / "Makefile.toml").write_text(
+        Path("Makefile.toml").read_text().replace('--require-firmware-ref "$firmware_ref"', '--require-firmware-ref "$FIRMWARE_REF"', 1),
+        encoding="utf-8",
+    )
+    bad_current_final_task = pc.check_makefile_task_invariants(manifest, root)
+
 def pack(results):
     return [result.__dict__ | {"ok": result.ok} for result in results]
 
@@ -4661,6 +4693,7 @@ print(json.dumps({
     "bad_uf2_gate": pack(bad_uf2_gate),
     "bad_rmk_behavior_task": pack(bad_rmk_behavior_task),
     "bad_current_template_task": pack(bad_current_template_task),
+    "bad_current_final_task": pack(bad_current_final_task),
 }))
 "#,
     );
@@ -4674,19 +4707,19 @@ print(json.dumps({
 
     let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     let ok = parsed["ok"].as_array().unwrap();
-    assert_eq!(ok.len(), 10);
+    assert_eq!(ok.len(), 11);
     assert!(ok.iter().all(|result| result["kind"] == "build_task"));
     assert_eq!(
         ok.iter()
             .map(|result| result["passed"].as_i64().unwrap())
             .sum::<i64>(),
-        33
+        35
     );
     assert_eq!(
         ok.iter()
             .map(|result| result["total"].as_i64().unwrap())
             .sum::<i64>(),
-        33
+        35
     );
 
     let bad_family = parsed["bad_family"]
@@ -4749,6 +4782,21 @@ print(json.dumps({
             .as_str()
             .unwrap()
             .contains("tasks.hardware-validation-evidence-template-current.script missing required values ['git status --porcelain --untracked-files=normal']")
+    );
+
+    let bad_current_final_task = parsed["bad_current_final_task"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "makefile_current_migration_final_uses_clean_git_ref")
+        .expect("changed current final migration status task result is missing");
+    assert_eq!(bad_current_final_task["kind"], "build_task");
+    assert_eq!(bad_current_final_task["ok"], false);
+    assert!(
+        bad_current_final_task["message"]
+            .as_str()
+            .unwrap()
+            .contains("tasks.migration-status-final-current.script missing required values ['--require-firmware-ref \"$firmware_ref\"']")
     );
 }
 
