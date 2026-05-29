@@ -112,7 +112,7 @@ Reset/storage-clear UF2 files, when generated for hardware testing, are kept und
 
 ```shell
 python3 -m json.tool vial.json >/tmp/lalapad-vial-check.json
-python3 -c 'import tomllib; tomllib.load(open("keyboard.toml", "rb")); tomllib.load(open("Cargo.toml", "rb")); print("toml ok")'
+python3 -c 'import tomllib; [tomllib.load(open(path, "rb")) for path in ("keyboard.toml", "Cargo.toml", "tools/porting_coverage_manifest.toml")]; print("toml ok")'
 rmkit get-chip --keyboard-toml-path keyboard.toml
 rmkit get-project-name --keyboard-toml-path keyboard.toml
 python3 tools/porting_coverage.py --require-zmk-source
@@ -159,8 +159,9 @@ keymap to catch transparent-key fallthrough drift. ZMK hold-tap timing values
 are also mirrored against the RMK Morse timing settings. Use
 `--zmk-keymap PATH --require-zmk-source` when the source-backed check must be
 mandatory in another checkout layout. The firmware CI checks out
-`e-sp9/zmk-config-LalaPadGen2`, runs this source-backed gate, and then runs the
-host-side parity test suite before building release binaries.
+`e-sp9/zmk-config-LalaPadGen2`, parses `vial.json`, RMK/Cargo/manifest TOML,
+and flash layout, runs this source-backed gate, and then runs the host-side
+parity test suite before building release binaries.
 
 Host-side parity tests can be run explicitly with:
 

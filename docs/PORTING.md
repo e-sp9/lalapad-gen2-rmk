@@ -255,8 +255,9 @@ python3 tools/porting_coverage.py --require-zmk-source
 ```
 
 The firmware GitHub Actions workflow checks out `e-sp9/zmk-config-LalaPadGen2`,
-runs this source-backed gate, and runs the host-side parity test suite before
-building release binaries. The gate
+parses `vial.json`, RMK/Cargo/manifest TOML, and flash layout, runs this
+source-backed gate, and runs the host-side parity test suite before building
+release binaries. The gate
 must report `100.00%` against the committed upstream checkout used by CI. The
 denominator can grow when upstream source files add classified behavior, so the
 exact count should be read from the command output. This is a static,
