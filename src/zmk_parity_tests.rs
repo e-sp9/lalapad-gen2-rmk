@@ -156,6 +156,7 @@ fn porting_coverage_complete_gate_accepts_explicit_status_completion() {
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("Porting coverage by kind:"));
+    assert!(stdout.contains("- build_task: 29/29 = 100.00%"));
     assert!(stdout.contains("- code_topology: 28/28 = 100.00%"));
     assert!(stdout.contains("- dependency: 21/21 = 100.00%"));
     assert!(stdout.contains("- gpio_flag_mirror: 36/36 = 100.00%"));
@@ -250,8 +251,8 @@ ported = 1
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("porting coverage baseline drift:"));
-    assert!(stderr.contains("coverage.total: expected baseline 1, got 2987"));
-    assert!(stderr.contains("coverage.result_count: expected baseline 1, got 488"));
+    assert!(stderr.contains("coverage.total: expected baseline 1, got 3016"));
+    assert!(stderr.contains("coverage.result_count: expected baseline 1, got 496"));
     assert!(stderr.contains("coverage.result_inventory_sha256: expected baseline bad"));
     assert!(
         stderr.contains("coverage.by_kind.behavior: actual report kind is missing from baseline")
@@ -530,7 +531,7 @@ fn migration_status_combines_software_and_hardware_progress() {
     );
     let stdout = String::from_utf8_lossy(&markdown.stdout);
     assert!(stdout.contains("## RMK Migration Status"));
-    assert!(stdout.contains("| Software coverage | 2987 | 2987 | 100.00% |"));
+    assert!(stdout.contains("| Software coverage | 3016 | 3016 | 100.00% |"));
     assert!(stdout.contains("### Hardware Progress By Area"));
     assert!(stdout.contains("| trackpad | 0 | 7 | 0.00% |"));
     assert!(stdout.contains("### Hardware Progress By Side"));
@@ -543,7 +544,7 @@ fn migration_status_combines_software_and_hardware_progress() {
 fn migration_status_rejects_coverage_baseline_drift() {
     let bad_baseline = r#"
 [coverage]
-passed = 2987
+passed = 3016
 total = 1
 result_count = 1
 result_inventory_sha256 = "bad"
@@ -580,8 +581,8 @@ ported_by_config_image = 6
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("Software failures:"));
-    assert!(stdout.contains("coverage.total: expected baseline 1, got 2987"));
-    assert!(stdout.contains("coverage.result_count: expected baseline 1, got 488"));
+    assert!(stdout.contains("coverage.total: expected baseline 1, got 3016"));
+    assert!(stdout.contains("coverage.result_count: expected baseline 1, got 496"));
     assert!(stdout.contains("coverage.result_inventory_sha256: expected baseline bad"));
 }
 
@@ -3912,6 +3913,106 @@ print(json.dumps({
             .as_str()
             .unwrap()
             .contains("local path patch")
+    );
+}
+
+#[test]
+fn porting_coverage_rejects_makefile_release_task_drift() {
+    let output = run_python(
+        r#"
+import importlib.util
+import json
+import sys
+import tempfile
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("porting_coverage", "tools/porting_coverage.py")
+pc = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = pc
+spec.loader.exec_module(pc)
+
+manifest = pc.load_toml(Path("tools/porting_coverage_manifest.toml"))
+ok = pc.check_makefile_task_invariants(manifest, Path("."))
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    (root / "Makefile.toml").write_text(
+        Path("Makefile.toml").read_text().replace('"nrf52840"', '"rp2040"', 1),
+        encoding="utf-8",
+    )
+    bad_family = pc.check_makefile_task_invariants(manifest, root)
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    (root / "Makefile.toml").write_text(
+        Path("Makefile.toml").read_text().replace('dependencies = ["flash-layout"]', 'dependencies = ["uf2-central"]', 1),
+        encoding="utf-8",
+    )
+    bad_uf2_gate = pc.check_makefile_task_invariants(manifest, root)
+
+def pack(results):
+    return [result.__dict__ | {"ok": result.ok} for result in results]
+
+print(json.dumps({
+    "ok": pack(ok),
+    "bad_family": pack(bad_family),
+    "bad_uf2_gate": pack(bad_uf2_gate),
+}))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "Makefile task invariant check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let ok = parsed["ok"].as_array().unwrap();
+    assert_eq!(ok.len(), 8);
+    assert!(ok.iter().all(|result| result["kind"] == "build_task"));
+    assert_eq!(
+        ok.iter()
+            .map(|result| result["passed"].as_i64().unwrap())
+            .sum::<i64>(),
+        29
+    );
+    assert_eq!(
+        ok.iter()
+            .map(|result| result["total"].as_i64().unwrap())
+            .sum::<i64>(),
+        29
+    );
+
+    let bad_family = parsed["bad_family"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "makefile_uf2_central_family_and_paths")
+        .expect("changed central UF2 task result is missing");
+    assert_eq!(bad_family["kind"], "build_task");
+    assert_eq!(bad_family["ok"], false);
+    assert!(
+        bad_family["message"]
+            .as_str()
+            .unwrap()
+            .contains("tasks.uf2-central.args missing required values ['nrf52840']")
+    );
+
+    let bad_uf2_gate = parsed["bad_uf2_gate"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "makefile_uf2_target_runs_flash_layout")
+        .expect("changed UF2 aggregate task result is missing");
+    assert_eq!(bad_uf2_gate["kind"], "build_task");
+    assert_eq!(bad_uf2_gate["ok"], false);
+    assert!(
+        bad_uf2_gate["message"]
+            .as_str()
+            .unwrap()
+            .contains("tasks.uf2.dependencies missing required values ['flash-layout']")
     );
 }
 

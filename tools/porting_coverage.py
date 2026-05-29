@@ -3220,6 +3220,68 @@ def check_cargo_dependency_invariants(manifest: dict[str, Any], project_root: Pa
     return results
 
 
+def check_makefile_task_invariants(manifest: dict[str, Any], project_root: Path) -> list[Result]:
+    checks = list(manifest.get("makefile_task_invariants", []))
+    if not checks:
+        return []
+
+    try:
+        makefile = load_toml(project_root / "Makefile.toml")
+    except (OSError, tomllib.TOMLDecodeError) as e:
+        return [Result("makefile.toml", "build_task", 0, 1, str(e))]
+
+    tasks = makefile.get("tasks", {})
+    results: list[Result] = []
+    for check in checks:
+        task_name = str(check["task"])
+        task = tasks.get(task_name)
+        passed = 0
+        total = 1
+        messages: list[str] = []
+        if isinstance(task, dict):
+            passed += 1
+        else:
+            messages.append(f"missing [tasks.{task_name}]")
+            task = {}
+
+        for field in ["command"]:
+            if field not in check:
+                continue
+            total += 1
+            expected = check[field]
+            actual = task.get(field)
+            if actual == expected:
+                passed += 1
+            else:
+                messages.append(f"tasks.{task_name}.{field} expected {expected!r}, got {actual!r}")
+
+        for field, actual_field in [
+            ("args_contains", "args"),
+            ("dependencies_include", "dependencies"),
+        ]:
+            if field not in check:
+                continue
+            total += 1
+            expected_values = list(check[field])
+            actual_values = list(task.get(actual_field, []))
+            missing = [value for value in expected_values if value not in actual_values]
+            if not missing:
+                passed += 1
+            else:
+                messages.append(f"tasks.{task_name}.{actual_field} missing required values {missing!r}")
+
+        results.append(
+            Result(
+                check["id"],
+                "build_task",
+                passed,
+                total,
+                "ok" if not messages else "; ".join(messages),
+            )
+        )
+    return results
+
+
 def check_rust_const_inventories(manifest: dict[str, Any], project_root: Path) -> list[Result]:
     results: list[Result] = []
     for check in manifest.get("rust_const_inventories", []):
@@ -4566,6 +4628,7 @@ def run(
     results.extend(check_scenarios(manifest, keyboard))
     results.extend(check_code_contains(manifest, project_root))
     results.extend(check_code_topology(manifest, project_root))
+    results.extend(check_makefile_task_invariants(manifest, project_root))
     results.extend(check_trackpad_virtual_buttons(manifest, keyboard, project_root))
     results.extend(check_vial_keyboard_toml_layout(manifest, keyboard, project_root))
     results.extend(

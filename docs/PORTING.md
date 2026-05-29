@@ -275,6 +275,10 @@ The Cargo dependency checks also keep RMK default features enabled so the
 default storage/Vial support from the selected RMK release is not accidentally
 disabled, and they pin the split firmware entrypoints to the expected
 `central` and `peripheral` binaries.
+The build-task checks pin the cargo-make release path as well: release builds
+must run the flash-layout config guard, objcopy the central and peripheral
+ELFs into matching HEX files, convert both halves to nRF52840 UF2 artifacts,
+and run the generated-UF2 flash-layout guard.
 The same command also prints an explicit IQS9151 symbol porting status summary:
 `ported`, `ported_by_behavior`, and `ported_by_config_image` count as
 implemented, while `not_ported` entries are the remaining software-porting

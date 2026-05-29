@@ -2633,6 +2633,59 @@ bins = [
   { name = "peripheral", path = "src/peripheral.rs", test = false, bench = false },
 ]
 
+[[makefile_task_invariants]]
+id = "makefile_build_runs_release_with_flash_layout_config"
+task = "build"
+command = "cargo"
+args_contains = ["build", "--release"]
+dependencies_include = ["install-llvm-tools", "flip-link", "flash-layout-config"]
+
+[[makefile_task_invariants]]
+id = "makefile_flash_layout_config_guard"
+task = "flash-layout-config"
+command = "python3"
+args_contains = ["tools/check_flash_layout.py", "--config-only"]
+
+[[makefile_task_invariants]]
+id = "makefile_objcopy_central_hex"
+task = "objcopy-central"
+command = "cargo"
+args_contains = ["objcopy", "--release", "--bin", "central", "--", "-O", "ihex", "firmware/hex/lalapad-gen2-rmk-central.hex"]
+dependencies_include = ["firmware-dirs", "build"]
+
+[[makefile_task_invariants]]
+id = "makefile_objcopy_peripheral_hex"
+task = "objcopy-peripheral"
+command = "cargo"
+args_contains = ["objcopy", "--release", "--bin", "peripheral", "--", "-O", "ihex", "firmware/hex/lalapad-gen2-rmk-peripheral.hex"]
+dependencies_include = ["firmware-dirs", "build"]
+
+[[makefile_task_invariants]]
+id = "makefile_uf2_central_family_and_paths"
+task = "uf2-central"
+command = "cargo"
+args_contains = ["hex-to-uf2", "--input-path", "firmware/hex/lalapad-gen2-rmk-central.hex", "--output-path", "firmware/normal/lalapad-gen2-rmk-central.uf2", "--family", "nrf52840"]
+dependencies_include = ["objcopy-central"]
+
+[[makefile_task_invariants]]
+id = "makefile_uf2_peripheral_family_and_paths"
+task = "uf2-peripheral"
+command = "cargo"
+args_contains = ["hex-to-uf2", "--input-path", "firmware/hex/lalapad-gen2-rmk-peripheral.hex", "--output-path", "firmware/normal/lalapad-gen2-rmk-peripheral.uf2", "--family", "nrf52840"]
+dependencies_include = ["objcopy-peripheral"]
+
+[[makefile_task_invariants]]
+id = "makefile_uf2_requires_flash_layout"
+task = "flash-layout"
+command = "python3"
+args_contains = ["tools/check_flash_layout.py", "--require-uf2"]
+dependencies_include = ["uf2-central", "uf2-peripheral"]
+
+[[makefile_task_invariants]]
+id = "makefile_uf2_target_runs_flash_layout"
+task = "uf2"
+dependencies_include = ["flash-layout"]
+
 [[code_contains]]
 id = "central_iqs9151_pins_and_side"
 file = "src/central.rs"
