@@ -188,10 +188,12 @@ but it does not use `--require-validated` because real hardware evidence cannot
 be created by GitHub Actions. The CI job also writes
 `python3 tools/hardware_validation.py --markdown` to the GitHub Actions step
 summary so remaining real-device evidence is visible next to each release
-build. Real hardware results can be kept in a separate overlay file using the
-format shown in `tools/hardware_validation_evidence.example.toml` and passed
-with `--evidence path/to/evidence.toml`; this lets the manifest remain the
-stable requirement list while measured evidence drives the validation rate.
+build. Reports include overall, area-level, and side-level validation progress
+so trackpad, split, Vial, status LED, battery, and storage gaps remain visible.
+Real hardware results can be kept in a separate overlay file using the format
+shown in `tools/hardware_validation_evidence.example.toml` and passed with
+`--evidence path/to/evidence.toml`; this lets the manifest remain the stable
+requirement list while measured evidence drives the validation rate.
 Validated evidence must include `validated_at`, `tester`, `firmware_ref`, and
 `artifact_or_notes`. `firmware_ref` is compared as an exact string, usually a
 release tag or commit hash for the central/peripheral firmware pair flashed

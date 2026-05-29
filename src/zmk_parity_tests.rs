@@ -168,6 +168,15 @@ fn hardware_validation_manifest_is_classified_but_not_release_blocking() {
         parsed["by_status"]["requires_hardware"].as_i64().unwrap() > 0,
         "real-hardware validation gaps should remain visible separately from source porting"
     );
+    assert_eq!(parsed["by_area"]["trackpad"]["total"].as_i64(), Some(7));
+    assert_eq!(parsed["by_area"]["trackpad"]["validated"].as_i64(), Some(0));
+    assert_eq!(
+        parsed["by_area"]["trackpad"]["by_status"]["requires_hardware"].as_i64(),
+        Some(7)
+    );
+    assert_eq!(parsed["by_side"]["right"]["total"].as_i64(), Some(5));
+    assert_eq!(parsed["by_side"]["left"]["total"].as_i64(), Some(3));
+    assert_eq!(parsed["by_side"]["both"]["total"].as_i64(), Some(4));
     assert!(
         FIRMWARE_WORKFLOW_YAML
             .contains("python3 tools/hardware_validation.py --require-classified"),
@@ -232,6 +241,13 @@ fn hardware_validation_markdown_report_lists_required_evidence() {
     assert!(stdout.contains(&format!(
         "Hardware validation: 0/{expected_total} = 0.00% validated"
     )));
+    assert!(stdout.contains("### Progress By Area"));
+    assert!(stdout.contains("| Area | Validated | Total | Rate | Status counts |"));
+    assert!(stdout.contains("| trackpad | 0 | 7 | 0.00% | `requires_hardware`=7 |"));
+    assert!(stdout.contains("### Progress By Side"));
+    assert!(stdout.contains("| Side | Validated | Total | Rate | Status counts |"));
+    assert!(stdout.contains("| right | 0 | 5 | 0.00% | `requires_hardware`=5 |"));
+    assert!(stdout.contains("### Checks"));
     assert!(stdout.contains(
         "| ID | Area | Side | Status | Requirement | Required evidence | Validated at | Tester | Firmware ref | Artifact/notes |"
     ));
@@ -440,6 +456,14 @@ artifact_or_notes = "I2C scan found 0x56 and product register 0x1000 read 0x09bc
     assert_eq!(parsed["validated"].as_i64(), Some(1));
     assert_eq!(parsed["by_status"]["validated"].as_i64(), Some(1));
     assert_eq!(parsed["by_status"]["requires_hardware"].as_i64(), Some(11));
+    assert_eq!(parsed["by_area"]["trackpad"]["total"].as_i64(), Some(7));
+    assert_eq!(parsed["by_area"]["trackpad"]["validated"].as_i64(), Some(1));
+    assert!(
+        (parsed["by_area"]["trackpad"]["rate"].as_f64().unwrap() - (100.0 / 7.0)).abs() < 1e-12
+    );
+    assert_eq!(parsed["by_side"]["right"]["total"].as_i64(), Some(5));
+    assert_eq!(parsed["by_side"]["right"]["validated"].as_i64(), Some(1));
+    assert_eq!(parsed["by_side"]["right"]["rate"].as_f64(), Some(20.0));
     assert_eq!(parsed["errors"].as_array().unwrap().len(), 0);
 }
 
@@ -511,6 +535,16 @@ artifact_or_notes = "missing firmware_ref should not count"
     let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(parsed["validated"].as_i64(), Some(0));
     assert_eq!(parsed["classified"].as_bool(), Some(false));
+    assert_eq!(parsed["by_area"]["trackpad"]["validated"].as_i64(), Some(0));
+    assert_eq!(
+        parsed["by_area"]["trackpad"]["by_status"]["validated"].as_i64(),
+        Some(1)
+    );
+    assert_eq!(parsed["by_side"]["right"]["validated"].as_i64(), Some(0));
+    assert_eq!(
+        parsed["by_side"]["right"]["by_status"]["validated"].as_i64(),
+        Some(1)
+    );
     assert!(
         parsed["errors"].as_array().unwrap()[0]
             .as_str()

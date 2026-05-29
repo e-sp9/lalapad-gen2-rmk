@@ -40,6 +40,8 @@ class HardwareValidationSummary:
     total: int
     validated: int
     by_status: dict[str, int]
+    by_area: dict[str, dict[str, Any]]
+    by_side: dict[str, dict[str, Any]]
     remaining: list[dict[str, str]]
     errors: list[str]
 
@@ -164,15 +166,31 @@ def summarize(
 ) -> HardwareValidationSummary:
     checks = manifest.get("checks", [])
     by_status = {status: 0 for status in sorted(VALID_STATUSES)}
+    by_area: dict[str, dict[str, Any]] = {}
+    by_side: dict[str, dict[str, Any]] = {}
     remaining: list[dict[str, str]] = []
     errors = list(initial_errors or [])
     seen_ids: set[str] = set()
     validated = 0
 
     if not isinstance(checks, list):
-        return HardwareValidationSummary(0, 0, by_status, [], ["checks must be an array"])
+        return HardwareValidationSummary(
+            0, 0, by_status, {}, {}, [], ["checks must be an array"]
+        )
     if not checks:
         errors.append("checks must contain at least one hardware validation item")
+
+    def progress_bucket(group: dict[str, dict[str, Any]], key: str) -> dict[str, Any]:
+        bucket = group.setdefault(
+            key,
+            {
+                "total": 0,
+                "validated": 0,
+                "rate": None,
+                "by_status": {status: 0 for status in sorted(VALID_STATUSES)},
+            },
+        )
+        return bucket
 
     for index, check in enumerate(checks):
         if not isinstance(check, dict):
@@ -180,6 +198,13 @@ def summarize(
             continue
 
         check_id = str(check.get("id", f"#{index + 1}"))
+        area = str(check.get("area", ""))
+        side = str(check.get("side", ""))
+        area_bucket = progress_bucket(by_area, area)
+        side_bucket = progress_bucket(by_side, side)
+        for bucket in [area_bucket, side_bucket]:
+            bucket["total"] += 1
+
         missing = [field for field in REQUIRED_FIELDS if not str(check.get(field, "")).strip()]
         if missing:
             errors.append(f"{check_id}: missing required field(s): {', '.join(missing)}")
@@ -196,6 +221,9 @@ def summarize(
             errors.append(f"{check_id}: invalid status {status!r}")
         else:
             by_status[status] += 1
+            area_bucket["by_status"][status] += 1
+            side_bucket["by_status"][status] += 1
+            counts_as_validated = False
             if status in VALIDATED_STATUSES:
                 missing_evidence = [
                     field
@@ -218,21 +246,35 @@ def summarize(
                     )
                 else:
                     validated += 1
+                    counts_as_validated = True
             else:
                 remaining.append(
                     {
                         "id": check_id,
-                        "area": str(check.get("area", "")),
-                        "side": str(check.get("side", "")),
+                        "area": area,
+                        "side": side,
                         "status": status,
                         "evidence": str(check.get("evidence", "")),
                     }
                 )
+            if counts_as_validated:
+                area_bucket["validated"] += 1
+                side_bucket["validated"] += 1
+
+    for group in [by_area, by_side]:
+        for bucket in group.values():
+            bucket["rate"] = (
+                None
+                if bucket["total"] == 0
+                else bucket["validated"] / bucket["total"] * 100
+            )
 
     return HardwareValidationSummary(
         total=len(checks),
         validated=validated,
         by_status=by_status,
+        by_area=dict(sorted(by_area.items())),
+        by_side=dict(sorted(by_side.items())),
         remaining=remaining,
         errors=errors,
     )
@@ -244,6 +286,8 @@ def as_json(summary: HardwareValidationSummary) -> dict[str, Any]:
         "validated": summary.validated,
         "rate": summary.rate,
         "by_status": summary.by_status,
+        "by_area": summary.by_area,
+        "by_side": summary.by_side,
         "remaining": summary.remaining,
         "errors": summary.errors,
         "classified": summary.classified,
@@ -314,9 +358,33 @@ def as_markdown(manifest: dict[str, Any], summary: HardwareValidationSummary) ->
         "",
         f"Status: {status_counts or 'none'}",
         "",
-        "| ID | Area | Side | Status | Requirement | Required evidence | Validated at | Tester | Firmware ref | Artifact/notes |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        "### Progress By Area",
+        "",
+        "| Area | Validated | Total | Rate | Status counts |",
+        "| --- | --- | --- | --- | --- |",
     ]
+    for area, progress in summary.by_area.items():
+        lines.append(progress_markdown_row("Area", area, progress))
+    lines.extend(
+        [
+            "",
+            "### Progress By Side",
+            "",
+            "| Side | Validated | Total | Rate | Status counts |",
+            "| --- | --- | --- | --- | --- |",
+        ]
+    )
+    for side, progress in summary.by_side.items():
+        lines.append(progress_markdown_row("Side", side, progress))
+    lines.extend(
+        [
+            "",
+            "### Checks",
+            "",
+            "| ID | Area | Side | Status | Requirement | Required evidence | Validated at | Tester | Firmware ref | Artifact/notes |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        ]
+    )
     for check in manifest.get("checks", []):
         if not isinstance(check, dict):
             continue
@@ -340,6 +408,21 @@ def as_markdown(manifest: dict[str, Any], summary: HardwareValidationSummary) ->
     return "\n".join(lines) + "\n"
 
 
+def progress_markdown_row(label: str, value: str, progress: dict[str, Any]) -> str:
+    rate = progress.get("rate")
+    rate_text = "n/a" if rate is None else f"{rate:.2f}%"
+    status_counts = ", ".join(
+        f"`{status}`={count}"
+        for status, count in progress.get("by_status", {}).items()
+        if count
+    )
+    return (
+        f"| {markdown_escape(value or f'unknown {label.lower()}')} | "
+        f"{progress.get('validated', 0)} | {progress.get('total', 0)} | "
+        f"{rate_text} | {status_counts or 'none'} |"
+    )
+
+
 def print_text(summary: HardwareValidationSummary) -> None:
     if summary.rate is None:
         print("Hardware validation: 0/0 = n/a")
@@ -352,6 +435,17 @@ def print_text(summary: HardwareValidationSummary) -> None:
         f"{status}={count}" for status, count in summary.by_status.items() if count
     )
     print(f"Hardware validation status: {status_counts or 'none'}")
+    for label, group in [("area", summary.by_area), ("side", summary.by_side)]:
+        if group:
+            print(f"Hardware validation by {label}:")
+            for key, progress in group.items():
+                rate = progress.get("rate")
+                rate_text = "n/a" if rate is None else f"{rate:.2f}%"
+                print(
+                    f"- {key or f'unknown {label}'}: "
+                    f"{progress.get('validated', 0)}/{progress.get('total', 0)} = "
+                    f"{rate_text}"
+                )
     if summary.remaining:
         print("Hardware validation remaining:")
         for item in summary.remaining:

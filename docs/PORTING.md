@@ -295,14 +295,16 @@ python3 tools/hardware_validation.py --evidence path/to/evidence.toml --require-
 ```
 
 The command prints the real-hardware validation rate and remaining evidence
-needed. CI uses `--require-classified` only, which means every hardware-only
-item must have a valid status, evidence description, and `source` link to an
-existing Markdown heading. CI intentionally does not use `--require-validated`;
-changing a check to `validated` requires actual device evidence from the
-checklist, not just a green software build. The Markdown mode emits the same
-tracker as a table for release notes, PR review, and the GitHub Actions step
-summary. Hardware evidence can also be recorded in a separate overlay file using
-the format in
+needed. JSON, text, and Markdown output include area-level and side-level
+progress so trackpad, split, Vial, status LED, battery, and storage gaps can be
+tracked independently. CI uses `--require-classified` only, which means every
+hardware-only item must have a valid status, evidence description, and `source`
+link to an existing Markdown heading. CI intentionally does not use
+`--require-validated`; changing a check to `validated` requires actual device
+evidence from the checklist, not just a green software build. The Markdown mode
+emits the same tracker as tables for release notes, PR review, and the GitHub
+Actions step summary. Hardware evidence can also be recorded in a separate
+overlay file using the format in
 `tools/hardware_validation_evidence.example.toml`; each evidence entry updates
 one manifest check by id and must provide `validated_at`, `tester`,
 `firmware_ref`, and `artifact_or_notes` before it can count as `validated`.
