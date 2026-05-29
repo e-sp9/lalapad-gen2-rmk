@@ -1852,6 +1852,131 @@ def check_west_manifest_inventory(manifest: dict[str, Any], zmk_config_dir: Path
     return [ordered_inventory_result("zmk_source.west_manifest", "zmk_inventory", expected, actual)]
 
 
+def yaml_scalar(value: str | None) -> str:
+    if value is None:
+        return ""
+    value = value.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+        return value[1:-1]
+    return value
+
+
+def zmk_build_file_inventory(text: str) -> list[str]:
+    items: list[str] = []
+    current_include: dict[str, str] | None = None
+    current_include_index = -1
+    top_section: str | None = None
+    build_section: str | None = None
+    include_keys = {"board", "shield", "snippet"}
+
+    def flush_include() -> None:
+        nonlocal current_include
+        if current_include:
+            item = (
+                f"include:board={current_include.get('board')}:"
+                f"shield={current_include.get('shield')}"
+            )
+            if "snippet" in current_include:
+                item += f":snippet={current_include['snippet']}"
+            items.append(item)
+        current_include = None
+
+    for raw_line in text.splitlines():
+        line = raw_line.split("#", 1)[0].rstrip()
+        if not line.strip() or line.strip() == "---":
+            continue
+        indent = len(line) - len(line.lstrip(" "))
+
+        if match := re.fullmatch(r"([A-Za-z0-9_-]+):(?:\s+(.+?))?", line):
+            flush_include()
+            top_section = match.group(1)
+            build_section = None
+            if top_section not in {"include", "build"}:
+                items.append(f"unknown.top_level.{top_section}={yaml_scalar(match.group(2))}")
+            continue
+
+        if top_section == "include":
+            if match := re.fullmatch(r"  -\s+([A-Za-z0-9_-]+):\s+(.+?)", line):
+                flush_include()
+                current_include_index += 1
+                key = match.group(1)
+                value = yaml_scalar(match.group(2))
+                current_include = {}
+                if key in include_keys:
+                    current_include[key] = value
+                else:
+                    items.append(f"include.{current_include_index}.{key}={value}")
+                continue
+            if current_include is not None:
+                if match := re.fullmatch(r"    ([A-Za-z0-9_-]+):\s+(.+?)", line):
+                    key = match.group(1)
+                    value = yaml_scalar(match.group(2))
+                    if key in include_keys:
+                        current_include[key] = value
+                    else:
+                        items.append(f"include.{current_include_index}.{key}={value}")
+                    continue
+            items.append(f"include.unparsed={line.strip()}")
+            continue
+
+        flush_include()
+        if top_section == "build":
+            if match := re.fullmatch(r"  ([A-Za-z0-9_-]+):(?:\s+(.+?))?", line):
+                build_section = match.group(1)
+                if build_section != "settings":
+                    items.append(f"build.{build_section}={yaml_scalar(match.group(2))}")
+                continue
+            if build_section == "settings":
+                if match := re.fullmatch(r"    ([A-Za-z0-9_-]+):\s+(.+?)", line):
+                    key = match.group(1)
+                    value = yaml_scalar(match.group(2))
+                    if key == "board_root":
+                        items.append(f"build.settings.board_root={value}")
+                    else:
+                        items.append(f"build.settings.{key}={value}")
+                    continue
+            if build_section is not None:
+                if match := re.fullmatch(r"    ([A-Za-z0-9_-]+):\s+(.+?)", line):
+                    items.append(
+                        f"build.{build_section}.{match.group(1)}={yaml_scalar(match.group(2))}"
+                    )
+                    continue
+            items.append(f"build.unparsed={line.strip()}")
+            continue
+
+        if top_section is not None:
+            items.append(f"{top_section}.unparsed={line.strip()}")
+        else:
+            items.append(f"unknown.unparsed={line.strip()}")
+    flush_include()
+    return items
+
+
+def check_zmk_build_file_inventory(
+    manifest: dict[str, Any], zmk_config_dir: Path
+) -> list[Result]:
+    results: list[Result] = []
+    for check in manifest.get("source_inventory", {}).get("build_files", []):
+        source_file = check["source_file"]
+        expected = list(check["expected"])
+        source_path = zmk_config_dir / source_file
+        result_id = f"zmk_source.build_file_inventory.{source_file}"
+        if not source_path.exists():
+            results.append(
+                Result(
+                    result_id,
+                    "zmk_inventory",
+                    0,
+                    max(1, len(expected)),
+                    f"missing ZMK build source file {source_file!r}",
+                )
+            )
+            continue
+        actual = zmk_build_file_inventory(source_path.read_text())
+        results.append(ordered_inventory_result(result_id, "zmk_inventory", expected, actual))
+    return results
+
+
 def check_zmk_dts_status_inventory(manifest: dict[str, Any], zmk_config_dir: Path) -> list[Result]:
     inventory = manifest.get("source_inventory", {})
     results: list[Result] = []
@@ -2464,6 +2589,7 @@ def check_zmk_source(
     results.extend(check_zmk_dts_property_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_gpio_property_inventory(manifest, zmk_config_dir))
     results.extend(check_west_manifest_inventory(manifest, zmk_config_dir))
+    results.extend(check_zmk_build_file_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_config_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_dts_status_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_pin_values(manifest, keyboard, zmk_config_dir))

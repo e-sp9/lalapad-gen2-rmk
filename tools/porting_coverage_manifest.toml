@@ -27,6 +27,10 @@ combo_properties = [
   { source_file = "lalapadgen2.keymap", source_block = "CONBO_ESC", expected = ["bindings=<&kp ESCAPE>", "key-positions=<0 1>"] },
   { source_file = "lalapadgen2.keymap", source_block = "COMBO_TAB", expected = ["bindings=<&kp TAB>", "key-positions=<10 11>"] },
 ]
+build_files = [
+  { source_file = "../build.yaml", expected = ["include:board=seeeduino_xiao_ble:shield=lalapadgen2_right rgbled_adapter:snippet=studio-rpc-usb-uart", "include:board=seeeduino_xiao_ble:shield=lalapadgen2_left rgbled_adapter", "include:board=seeeduino_xiao_ble:shield=settings_reset"] },
+  { source_file = "../zephyr/module.yml", expected = ["build.settings.board_root=."] },
+]
 source_files = [
   "boards/shields/lalapadgen2/Kconfig.defconfig",
   "boards/shields/lalapadgen2/Kconfig.shield",

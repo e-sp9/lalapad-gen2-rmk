@@ -494,6 +494,26 @@ fn porting_coverage_includes_exact_rmk_inventory_gates() {
         assert_eq!(west_inventory["passed"].as_i64(), Some(expected_west_items));
         assert_eq!(west_inventory["total"].as_i64(), Some(expected_west_items));
         assert_eq!(west_inventory["ok"], true);
+
+        for build_file in porting_coverage_manifest_toml()["source_inventory"]["build_files"]
+            .as_array()
+            .unwrap()
+        {
+            let source_file = build_file["source_file"].as_str().unwrap();
+            let expected_items = build_file["expected"].as_array().unwrap().len() as i64;
+            let build_inventory = results
+                .iter()
+                .find(|result| {
+                    result["id"] == format!("zmk_source.build_file_inventory.{source_file}")
+                })
+                .unwrap_or_else(|| {
+                    panic!("ZMK build file inventory coverage result is missing for {source_file}")
+                });
+            assert_eq!(build_inventory["kind"], "zmk_inventory");
+            assert_eq!(build_inventory["passed"].as_i64(), Some(expected_items));
+            assert_eq!(build_inventory["total"].as_i64(), Some(expected_items));
+            assert_eq!(build_inventory["ok"], true);
+        }
     }
 }
 
@@ -2450,6 +2470,188 @@ print(json.dumps({"ok": ok, "changed": changed, "missing_file": missing_file}))
             .as_str()
             .unwrap()
             .contains("missing west manifest")
+    );
+}
+
+#[test]
+fn porting_coverage_rejects_unclassified_zmk_build_files() {
+    let output = run_python(
+        r#"
+import importlib.util
+import json
+import sys
+import tempfile
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("porting_coverage", "tools/porting_coverage.py")
+pc = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = pc
+spec.loader.exec_module(pc)
+
+manifest = {
+    "source_inventory": {
+        "build_files": [
+            {
+                "source_file": "../build.yaml",
+                "expected": [
+                    "include:board=seeeduino_xiao_ble:shield=lalapadgen2_right rgbled_adapter:snippet=studio-rpc-usb-uart",
+                    "include:board=seeeduino_xiao_ble:shield=lalapadgen2_left rgbled_adapter",
+                    "include:board=seeeduino_xiao_ble:shield=settings_reset",
+                ],
+            },
+            {
+                "source_file": "../zephyr/module.yml",
+                "expected": ["build.settings.board_root=."],
+            },
+        ],
+    },
+}
+
+def build(extra_include="", extra_top=""):
+    return f'''
+---
+include:
+  - board: seeeduino_xiao_ble
+    shield: lalapadgen2_right rgbled_adapter
+    snippet: studio-rpc-usb-uart
+  - board: seeeduino_xiao_ble
+    shield: lalapadgen2_left rgbled_adapter
+  - board: seeeduino_xiao_ble
+    shield: settings_reset
+{extra_include}{extra_top}'''
+
+def module(extra_settings="", extra_top=""):
+    return f'''
+---
+build:
+  settings:
+    board_root: .
+{extra_settings}{extra_top}'''
+
+def pack(results):
+    return [result.__dict__ | {"ok": result.ok} for result in results]
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    config = root / "config"
+    config.mkdir()
+    module_dir = root / "zephyr"
+    module_dir.mkdir()
+    build_fixture = root / "build.yaml"
+    module_fixture = module_dir / "module.yml"
+    build_fixture.write_text(build())
+    module_fixture.write_text(module())
+    ok = pack(pc.check_zmk_build_file_inventory(manifest, config))
+    build_fixture.write_text(build('  - board: seeeduino_xiao_ble\n    shield: experimental_extra\n'))
+    changed = pack(pc.check_zmk_build_file_inventory(manifest, config))
+    build_fixture.write_text(build('    artifact-name: drift\n'))
+    unknown_include_key = pack(pc.check_zmk_build_file_inventory(manifest, config))
+    build_fixture.write_text(build(extra_top='other:\n  settings:\n    board_root: .\n'))
+    wrong_section = pack(pc.check_zmk_build_file_inventory(manifest, config))
+    build_fixture.write_text(build(extra_top='build:\n  settings:\n    board_root: .\n'))
+    misplaced_board_root = pack(pc.check_zmk_build_file_inventory(manifest, config))
+    build_fixture.write_text(build())
+    module_fixture.write_text(module('    dts_root: .\n'))
+    unknown_module_key = pack(pc.check_zmk_build_file_inventory(manifest, config))
+    build_fixture.unlink()
+    missing_file = pack(pc.check_zmk_build_file_inventory(manifest, config))
+
+print(json.dumps({
+    "ok": ok,
+    "changed": changed,
+    "unknown_include_key": unknown_include_key,
+    "wrong_section": wrong_section,
+    "misplaced_board_root": misplaced_board_root,
+    "unknown_module_key": unknown_module_key,
+    "missing_file": missing_file,
+}))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "ZMK build file inventory parser check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let ok_inventory = &parsed["ok"][0];
+    assert_eq!(ok_inventory["kind"], "zmk_inventory");
+    assert_eq!(ok_inventory["passed"].as_i64(), Some(3));
+    assert_eq!(ok_inventory["total"].as_i64(), Some(3));
+    assert_eq!(ok_inventory["ok"], true);
+    let ok_module_inventory = &parsed["ok"][1];
+    assert_eq!(ok_module_inventory["passed"].as_i64(), Some(1));
+    assert_eq!(ok_module_inventory["total"].as_i64(), Some(1));
+    assert_eq!(ok_module_inventory["ok"], true);
+
+    let changed_inventory = &parsed["changed"][0];
+    assert_eq!(changed_inventory["kind"], "zmk_inventory");
+    assert_eq!(changed_inventory["passed"].as_i64(), Some(3));
+    assert_eq!(changed_inventory["total"].as_i64(), Some(4));
+    assert_eq!(changed_inventory["ok"], false);
+    assert!(
+        changed_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("experimental_extra")
+    );
+
+    let unknown_include_key_inventory = &parsed["unknown_include_key"][0];
+    assert_eq!(unknown_include_key_inventory["passed"].as_i64(), Some(2));
+    assert_eq!(unknown_include_key_inventory["total"].as_i64(), Some(4));
+    assert_eq!(unknown_include_key_inventory["ok"], false);
+    assert!(
+        unknown_include_key_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("artifact-name")
+    );
+
+    let wrong_section_inventory = &parsed["wrong_section"][0];
+    assert_eq!(wrong_section_inventory["passed"].as_i64(), Some(3));
+    assert_eq!(wrong_section_inventory["total"].as_i64(), Some(6));
+    assert_eq!(wrong_section_inventory["ok"], false);
+    assert!(
+        wrong_section_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("unknown.top_level.other")
+    );
+
+    let misplaced_board_root_inventory = &parsed["misplaced_board_root"][0];
+    assert_eq!(misplaced_board_root_inventory["passed"].as_i64(), Some(3));
+    assert_eq!(misplaced_board_root_inventory["total"].as_i64(), Some(4));
+    assert_eq!(misplaced_board_root_inventory["ok"], false);
+    assert!(
+        misplaced_board_root_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("build.settings.board_root")
+    );
+
+    let unknown_module_key_inventory = &parsed["unknown_module_key"][1];
+    assert_eq!(unknown_module_key_inventory["passed"].as_i64(), Some(1));
+    assert_eq!(unknown_module_key_inventory["total"].as_i64(), Some(2));
+    assert_eq!(unknown_module_key_inventory["ok"], false);
+    assert!(
+        unknown_module_key_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("build.settings.dts_root")
+    );
+
+    let missing_file_inventory = &parsed["missing_file"][0];
+    assert_eq!(missing_file_inventory["kind"], "zmk_inventory");
+    assert_eq!(missing_file_inventory["passed"].as_i64(), Some(0));
+    assert_eq!(missing_file_inventory["total"].as_i64(), Some(3));
+    assert_eq!(missing_file_inventory["ok"], false);
+    assert!(
+        missing_file_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("missing ZMK build source file")
     );
 }
 
