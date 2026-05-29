@@ -1918,12 +1918,14 @@ def check_zmk_dts_property_inventory(manifest: dict[str, Any], zmk_config_dir: P
     results: list[Result] = []
     for check in manifest.get("source_inventory", {}).get("dts_properties", []):
         source_file = check["source_file"]
+        source_block = check["source_block"]
         expected = list(check["expected"])
         source_path = zmk_config_dir / source_file
+        result_id = f"zmk_source.dts_properties.{source_file}.{source_block}"
         if not source_path.exists():
             results.append(
                 Result(
-                    f"zmk_source.dts_properties.{check['source_block']}",
+                    result_id,
                     "zmk_inventory",
                     0,
                     max(1, len(expected)),
@@ -1932,11 +1934,11 @@ def check_zmk_dts_property_inventory(manifest: dict[str, Any], zmk_config_dir: P
             )
             continue
         try:
-            actual = dts_property_inventory(source_path.read_text(), check["source_block"])
+            actual = dts_property_inventory(source_path.read_text(), source_block)
         except ValueError as e:
             results.append(
                 Result(
-                    f"zmk_source.dts_properties.{check['source_block']}",
+                    result_id,
                     "zmk_inventory",
                     0,
                     max(1, len(expected)),
@@ -1946,7 +1948,7 @@ def check_zmk_dts_property_inventory(manifest: dict[str, Any], zmk_config_dir: P
             continue
         results.append(
             ordered_inventory_result(
-                f"zmk_source.dts_properties.{check['source_block']}",
+                result_id,
                 "zmk_inventory",
                 expected,
                 actual,

@@ -220,7 +220,8 @@ trackpad-to-position behavior and input-processor properties, checks the ZMK
 split-input container properties, checks the ZMK trackpad listener device and
 normal/low-speed input-processor chains, checks
 selected ZMK DTS properties for split input, dynamic scaling, right-half column
-offset, and overlay trackpad routing overrides, checks source GPIO pin flags,
+offset, overlay trackpad routing, matrix transform, physical-layout, RGB LED,
+I2C, and charge-indicator nodes, checks source GPIO pin flags,
 checks the ZMK `*.dtsi` / `*.overlay` status-node inventory, and checks the RMK
 custom keycode order used for the ZMK Bluetooth and trackpad scale actions.
 These high-risk ZMK source checks are represented as structured inventories

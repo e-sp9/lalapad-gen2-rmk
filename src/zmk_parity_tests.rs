@@ -542,14 +542,17 @@ fn porting_coverage_includes_exact_rmk_inventory_gates() {
                 .as_array()
                 .unwrap()
         {
+            let source_file = dts_property_block["source_file"].as_str().unwrap();
             let source_block = dts_property_block["source_block"].as_str().unwrap();
             let expected_entries = dts_property_block["expected"].as_array().unwrap().len() as i64;
             let property_inventory = results
                 .iter()
-                .find(|result| result["id"] == format!("zmk_source.dts_properties.{source_block}"))
+                .find(|result| {
+                    result["id"] == format!("zmk_source.dts_properties.{source_file}.{source_block}")
+                })
                 .unwrap_or_else(|| {
                     panic!(
-                        "ZMK DTS property inventory coverage result is missing for {source_block}"
+                        "ZMK DTS property inventory coverage result is missing for {source_file} {source_block}"
                     )
                 });
             assert_eq!(property_inventory["kind"], "zmk_inventory");
@@ -3074,6 +3077,10 @@ print(json.dumps({
 
     let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     let ok_inventory = &parsed["ok"][0];
+    assert_eq!(
+        ok_inventory["id"],
+        "zmk_source.dts_properties.lalapadgen2.dtsi.zip_dynamic_xy_scaler"
+    );
     assert_eq!(ok_inventory["kind"], "zmk_inventory");
     assert_eq!(ok_inventory["passed"].as_i64(), Some(6));
     assert_eq!(ok_inventory["total"].as_i64(), Some(6));
@@ -3104,6 +3111,10 @@ print(json.dumps({
     );
 
     let missing_file_inventory = &parsed["missing_file"][0];
+    assert_eq!(
+        missing_file_inventory["id"],
+        "zmk_source.dts_properties.lalapadgen2.dtsi.zip_dynamic_xy_scaler"
+    );
     assert_eq!(missing_file_inventory["kind"], "zmk_inventory");
     assert_eq!(missing_file_inventory["passed"].as_i64(), Some(0));
     assert_eq!(missing_file_inventory["total"].as_i64(), Some(6));

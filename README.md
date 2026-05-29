@@ -142,7 +142,8 @@ bindings, ZMK trackpad-to-position behavior and input-processor properties, ZMK
 split-input container properties, ZMK trackpad listener device and
 normal/low-speed input-processor chains, selected
 ZMK DTS properties for split input, dynamic scaling, right-half column offset,
-and overlay trackpad routing overrides, ZMK GPIO pin flags, the ZMK DTS/overlay
+overlay trackpad routing overrides, matrix transform, physical-layout, I2C,
+RGB LED, and charge-indicator nodes, ZMK GPIO pin flags, the ZMK DTS/overlay
 status-node inventory, exact RMK keymap array shape, and the exact RMK combo
 inventory. The
 source-backed gate uses structured inventories instead of regex-only ZMK source
