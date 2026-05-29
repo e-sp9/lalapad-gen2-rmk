@@ -376,6 +376,29 @@ fn porting_coverage_includes_exact_rmk_inventory_gates() {
             assert_eq!(kconfig_inventory["ok"], true);
         }
 
+        for kconfig_file in
+            porting_coverage_manifest_toml()["source_inventory"]["disabled_kconfig_lines"]
+                .as_array()
+                .unwrap()
+        {
+            let source_file = kconfig_file["source_file"].as_str().unwrap();
+            let expected_lines = kconfig_file["expected"].as_array().unwrap().len() as i64;
+            let kconfig_inventory = results
+                .iter()
+                .find(|result| {
+                    result["id"] == format!("zmk_source.disabled_kconfig_lines.{source_file}")
+                })
+                .unwrap_or_else(|| {
+                    panic!(
+                        "ZMK disabled Kconfig line inventory coverage result is missing for {source_file}"
+                    )
+                });
+            assert_eq!(kconfig_inventory["kind"], "zmk_inventory");
+            assert_eq!(kconfig_inventory["passed"].as_i64(), Some(expected_lines));
+            assert_eq!(kconfig_inventory["total"].as_i64(), Some(expected_lines));
+            assert_eq!(kconfig_inventory["ok"], true);
+        }
+
         for define_file in porting_coverage_manifest_toml()["source_inventory"]["define_entries"]
             .as_array()
             .unwrap()
@@ -1998,6 +2021,122 @@ print(json.dumps({
             .as_str()
             .unwrap()
             .contains("got None")
+    );
+
+    let missing_file_inventory = &parsed["missing_file"][0];
+    assert_eq!(missing_file_inventory["kind"], "zmk_inventory");
+    assert_eq!(missing_file_inventory["passed"].as_i64(), Some(0));
+    assert_eq!(missing_file_inventory["total"].as_i64(), Some(2));
+    assert_eq!(missing_file_inventory["ok"], false);
+    assert!(
+        missing_file_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("missing ZMK Kconfig source file")
+    );
+}
+
+#[test]
+fn porting_coverage_rejects_unclassified_disabled_zmk_kconfig_lines() {
+    let output = run_python(
+        r#"
+import importlib.util
+import json
+import sys
+import tempfile
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("porting_coverage", "tools/porting_coverage.py")
+pc = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = pc
+spec.loader.exec_module(pc)
+
+manifest = {
+    "source_inventory": {
+        "disabled_kconfig_lines": [{
+            "source_file": "lalapadgen2.conf",
+            "expected": [
+                "CONFIG_ZMK_USB_LOGGING=y",
+                "CONFIG_INPUT_LOG_LEVEL_DBG=y",
+            ],
+        }],
+    },
+}
+
+def pack(results):
+    return [result.__dict__ | {"ok": result.ok} for result in results]
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    fixture = root / "lalapadgen2.conf"
+    fixture.write_text('''
+    CONFIG_BT_BAS=y
+    #CONFIG_ZMK_USB_LOGGING=y
+    # CONFIG_INPUT_LOG_LEVEL_DBG=y
+    ''')
+    ok = pack(pc.check_zmk_disabled_kconfig_line_inventory(manifest, root))
+
+    fixture.write_text('''
+    #CONFIG_ZMK_USB_LOGGING=y
+    #CONFIG_INPUT_LOG_LEVEL_DBG=n
+    #CONFIG_NEW_DISABLED_SETTING=42
+    ''')
+    changed = pack(pc.check_zmk_disabled_kconfig_line_inventory(manifest, root))
+
+    fixture.write_text('''
+    CONFIG_ZMK_USB_LOGGING=y
+    #CONFIG_INPUT_LOG_LEVEL_DBG=y
+    ''')
+    enabled = pack(pc.check_zmk_disabled_kconfig_line_inventory(manifest, root))
+
+    fixture.unlink()
+    missing_file = pack(pc.check_zmk_disabled_kconfig_line_inventory(manifest, root))
+
+print(json.dumps({
+    "ok": ok,
+    "changed": changed,
+    "enabled": enabled,
+    "missing_file": missing_file,
+}))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "disabled Kconfig line inventory parser check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let ok_inventory = &parsed["ok"][0];
+    assert_eq!(ok_inventory["kind"], "zmk_inventory");
+    assert_eq!(ok_inventory["passed"].as_i64(), Some(2));
+    assert_eq!(ok_inventory["total"].as_i64(), Some(2));
+    assert_eq!(ok_inventory["ok"], true);
+
+    let changed_inventory = &parsed["changed"][0];
+    assert_eq!(changed_inventory["kind"], "zmk_inventory");
+    assert_eq!(changed_inventory["passed"].as_i64(), Some(1));
+    assert_eq!(changed_inventory["total"].as_i64(), Some(3));
+    assert_eq!(changed_inventory["ok"], false);
+    assert!(
+        changed_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("CONFIG_NEW_DISABLED_SETTING=42")
+    );
+
+    let enabled_inventory = &parsed["enabled"][0];
+    assert_eq!(enabled_inventory["kind"], "zmk_inventory");
+    assert_eq!(enabled_inventory["passed"].as_i64(), Some(0));
+    assert_eq!(enabled_inventory["total"].as_i64(), Some(2));
+    assert_eq!(enabled_inventory["ok"], false);
+    assert!(
+        enabled_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("CONFIG_INPUT_LOG_LEVEL_DBG=y")
     );
 
     let missing_file_inventory = &parsed["missing_file"][0];

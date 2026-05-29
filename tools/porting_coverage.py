@@ -1128,6 +1128,13 @@ def active_kconfig_line_inventory(text: str) -> list[str]:
     ]
 
 
+def disabled_kconfig_line_inventory(text: str) -> list[str]:
+    return [
+        match.group(1).strip()
+        for match in re.finditer(r"(?m)^\s*#\s*(CONFIG_[A-Za-z0-9_]+=[^\s#]+)", text)
+    ]
+
+
 def check_zmk_kconfig_line_inventory(
     manifest: dict[str, Any], zmk_config_dir: Path
 ) -> list[Result]:
@@ -1149,6 +1156,31 @@ def check_zmk_kconfig_line_inventory(
             )
             continue
         actual = active_kconfig_line_inventory(source_path.read_text())
+        results.append(ordered_inventory_result(result_id, "zmk_inventory", expected, actual))
+    return results
+
+
+def check_zmk_disabled_kconfig_line_inventory(
+    manifest: dict[str, Any], zmk_config_dir: Path
+) -> list[Result]:
+    results: list[Result] = []
+    for check in manifest.get("source_inventory", {}).get("disabled_kconfig_lines", []):
+        source_file = check["source_file"]
+        expected = list(check["expected"])
+        source_path = zmk_config_dir / source_file
+        result_id = f"zmk_source.disabled_kconfig_lines.{source_file}"
+        if not source_path.exists():
+            results.append(
+                Result(
+                    result_id,
+                    "zmk_inventory",
+                    0,
+                    max(1, len(expected)),
+                    f"missing ZMK Kconfig source file {source_file!r}",
+                )
+            )
+            continue
+        actual = disabled_kconfig_line_inventory(source_path.read_text())
         results.append(ordered_inventory_result(result_id, "zmk_inventory", expected, actual))
     return results
 
@@ -2904,6 +2936,7 @@ def check_zmk_source(
     results.extend(check_zmk_include_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_kconfig_entry_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_kconfig_line_inventory(manifest, zmk_config_dir))
+    results.extend(check_zmk_disabled_kconfig_line_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_behavior_property_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_combo_property_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_define_entry_inventory(manifest, zmk_config_dir))

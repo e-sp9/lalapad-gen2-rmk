@@ -211,7 +211,7 @@ and build-matrix files, checks ZMK layout JSON metadata and per-key
 coordinates, checks the ZMK keymap layer and behavior inventories, checks ZMK
 behavior-node and combo-node
 property inventories, checks ZMK `#include` dependencies, checks the ZMK
-active Kconfig line order and values, checks the ZMK `Kconfig.*`
+active and disabled Kconfig line order and values, checks the ZMK `Kconfig.*`
 shield/default entries, checks the `west.yml` ZMK module inventory,
 checks the ZMK trackpad virtual-position `#define` inventory, checks the ZMK
 `INPUT_BTN_*` to virtual-position binding inventory, checks the ZMK

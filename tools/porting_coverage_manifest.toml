@@ -260,6 +260,13 @@ kconfig_lines = [
     "CONFIG_INPUT_IQS9151_3F_SWIPE_THRESHOLD=200",
   ] },
 ]
+disabled_kconfig_lines = [
+  { source_file = "lalapadgen2.conf", expected = [
+    "CONFIG_ZMK_USB_LOGGING=y",
+    "CONFIG_INPUT_LOG_LEVEL_DBG=y",
+    "CONFIG_LOG_PROCESS_THREAD_STARTUP_DELAY_MS=3000",
+  ] },
+]
 dts_status_files = [
   { source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi", expected = ["trackpad_listener_R:disabled", "trackpad_listener_L:disabled", "leds:okay", "easy_charge_indicator:okay", "&xiao_i2c:okay", "iqs9151:okay"] },
   { source_file = "boards/shields/lalapadgen2/lalapadgen2_right.overlay", expected = ["&trackpad_listener_R:okay", "&trackpad_listener_L:okay"] },
