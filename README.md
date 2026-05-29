@@ -141,7 +141,8 @@ inventory, exact RMK keymap array shape, and the exact RMK combo inventory. The
 source-backed gate uses structured inventories instead of regex-only ZMK source
 checks for these high-risk DTS, GPIO, trackpad, and split-routing details, and
 it cross-checks thumb tap/hold layer-resolution scenarios against the ZMK
-source keymap after documented RMK deltas are applied. Use
+source keymap after documented RMK deltas are applied. ZMK hold-tap timing
+values are also mirrored against the RMK Morse timing settings. Use
 `--zmk-keymap PATH --require-zmk-source` when the source-backed check must be
 mandatory in another checkout layout. The firmware CI checks out
 `e-sp9/zmk-config-LalaPadGen2` and runs this source-backed gate before building

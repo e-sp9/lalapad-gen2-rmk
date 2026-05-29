@@ -559,6 +559,41 @@ expected = 200
 id = "zmk_mt2_require_prior_idle_ms"
 expected = 125
 
+[[zmk_behavior_mirrors]]
+id = "zmk_mt2_prior_idle_mirrors_rmk_morse_prior_idle"
+source_id = "zmk_mt2_require_prior_idle_ms"
+source_expected = 125
+target_path = "behavior.morse.prior_idle_time"
+transform = "ms_string"
+
+[[zmk_behavior_mirrors]]
+id = "zmk_mt2_tapping_term_mirrors_rmk_global_hold_timeout"
+source_id = "zmk_mt2_tapping_term_ms"
+source_expected = 200
+target_path = "behavior.morse.hold_timeout"
+transform = "ms_string"
+
+[[zmk_behavior_mirrors]]
+id = "zmk_mt2_tapping_term_mirrors_fast_layer_hold_timeout"
+source_id = "zmk_mt2_tapping_term_ms"
+source_expected = 200
+target_path = "behavior.morse.profiles.FAST_LAYER.hold_timeout"
+transform = "ms_string"
+
+[[zmk_behavior_mirrors]]
+id = "zmk_mt2_quick_tap_mirrors_rmk_global_gap_timeout"
+source_id = "zmk_mt2_quick_tap_ms"
+source_expected = 200
+target_path = "behavior.morse.gap_timeout"
+transform = "ms_string"
+
+[[zmk_behavior_mirrors]]
+id = "zmk_mt2_quick_tap_mirrors_fast_layer_gap_timeout"
+source_id = "zmk_mt2_quick_tap_ms"
+source_expected = 200
+target_path = "behavior.morse.profiles.FAST_LAYER.gap_timeout"
+transform = "ms_string"
+
 [[zmk_config_values]]
 id = "zmk_ble_tx_power_plus_8"
 source_file = "lalapadgen2.conf"

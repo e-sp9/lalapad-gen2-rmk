@@ -2121,12 +2121,11 @@ def check_zmk_source_deltas(manifest: dict[str, Any], raw_layers: list[list[list
     return results
 
 
-def check_zmk_behavior_source(manifest: dict[str, Any], source_text: str) -> list[Result]:
-    results: list[Result] = []
+def zmk_behavior_source_values(source_text: str) -> dict[str, Any]:
     mt_block = extract_block(source_text, "&mt")
     lt_block = extract_block(source_text, "&lt")
     mt2_block = extract_block(source_text, "mt2")
-    source_values = {
+    return {
         "zmk_mt_quick_tap_ms": angle_int_property(mt_block, "quick-tap-ms"),
         "zmk_lt_quick_tap_ms": angle_int_property(lt_block, "quick-tap-ms"),
         "zmk_mt2_flavor": scalar_property(mt2_block, "flavor"),
@@ -2134,6 +2133,11 @@ def check_zmk_behavior_source(manifest: dict[str, Any], source_text: str) -> lis
         "zmk_mt2_quick_tap_ms": angle_int_property(mt2_block, "quick-tap-ms"),
         "zmk_mt2_require_prior_idle_ms": angle_int_property(mt2_block, "require-prior-idle-ms"),
     }
+
+
+def check_zmk_behavior_source(manifest: dict[str, Any], source_text: str) -> list[Result]:
+    results: list[Result] = []
+    source_values = zmk_behavior_source_values(source_text)
     for check in manifest.get("zmk_behavior_values", []):
         actual = source_values.get(check["id"])
         expected = check["expected"]
@@ -2145,6 +2149,60 @@ def check_zmk_behavior_source(manifest: dict[str, Any], source_text: str) -> lis
                 1 if ok else 0,
                 1,
                 f"expected {expected!r}, got {actual!r}",
+            )
+        )
+    return results
+
+
+def transform_zmk_behavior_value(value: Any, transform: str | None) -> Any:
+    if transform is None:
+        return value
+    if transform == "ms_string":
+        return f"{value}ms"
+    raise ValueError(f"unknown ZMK behavior mirror transform {transform!r}")
+
+
+def check_zmk_behavior_mirrors(
+    manifest: dict[str, Any],
+    keyboard: dict[str, Any],
+    source_text: str,
+) -> list[Result]:
+    results: list[Result] = []
+    source_values = zmk_behavior_source_values(source_text)
+    for check in manifest.get("zmk_behavior_mirrors", []):
+        source_id = check["source_id"]
+        transform = check.get("transform")
+        passed = 0
+        total = 2 if "source_expected" in check else 1
+        messages: list[str] = []
+        source_actual = source_values.get(source_id)
+        if "source_expected" in check:
+            source_expected = check["source_expected"]
+            if source_actual == source_expected:
+                passed += 1
+            else:
+                messages.append(
+                    f"source {source_id} expected {source_expected!r}, got {source_actual!r}"
+                )
+        try:
+            expected_target = transform_zmk_behavior_value(source_actual, transform)
+            target_actual = path_get(keyboard, check["target_path"])
+        except (KeyError, ValueError) as e:
+            messages.append(str(e))
+        else:
+            if target_actual == expected_target:
+                passed += 1
+            else:
+                messages.append(
+                    f"target {check['target_path']} expected {expected_target!r}, got {target_actual!r}"
+                )
+        results.append(
+            Result(
+                check["id"],
+                "zmk_behavior_mirror",
+                passed,
+                total,
+                "ok" if not messages else "; ".join(messages),
             )
         )
     return results
@@ -2276,6 +2334,7 @@ def check_zmk_source(
             "ok" if ok else "ZMK conditional layer 1+2=>3 is not mirrored by manifest tri-layer",
         )
     )
+    results.extend(check_zmk_behavior_mirrors(manifest, keyboard, source_text))
     results.extend(check_zmk_config_values(manifest, keyboard, zmk_config_dir))
     results.extend(check_zmk_config_mirrors(manifest, zmk_config_dir))
     results.extend(check_zmk_source_file_inventory(manifest, zmk_config_dir))

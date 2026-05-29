@@ -175,6 +175,23 @@ fn porting_coverage_includes_exact_rmk_inventory_gates() {
         );
         assert_eq!(behavior_inventory["ok"], true);
 
+        for mirror in porting_coverage_manifest_toml()["zmk_behavior_mirrors"]
+            .as_array()
+            .unwrap()
+        {
+            let mirror_id = mirror["id"].as_str().unwrap();
+            let mirror_result = results
+                .iter()
+                .find(|result| result["id"] == mirror_id)
+                .unwrap_or_else(|| {
+                    panic!("ZMK behavior mirror coverage result is missing for {mirror_id}")
+                });
+            assert_eq!(mirror_result["kind"], "zmk_behavior_mirror");
+            assert_eq!(mirror_result["passed"].as_i64(), Some(2));
+            assert_eq!(mirror_result["total"].as_i64(), Some(2));
+            assert_eq!(mirror_result["ok"], true);
+        }
+
         let file_inventory = results
             .iter()
             .find(|result| result["id"] == "zmk_source.file_inventory")
@@ -478,6 +495,93 @@ print(json.dumps({
             .as_str()
             .unwrap()
             .contains("source output expected 'Kp7', got 'Kp8'")
+    );
+}
+
+#[test]
+fn porting_coverage_rejects_zmk_behavior_mirror_drift() {
+    let output = run_python(
+        r#"
+import importlib.util
+import json
+import sys
+
+spec = importlib.util.spec_from_file_location("porting_coverage", "tools/porting_coverage.py")
+pc = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = pc
+spec.loader.exec_module(pc)
+
+source = '''
+&mt { quick-tap-ms = <200>; };
+&lt { quick-tap-ms = <200>; };
+/ {
+    behaviors {
+        mt2: mod_tap2 {
+            flavor = "tap-preferred";
+            tapping-term-ms = <200>;
+            quick-tap-ms = <200>;
+            require-prior-idle-ms = <125>;
+        };
+    };
+};
+'''
+manifest = {
+    "zmk_behavior_mirrors": [{
+        "id": "prior_idle",
+        "source_id": "zmk_mt2_require_prior_idle_ms",
+        "source_expected": 125,
+        "target_path": "behavior.morse.prior_idle_time",
+        "transform": "ms_string",
+    }],
+}
+ok_keyboard = {"behavior": {"morse": {"prior_idle_time": "125ms"}}}
+changed_keyboard = {"behavior": {"morse": {"prior_idle_time": "200ms"}}}
+changed_source = source.replace("require-prior-idle-ms = <125>;", "require-prior-idle-ms = <100>;")
+
+def pack(results):
+    return [result.__dict__ | {"ok": result.ok} for result in results]
+
+print(json.dumps({
+    "ok": pack(pc.check_zmk_behavior_mirrors(manifest, ok_keyboard, source)),
+    "changed_target": pack(pc.check_zmk_behavior_mirrors(manifest, changed_keyboard, source)),
+    "changed_source": pack(pc.check_zmk_behavior_mirrors(manifest, ok_keyboard, changed_source)),
+}))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "ZMK behavior mirror check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(parsed["ok"][0]["kind"], "zmk_behavior_mirror");
+    assert_eq!(parsed["ok"][0]["passed"].as_i64(), Some(2));
+    assert_eq!(parsed["ok"][0]["total"].as_i64(), Some(2));
+    assert_eq!(parsed["ok"][0]["ok"], true);
+
+    let changed_target = &parsed["changed_target"][0];
+    assert_eq!(changed_target["passed"].as_i64(), Some(1));
+    assert_eq!(changed_target["total"].as_i64(), Some(2));
+    assert_eq!(changed_target["ok"], false);
+    assert!(
+        changed_target["message"]
+            .as_str()
+            .unwrap()
+            .contains("target behavior.morse.prior_idle_time expected '125ms', got '200ms'")
+    );
+
+    let changed_source = &parsed["changed_source"][0];
+    assert_eq!(changed_source["passed"].as_i64(), Some(0));
+    assert_eq!(changed_source["total"].as_i64(), Some(2));
+    assert_eq!(changed_source["ok"], false);
+    assert!(
+        changed_source["message"]
+            .as_str()
+            .unwrap()
+            .contains("source zmk_mt2_require_prior_idle_ms expected 125, got 100")
     );
 }
 

@@ -220,6 +220,8 @@ checks are represented as structured inventories rather than regex-only checks.
 The thumb tap/hold layer-resolution scenarios are also cross-checked against
 the ZMK source keymap after documented RMK deltas are applied, so scenario
 expectations must stay source-backed instead of becoming RMK-only assertions.
+ZMK `mt2` hold-tap timing values are mirrored against the RMK Morse timing
+settings to catch timing drift on either side of the migration contract.
 
 When the upstream checkout from `metadata.source_repo_hint` is available, the
 gate also parses `config/lalapadgen2.keymap` directly and checks the manifest
