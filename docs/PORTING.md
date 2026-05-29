@@ -404,6 +404,7 @@ python3 tools/hardware_validation.py --checklist
 python3 tools/hardware_validation.py --evidence-template
 cargo make hardware-validation-evidence-template-current
 python3 tools/firmware_artifact_manifest.py --require-uf2 > firmware-artifacts.local.json
+cargo make firmware-artifact-manifest-current
 python3 tools/hardware_validation.py --evidence-template --firmware-ref-template <tag-or-commit>
 python3 tools/hardware_validation.py --evidence path/to/evidence.toml --markdown
 python3 tools/hardware_validation.py --evidence path/to/evidence.toml --require-validated --require-firmware-ref <tag-or-commit>
@@ -450,4 +451,7 @@ working tree has tracked or untracked non-ignored changes.
 After building the UF2 files that will be flashed, use
 `python3 tools/firmware_artifact_manifest.py --require-uf2 >
 firmware-artifacts.local.json` to preserve the exact central/peripheral file
-sizes and SHA256 hashes alongside the hardware evidence overlay.
+sizes and SHA256 hashes alongside the hardware evidence overlay. Prefer
+`cargo make firmware-artifact-manifest-current` for a clean local build; it
+creates `firmware-artifacts.local.json` with the current exact tag or short
+commit as `firmware_ref` and refuses tracked or untracked non-ignored changes.

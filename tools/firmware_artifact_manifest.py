@@ -207,6 +207,7 @@ def main() -> None:
     parser.add_argument("--require-uf2", action="store_true")
     parser.add_argument("--require-dfu", action="store_true")
     parser.add_argument("--markdown", action="store_true")
+    parser.add_argument("--output", type=Path, default=None)
     args = parser.parse_args()
 
     root = args.root.resolve()
@@ -218,15 +219,29 @@ def main() -> None:
         args.require_dfu,
     )
     if args.markdown:
-        print(as_markdown(manifest), end="")
+        rendered = as_markdown(manifest)
     else:
-        print(json.dumps(manifest, indent=2, sort_keys=True))
+        rendered = json.dumps(manifest, indent=2, sort_keys=True) + "\n"
+
+    if errors and args.output is not None:
+        output = args.output
+        if not output.is_absolute():
+            output = root / output
+        output.unlink(missing_ok=True)
+    elif args.output is not None:
+        output = args.output
+        if not output.is_absolute():
+            output = root / output
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(rendered, encoding="utf-8")
+    else:
+        print(rendered, end="")
+
     if errors:
         print("firmware artifact manifest errors:", file=sys.stderr)
         for error in errors:
             print(f"- {error}", file=sys.stderr)
         raise SystemExit(1)
-
 
 if __name__ == "__main__":
     main()

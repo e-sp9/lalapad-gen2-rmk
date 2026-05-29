@@ -113,6 +113,14 @@ that will be flashed or referenced in hardware evidence:
 python3 tools/firmware_artifact_manifest.py --require-uf2 > firmware-artifacts.local.json
 ```
 
+For a clean local build, prefer the current-ref helper. It writes the same
+manifest to `firmware-artifacts.local.json`, pre-fills `firmware_ref` from the
+current exact tag or short commit, and refuses mutable working-tree state:
+
+```shell
+cargo make firmware-artifact-manifest-current
+```
+
 Reset/storage-clear UF2 files, when generated for hardware testing, are kept under `firmware/reset/`.
 
 ## Validation
@@ -142,6 +150,7 @@ When real hardware evidence changed, also run:
 cargo make hardware-validation-evidence-template-current > hardware-validation-evidence.local.toml
 python3 tools/hardware_validation.py --checklist > hardware-validation-checklist.local.md
 python3 tools/firmware_artifact_manifest.py --require-uf2 > firmware-artifacts.local.json
+cargo make firmware-artifact-manifest-current
 python3 tools/hardware_validation.py --evidence hardware-validation-evidence.local.toml --markdown
 ```
 
@@ -274,7 +283,9 @@ current tag or commit and refuses to run with tracked or untracked non-ignored
 changes, which avoids recording evidence against a mutable local build.
 `tools/firmware_artifact_manifest.py --require-uf2` records the flashed UF2
 file sizes and SHA256 hashes so `artifact_or_notes` can point to an exact
-artifact set. Generated `hardware-validation-evidence*.toml`,
+artifact set. `cargo make firmware-artifact-manifest-current` records the same
+hashes in `firmware-artifacts.local.json` and requires a clean current tag or
+commit for its `firmware_ref`. Generated `hardware-validation-evidence*.toml`,
 `hardware-validation-checklist*.md`, and `firmware-artifacts*.json` files are
 ignored by default.
 For the combined final gate, run:

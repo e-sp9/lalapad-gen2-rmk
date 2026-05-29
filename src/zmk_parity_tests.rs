@@ -197,7 +197,7 @@ fn porting_coverage_complete_gate_accepts_explicit_status_completion() {
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("Porting coverage by kind:"));
-    assert!(stdout.contains("- build_task: 39/39 = 100.00%"));
+    assert!(stdout.contains("- build_task: 42/42 = 100.00%"));
     assert!(stdout.contains("- code_topology: 28/28 = 100.00%"));
     assert!(stdout.contains("- dependency: 21/21 = 100.00%"));
     assert!(stdout.contains("- gpio_flag_mirror: 36/36 = 100.00%"));
@@ -294,8 +294,8 @@ ported = 1
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("porting coverage baseline drift:"));
-    assert!(stderr.contains("coverage.total: expected baseline 1, got 3068"));
-    assert!(stderr.contains("coverage.result_count: expected baseline 1, got 505"));
+    assert!(stderr.contains("coverage.total: expected baseline 1, got 3071"));
+    assert!(stderr.contains("coverage.result_count: expected baseline 1, got 506"));
     assert!(stderr.contains("coverage.result_inventory_sha256: expected baseline bad"));
     assert!(
         stderr.contains("coverage.by_kind.behavior: actual report kind is missing from baseline")
@@ -583,7 +583,7 @@ fn migration_status_combines_software_and_hardware_progress() {
     );
     let stdout = String::from_utf8_lossy(&markdown.stdout);
     assert!(stdout.contains("## RMK Migration Status"));
-    assert!(stdout.contains("| Software coverage | 3068 | 3068 | 100.00% |"));
+    assert!(stdout.contains("| Software coverage | 3071 | 3071 | 100.00% |"));
     assert!(stdout.contains("### Hardware Progress By Area"));
     assert!(stdout.contains("| trackpad | 0 | 7 | 0.00% |"));
     assert!(stdout.contains("### Hardware Progress By Side"));
@@ -642,7 +642,7 @@ print(migration_status.markdown_table([
 fn migration_status_rejects_coverage_baseline_drift() {
     let bad_baseline = r#"
 [coverage]
-passed = 3068
+passed = 3071
 total = 1
 result_count = 1
 result_inventory_sha256 = "bad"
@@ -679,8 +679,8 @@ ported_by_config_image = 6
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("Software failures:"));
-    assert!(stdout.contains("coverage.total: expected baseline 1, got 3068"));
-    assert!(stdout.contains("coverage.result_count: expected baseline 1, got 505"));
+    assert!(stdout.contains("coverage.total: expected baseline 1, got 3071"));
+    assert!(stdout.contains("coverage.result_count: expected baseline 1, got 506"));
     assert!(stdout.contains("coverage.result_inventory_sha256: expected baseline bad"));
 }
 
@@ -1102,6 +1102,7 @@ with tempfile.TemporaryDirectory() as tempdir:
                 json.dumps({"manifest": {"application": {"bin_file": f"{role}.bin", "dat_file": f"{role}.dat"}}}),
             )
 
+    output_path = root / "firmware-artifacts.local.json"
     manifest = subprocess.run(
         [
             sys.executable,
@@ -1112,16 +1113,21 @@ with tempfile.TemporaryDirectory() as tempdir:
             "v0.3.0",
             "--require-uf2",
             "--require-dfu",
+            "--output",
+            str(output_path),
         ],
         check=True,
         cwd=Path.cwd(),
         stdout=subprocess.PIPE,
         text=True,
     )
-    parsed = json.loads(manifest.stdout)
+    parsed = json.loads(output_path.read_text())
+    output_path_exists = output_path.exists()
 
     missing = root / "firmware/normal/lalapad-gen2-rmk-peripheral.uf2"
     missing.unlink()
+    stale_output = root / "stale-firmware-artifacts.local.json"
+    stale_output.write_text("stale\n")
     failed = subprocess.run(
         [
             sys.executable,
@@ -1131,6 +1137,8 @@ with tempfile.TemporaryDirectory() as tempdir:
             "--firmware-ref",
             "v0.3.0",
             "--require-uf2",
+            "--output",
+            str(stale_output),
         ],
         cwd=Path.cwd(),
         stdout=subprocess.PIPE,
@@ -1140,9 +1148,13 @@ with tempfile.TemporaryDirectory() as tempdir:
 
 print(json.dumps({
     "manifest": parsed,
+    "stdout": manifest.stdout,
+    "output_path_exists": output_path_exists,
     "central_uf2_sha256": hashlib.sha256(b"central uf2").hexdigest(),
     "failed_code": failed.returncode,
+    "failed_stdout": failed.stdout,
     "failed_stderr": failed.stderr,
+    "stale_output_exists_after_failure": stale_output.exists(),
 }))
 "#,
     );
@@ -1155,6 +1167,8 @@ print(json.dumps({
     );
     let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     let manifest = &parsed["manifest"];
+    assert_eq!(parsed["stdout"].as_str(), Some(""));
+    assert_eq!(parsed["output_path_exists"].as_bool(), Some(true));
     assert_eq!(manifest["firmware_ref"].as_str(), Some("v0.3.0"));
     assert_eq!(manifest["artifact_count"].as_i64(), Some(6));
     assert!(
@@ -1188,6 +1202,11 @@ print(json.dumps({
         Some("central.bin")
     );
     assert_ne!(parsed["failed_code"].as_i64(), Some(0));
+    assert_eq!(parsed["failed_stdout"].as_str(), Some(""));
+    assert_eq!(
+        parsed["stale_output_exists_after_failure"].as_bool(),
+        Some(false)
+    );
     assert!(
         parsed["failed_stderr"]
             .as_str()
@@ -1917,6 +1936,8 @@ fn local_validation_entrypoints_match_ci_gates() {
     let migration_status_final_task = makefile_task_block("migration-status-final");
     let migration_status_final_current_task = makefile_task_block("migration-status-final-current");
     let firmware_artifact_manifest_task = makefile_task_block("firmware-artifact-manifest");
+    let firmware_artifact_manifest_current_task =
+        makefile_task_block("firmware-artifact-manifest-current");
     let hardware_validation_task = makefile_task_block("hardware-validation");
     let hardware_validation_report_task = makefile_task_block("hardware-validation-report");
     let hardware_validation_checklist_task = makefile_task_block("hardware-validation-checklist");
@@ -2014,6 +2035,21 @@ fn local_validation_entrypoints_match_ci_gates() {
         "cargo make firmware-artifact-manifest should generate hashes from built UF2 artifacts"
     );
     assert!(
+        firmware_artifact_manifest_current_task
+            .contains("git status --porcelain --untracked-files=normal")
+            && firmware_artifact_manifest_current_task
+                .contains("git describe --tags --exact-match")
+            && firmware_artifact_manifest_current_task.contains("git rev-parse --short=12 HEAD")
+            && firmware_artifact_manifest_current_task
+                .contains("tools/firmware_artifact_manifest.py")
+            && firmware_artifact_manifest_current_task.contains("--require-uf2")
+            && firmware_artifact_manifest_current_task.contains("dependencies = [\"uf2\"]")
+            && firmware_artifact_manifest_current_task.contains("--firmware-ref \"$firmware_ref\"")
+            && firmware_artifact_manifest_current_task
+                .contains("--output firmware-artifacts.local.json"),
+        "cargo make firmware-artifact-manifest-current should hash built UF2 artifacts against a clean current git ref"
+    );
+    assert!(
         hardware_validation_task.contains("tools/hardware_validation.py")
             && hardware_validation_task.contains("--hardware-baseline")
             && hardware_validation_task.contains("--require-classified"),
@@ -2071,6 +2107,7 @@ fn local_validation_entrypoints_match_ci_gates() {
         "tools/hardware_validation.py --evidence path/to/evidence.toml --markdown",
         "tools/hardware_validation.py --evidence path/to/evidence.toml --require-validated --require-firmware-ref <tag-or-commit>",
         "python3 tools/firmware_artifact_manifest.py --require-uf2 > firmware-artifacts.local.json",
+        "cargo make firmware-artifact-manifest-current",
         "cargo make rmk-behavior-tests",
         "tools/firmware_artifact_manifest.py",
         "tools/porting_coverage_baseline.toml",
@@ -2123,12 +2160,14 @@ fn local_validation_entrypoints_match_ci_gates() {
         README_MD.contains("cargo make migration-status-report")
             && README_MD.contains("cargo make rmk-behavior-tests")
             && README_MD.contains("python3 tools/firmware_artifact_manifest.py --require-uf2 > firmware-artifacts.local.json")
+            && README_MD.contains("cargo make firmware-artifact-manifest-current")
             && README_MD.contains("cargo make hardware-validation-evidence-template-current")
             && README_MD.contains("HARDWARE_EVIDENCE=hardware-validation-evidence.local.toml cargo make migration-status-final-current")
             && README_MD.contains("HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-report")
             && PORTING_MD.contains("cargo make migration-status-report")
             && PORTING_MD.contains("cargo make rmk-behavior-tests")
             && PORTING_MD.contains("python3 tools/firmware_artifact_manifest.py --require-uf2 > firmware-artifacts.local.json")
+            && PORTING_MD.contains("cargo make firmware-artifact-manifest-current")
             && PORTING_MD.contains("cargo make hardware-validation-evidence-template-current")
             && PORTING_MD.contains("HARDWARE_EVIDENCE=hardware-validation-evidence.local.toml cargo make migration-status-final-current"),
         "README and porting notes should document the local Markdown migration dashboard, RMK behavior regression suite, artifact manifest, current-ref evidence template, and current-ref final gate"
@@ -4829,6 +4868,14 @@ with tempfile.TemporaryDirectory() as tempdir:
 with tempfile.TemporaryDirectory() as tempdir:
     root = Path(tempdir)
     (root / "Makefile.toml").write_text(
+        Path("Makefile.toml").read_text().replace("--output firmware-artifacts.local.json", "--output firmware-artifacts.json", 1),
+        encoding="utf-8",
+    )
+    bad_current_artifact_manifest_task = pc.check_makefile_task_invariants(manifest, root)
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    (root / "Makefile.toml").write_text(
         Path("Makefile.toml").read_text().replace("git status --porcelain --untracked-files=normal", "git status --short", 1),
         encoding="utf-8",
     )
@@ -4851,6 +4898,7 @@ print(json.dumps({
     "bad_uf2_gate": pack(bad_uf2_gate),
     "bad_rmk_behavior_task": pack(bad_rmk_behavior_task),
     "bad_artifact_manifest_task": pack(bad_artifact_manifest_task),
+    "bad_current_artifact_manifest_task": pack(bad_current_artifact_manifest_task),
     "bad_current_template_task": pack(bad_current_template_task),
     "bad_current_final_task": pack(bad_current_final_task),
 }))
@@ -4866,19 +4914,19 @@ print(json.dumps({
 
     let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     let ok = parsed["ok"].as_array().unwrap();
-    assert_eq!(ok.len(), 12);
+    assert_eq!(ok.len(), 13);
     assert!(ok.iter().all(|result| result["kind"] == "build_task"));
     assert_eq!(
         ok.iter()
             .map(|result| result["passed"].as_i64().unwrap())
             .sum::<i64>(),
-        39
+        42
     );
     assert_eq!(
         ok.iter()
             .map(|result| result["total"].as_i64().unwrap())
             .sum::<i64>(),
-        39
+        42
     );
 
     let bad_family = parsed["bad_family"]
@@ -4939,6 +4987,23 @@ print(json.dumps({
             .as_str()
             .unwrap()
             .contains("tasks.firmware-artifact-manifest.args missing required values ['tools/firmware_artifact_manifest.py']")
+    );
+
+    let bad_current_artifact_manifest_task = parsed["bad_current_artifact_manifest_task"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| {
+            result["id"] == "makefile_current_firmware_artifact_manifest_uses_clean_git_ref"
+        })
+        .expect("changed current firmware artifact manifest task result is missing");
+    assert_eq!(bad_current_artifact_manifest_task["kind"], "build_task");
+    assert_eq!(bad_current_artifact_manifest_task["ok"], false);
+    assert!(
+        bad_current_artifact_manifest_task["message"]
+            .as_str()
+            .unwrap()
+            .contains("tasks.firmware-artifact-manifest-current.script missing required values ['--output firmware-artifacts.local.json']")
     );
 
     let bad_current_template_task = parsed["bad_current_template_task"]

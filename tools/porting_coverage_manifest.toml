@@ -2698,6 +2698,20 @@ args_contains = ["tools/firmware_artifact_manifest.py", "--require-uf2"]
 dependencies_include = ["uf2"]
 
 [[makefile_task_invariants]]
+id = "makefile_current_firmware_artifact_manifest_uses_clean_git_ref"
+task = "firmware-artifact-manifest-current"
+dependencies_include = ["uf2"]
+script_contains = [
+  "git status --porcelain --untracked-files=normal",
+  "git describe --tags --exact-match",
+  "git rev-parse --short=12 HEAD",
+  "tools/firmware_artifact_manifest.py",
+  "--require-uf2",
+  "--firmware-ref \"$firmware_ref\"",
+  "--output firmware-artifacts.local.json",
+]
+
+[[makefile_task_invariants]]
 id = "makefile_rmk_behavior_tests_run_full_host_suite"
 task = "rmk-behavior-tests"
 script_contains = [
