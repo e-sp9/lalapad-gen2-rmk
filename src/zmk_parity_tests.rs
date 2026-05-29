@@ -157,7 +157,7 @@ fn porting_coverage_complete_gate_accepts_explicit_status_completion() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("Porting coverage by kind:"));
     assert!(stdout.contains("- code_topology: 28/28 = 100.00%"));
-    assert!(stdout.contains("- dependency: 11/11 = 100.00%"));
+    assert!(stdout.contains("- dependency: 21/21 = 100.00%"));
     assert!(stdout.contains("- gpio_flag_mirror: 36/36 = 100.00%"));
     assert!(stdout.contains("- rmk_patch: 59/59 = 100.00%"));
     assert!(stdout.contains("- scenario:"));
@@ -250,7 +250,7 @@ ported = 1
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("porting coverage baseline drift:"));
-    assert!(stderr.contains("coverage.total: expected baseline 1, got 2977"));
+    assert!(stderr.contains("coverage.total: expected baseline 1, got 2987"));
     assert!(stderr.contains("coverage.result_count: expected baseline 1, got 488"));
     assert!(stderr.contains("coverage.result_inventory_sha256: expected baseline bad"));
     assert!(
@@ -530,7 +530,7 @@ fn migration_status_combines_software_and_hardware_progress() {
     );
     let stdout = String::from_utf8_lossy(&markdown.stdout);
     assert!(stdout.contains("## RMK Migration Status"));
-    assert!(stdout.contains("| Software coverage | 2977 | 2977 | 100.00% |"));
+    assert!(stdout.contains("| Software coverage | 2987 | 2987 | 100.00% |"));
     assert!(stdout.contains("### Hardware Progress By Area"));
     assert!(stdout.contains("| trackpad | 0 | 7 | 0.00% |"));
     assert!(stdout.contains("### Hardware Progress By Side"));
@@ -543,7 +543,7 @@ fn migration_status_combines_software_and_hardware_progress() {
 fn migration_status_rejects_coverage_baseline_drift() {
     let bad_baseline = r#"
 [coverage]
-passed = 2977
+passed = 2987
 total = 1
 result_count = 1
 result_inventory_sha256 = "bad"
@@ -580,7 +580,7 @@ ported_by_config_image = 6
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("Software failures:"));
-    assert!(stdout.contains("coverage.total: expected baseline 1, got 2977"));
+    assert!(stdout.contains("coverage.total: expected baseline 1, got 2987"));
     assert!(stdout.contains("coverage.result_count: expected baseline 1, got 488"));
     assert!(stdout.contains("coverage.result_inventory_sha256: expected baseline bad"));
 }
@@ -3804,6 +3804,32 @@ bad_features = pc.load_toml(Path("tools/porting_coverage_manifest.toml"))
 bad_features["cargo_dependency_invariants"][0]["features"] = ["nrf52840_ble"]
 bad_features_result = pc.check_cargo_dependency_invariants(bad_features, Path("."))
 
+def write_cargo_project(root, cargo_text):
+    (root / "Cargo.toml").write_text(cargo_text)
+    (root / "Cargo.lock").write_text(Path("Cargo.lock").read_text())
+    (root / "vendor/rmk-0.8.2").mkdir(parents=True)
+    (root / "vendor/rmk-0.8.2/Cargo.toml").write_text(Path("vendor/rmk-0.8.2/Cargo.toml").read_text())
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    cargo_text = Path("Cargo.toml").read_text().replace(
+        "], optional = true }",
+        "], default-features = false, optional = true }",
+        1,
+    )
+    write_cargo_project(root, cargo_text)
+    bad_default_features_result = pc.check_cargo_dependency_invariants(manifest, root)
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    cargo_text = Path("Cargo.toml").read_text().replace(
+        'path = "src/peripheral.rs"',
+        'path = "src/wrong-peripheral.rs"',
+        1,
+    )
+    write_cargo_project(root, cargo_text)
+    bad_bin_result = pc.check_cargo_dependency_invariants(manifest, root)
+
 with tempfile.TemporaryDirectory() as tempdir:
     root = Path(tempdir)
     cargo = pc.load_toml(Path("Cargo.toml"))
@@ -3822,6 +3848,8 @@ def pack(results):
 print(json.dumps({
     "ok": pack(ok),
     "bad_features": pack(bad_features_result),
+    "bad_default_features": pack(bad_default_features_result),
+    "bad_bin": pack(bad_bin_result),
     "no_patch": pack(no_patch_result),
 }))
 "#,
@@ -3839,8 +3867,8 @@ print(json.dumps({
     assert_eq!(ok.len(), 1);
     assert_eq!(ok[0]["id"], "cargo_uses_local_rmk_0_8_2_patch");
     assert_eq!(ok[0]["kind"], "dependency");
-    assert_eq!(ok[0]["passed"].as_i64(), Some(11));
-    assert_eq!(ok[0]["total"].as_i64(), Some(11));
+    assert_eq!(ok[0]["passed"].as_i64(), Some(21));
+    assert_eq!(ok[0]["total"].as_i64(), Some(21));
     assert_eq!(ok[0]["ok"], true);
 
     let bad_features = &parsed["bad_features"][0];
@@ -3852,6 +3880,23 @@ print(json.dumps({
             .unwrap()
             .contains("features expected")
     );
+
+    let bad_default_features = &parsed["bad_default_features"][0];
+    assert_eq!(bad_default_features["kind"], "dependency");
+    assert_eq!(bad_default_features["ok"], false);
+    assert!(
+        bad_default_features["message"]
+            .as_str()
+            .unwrap()
+            .contains("top-level rmk dependency default-features expected True, got False")
+    );
+
+    let bad_bin = &parsed["bad_bin"][0];
+    assert_eq!(bad_bin["kind"], "dependency");
+    assert_eq!(bad_bin["ok"], false);
+    assert!(bad_bin["message"].as_str().unwrap().contains(
+        "[[bin]] peripheral.path expected 'src/peripheral.rs', got 'src/wrong-peripheral.rs'"
+    ));
 
     let no_patch = &parsed["no_patch"][0];
     assert_eq!(no_patch["kind"], "dependency");

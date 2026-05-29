@@ -271,6 +271,10 @@ exact count should be read from the command output. This is a static,
 source-backed, and scenario-level RMK
 configuration coverage metric, not a claim that hardware-only IQS9151, BLE,
 storage, or Vial runtime paths have been exhaustively exercised on real devices.
+The Cargo dependency checks also keep RMK default features enabled so the
+default storage/Vial support from the selected RMK release is not accidentally
+disabled, and they pin the split firmware entrypoints to the expected
+`central` and `peripheral` binaries.
 The same command also prints an explicit IQS9151 symbol porting status summary:
 `ported`, `ported_by_behavior`, and `ported_by_config_image` count as
 implemented, while `not_ported` entries are the remaining software-porting

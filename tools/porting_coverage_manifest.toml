@@ -2619,6 +2619,7 @@ vendor_cargo_file = "vendor/rmk-0.8.2/Cargo.toml"
 dependency_version = "0.8"
 vendor_version = "0.8.2"
 patch_path = "vendor/rmk-0.8.2"
+default_features_enabled = true
 features = [
   "nrf52840_ble",
   "split",
@@ -2626,6 +2627,10 @@ features = [
   "controller",
   "adafruit_bl",
   "passkey_entry",
+]
+bins = [
+  { name = "central", path = "src/central.rs", test = false, bench = false },
+  { name = "peripheral", path = "src/peripheral.rs", test = false, bench = false },
 ]
 
 [[code_contains]]

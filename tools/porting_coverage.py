@@ -3151,6 +3151,38 @@ def check_cargo_dependency_invariants(manifest: dict[str, Any], project_root: Pa
             else:
                 messages.append(f"{dep_id} optional expected {expected_optional}, got {actual_optional}")
 
+            total += 1
+            expected_default_features = bool(check.get("default_features_enabled", True))
+            actual_default_features = bool(dependency.get("default-features", True))
+            if actual_default_features == expected_default_features:
+                passed += 1
+            else:
+                messages.append(
+                    f"{dep_id} default-features expected {expected_default_features}, got {actual_default_features}"
+                )
+
+        bins_by_name = {str(entry.get("name", "")): entry for entry in cargo.get("bin", [])}
+        for expected_bin in check.get("bins", []):
+            bin_name = str(expected_bin["name"])
+            actual_bin = bins_by_name.get(bin_name)
+            total += 1
+            if actual_bin is not None:
+                passed += 1
+            else:
+                messages.append(f"missing [[bin]] {bin_name!r}")
+                actual_bin = {}
+
+            for field in ["path", "test", "bench"]:
+                total += 1
+                expected_value = expected_bin[field]
+                actual_value = actual_bin.get(field)
+                if actual_value == expected_value:
+                    passed += 1
+                else:
+                    messages.append(
+                        f"[[bin]] {bin_name}.{field} expected {expected_value!r}, got {actual_value!r}"
+                    )
+
         total += 1
         actual_vendor_name = vendor.get("package", {}).get("name")
         actual_vendor_version = vendor.get("package", {}).get("version")
