@@ -575,6 +575,31 @@ fn porting_coverage_includes_exact_rmk_inventory_gates() {
             assert_eq!(json_inventory["total"].as_i64(), Some(expected_items));
             assert_eq!(json_inventory["ok"], true);
         }
+
+        for json_layout in
+            porting_coverage_manifest_toml()["source_inventory"]["json_layout_entries"]
+                .as_array()
+                .unwrap()
+        {
+            let source_file = json_layout["source_file"].as_str().unwrap();
+            let layout_name = json_layout["layout_name"].as_str().unwrap();
+            let expected_items = json_layout["expected"].as_array().unwrap().len() as i64;
+            let layout_inventory = results
+                .iter()
+                .find(|result| {
+                    result["id"]
+                        == format!("zmk_source.json_layout_entries.{source_file}.{layout_name}")
+                })
+                .unwrap_or_else(|| {
+                    panic!(
+                        "ZMK JSON layout entry coverage result is missing for {source_file}:{layout_name}"
+                    )
+                });
+            assert_eq!(layout_inventory["kind"], "zmk_inventory");
+            assert_eq!(layout_inventory["passed"].as_i64(), Some(expected_items));
+            assert_eq!(layout_inventory["total"].as_i64(), Some(expected_items));
+            assert_eq!(layout_inventory["ok"], true);
+        }
     }
 }
 
@@ -3146,6 +3171,162 @@ print(json.dumps({
             .as_str()
             .unwrap()
             .contains("missing ZMK JSON source file")
+    );
+}
+
+#[test]
+fn porting_coverage_rejects_unclassified_zmk_json_layout_entries() {
+    let output = run_python(
+        r#"
+import importlib.util
+import json
+import sys
+import tempfile
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("porting_coverage", "tools/porting_coverage.py")
+pc = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = pc
+spec.loader.exec_module(pc)
+
+manifest = {
+    "source_inventory": {
+        "json_layout_entries": [{
+            "source_file": "lalapadgen2.json",
+            "layout_name": "default_layout",
+            "expected": [
+                "default_layout[0]=row=0,col=0,x=0,y=1",
+                "default_layout[1]=row=0,col=1,x=1,y=1",
+            ],
+        }],
+    },
+}
+
+def layout(entries=None):
+    return json.dumps({
+        "layouts": {
+            "default_layout": {
+                "layout": [
+                    {"row": 0, "col": 0, "x": 0, "y": 1},
+                    {"row": 0, "col": 1, "x": 1, "y": 1},
+                ] if entries is None else entries,
+            },
+        },
+    })
+
+def pack(results):
+    return [result.__dict__ | {"ok": result.ok} for result in results]
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    fixture = root / "lalapadgen2.json"
+    fixture.write_text(layout())
+    ok = pack(pc.check_zmk_json_layout_entry_inventory(manifest, root))
+    fixture.write_text(layout([
+        {"row": 0, "col": 0, "x": 0, "y": 1},
+        {"row": 0, "col": 1, "x": 1.5, "y": 1},
+    ]))
+    coordinate_drift = pack(pc.check_zmk_json_layout_entry_inventory(manifest, root))
+    fixture.write_text(layout([
+        {"row": 0, "col": 0, "x": 0, "y": 1},
+        {"row": 0, "col": 1, "x": 1, "y": 1, "label": "extra"},
+    ]))
+    extra_attr = pack(pc.check_zmk_json_layout_entry_inventory(manifest, root))
+    fixture.write_text(layout([
+        {"row": 0, "col": 0, "x": 0, "y": 1},
+    ]))
+    missing_entry = pack(pc.check_zmk_json_layout_entry_inventory(manifest, root))
+    fixture.write_text(layout([
+        {"row": 0, "col": 0, "x": 0, "y": 1},
+        "not-an-object",
+    ]))
+    malformed_entry = pack(pc.check_zmk_json_layout_entry_inventory(manifest, root))
+    fixture.write_text(json.dumps({"layouts": {"default_layout": {"layout": {}}}}))
+    invalid_layout = pack(pc.check_zmk_json_layout_entry_inventory(manifest, root))
+
+print(json.dumps({
+    "ok": ok,
+    "coordinate_drift": coordinate_drift,
+    "extra_attr": extra_attr,
+    "missing_entry": missing_entry,
+    "malformed_entry": malformed_entry,
+    "invalid_layout": invalid_layout,
+}))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "ZMK JSON layout entry parser check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let ok_inventory = &parsed["ok"][0];
+    assert_eq!(ok_inventory["kind"], "zmk_inventory");
+    assert_eq!(ok_inventory["passed"].as_i64(), Some(2));
+    assert_eq!(ok_inventory["total"].as_i64(), Some(2));
+    assert_eq!(ok_inventory["ok"], true);
+
+    let coordinate_drift_inventory = &parsed["coordinate_drift"][0];
+    assert_eq!(coordinate_drift_inventory["kind"], "zmk_inventory");
+    assert_eq!(coordinate_drift_inventory["passed"].as_i64(), Some(1));
+    assert_eq!(coordinate_drift_inventory["total"].as_i64(), Some(2));
+    assert_eq!(coordinate_drift_inventory["ok"], false);
+    assert!(
+        coordinate_drift_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("x=1.5")
+    );
+
+    let extra_attr_inventory = &parsed["extra_attr"][0];
+    assert_eq!(extra_attr_inventory["kind"], "zmk_inventory");
+    assert_eq!(extra_attr_inventory["passed"].as_i64(), Some(1));
+    assert_eq!(extra_attr_inventory["total"].as_i64(), Some(2));
+    assert_eq!(extra_attr_inventory["ok"], false);
+    assert!(
+        extra_attr_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("label=\"extra\"")
+    );
+
+    let missing_entry_inventory = &parsed["missing_entry"][0];
+    assert_eq!(missing_entry_inventory["kind"], "zmk_inventory");
+    assert_eq!(missing_entry_inventory["passed"].as_i64(), Some(1));
+    assert_eq!(missing_entry_inventory["total"].as_i64(), Some(2));
+    assert_eq!(missing_entry_inventory["ok"], false);
+    assert!(
+        missing_entry_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("got None")
+    );
+
+    let malformed_entry_inventory = &parsed["malformed_entry"][0];
+    assert_eq!(malformed_entry_inventory["kind"], "zmk_inventory");
+    assert_eq!(malformed_entry_inventory["passed"].as_i64(), Some(1));
+    assert_eq!(malformed_entry_inventory["total"].as_i64(), Some(2));
+    assert_eq!(malformed_entry_inventory["ok"], false);
+    assert!(
+        malformed_entry_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("not-an-object")
+    );
+
+    let invalid_layout_inventory = &parsed["invalid_layout"][0];
+    assert_eq!(invalid_layout_inventory["kind"], "zmk_inventory");
+    assert_eq!(invalid_layout_inventory["passed"].as_i64(), Some(0));
+    assert_eq!(invalid_layout_inventory["total"].as_i64(), Some(2));
+    assert_eq!(invalid_layout_inventory["ok"], false);
+    assert!(
+        invalid_layout_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("default_layout:layout={}")
     );
 }
 

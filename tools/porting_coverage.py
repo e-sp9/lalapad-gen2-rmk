@@ -2094,6 +2094,10 @@ def compact_json_value(value: Any) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"))
 
 
+def compact_json_scalar(value: Any) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"))
+
+
 def zmk_json_file_inventory(value: dict[str, Any]) -> list[str]:
     items: list[str] = []
     known_top_level = {"id", "name", "layouts", "sensors"}
@@ -2132,6 +2136,37 @@ def zmk_json_file_inventory(value: dict[str, Any]) -> list[str]:
 
     for key in sorted(set(value) - known_top_level):
         items.append(f"json.top_level.{key}={compact_json_value(value[key])}")
+    return items
+
+
+def zmk_json_layout_entry_inventory(value: dict[str, Any], layout_name: str) -> list[str]:
+    layouts = value.get("layouts", {})
+    if not isinstance(layouts, dict):
+        return [f"{layout_name}:layouts={compact_json_value(layouts)}"]
+
+    layout = layouts.get(layout_name)
+    if not isinstance(layout, dict):
+        return [f"{layout_name}:layout={compact_json_value(layout)}"]
+
+    entries = layout.get("layout", [])
+    if not isinstance(entries, list):
+        return [f"{layout_name}:layout={compact_json_value(entries)}"]
+
+    items: list[str] = []
+    preferred_keys = ["row", "col", "x", "y", "u", "h", "w"]
+    preferred_key_set = set(preferred_keys)
+    for index, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            items.append(f"{layout_name}[{index}]={compact_json_value(entry)}")
+            continue
+        parts = [
+            f"{key}={compact_json_scalar(entry[key])}" for key in preferred_keys if key in entry
+        ]
+        parts.extend(
+            f"{key}={compact_json_value(entry[key])}"
+            for key in sorted(set(entry) - preferred_key_set)
+        )
+        items.append(f"{layout_name}[{index}]={','.join(parts)}")
     return items
 
 
@@ -2178,6 +2213,56 @@ def check_zmk_json_file_inventory(manifest: dict[str, Any], zmk_config_dir: Path
             )
             continue
         actual = zmk_json_file_inventory(source_json)
+        results.append(ordered_inventory_result(result_id, "zmk_inventory", expected, actual))
+    return results
+
+
+def check_zmk_json_layout_entry_inventory(
+    manifest: dict[str, Any], zmk_config_dir: Path
+) -> list[Result]:
+    results: list[Result] = []
+    for check in manifest.get("source_inventory", {}).get("json_layout_entries", []):
+        source_file = check["source_file"]
+        layout_name = check["layout_name"]
+        expected = list(check["expected"])
+        source_path = zmk_config_dir / source_file
+        result_id = f"zmk_source.json_layout_entries.{source_file}.{layout_name}"
+        if not source_path.exists():
+            results.append(
+                Result(
+                    result_id,
+                    "zmk_inventory",
+                    0,
+                    max(1, len(expected)),
+                    f"missing ZMK JSON source file {source_file!r}",
+                )
+            )
+            continue
+        try:
+            source_json = load_json(source_path)
+        except json.JSONDecodeError as e:
+            results.append(
+                Result(
+                    result_id,
+                    "zmk_inventory",
+                    0,
+                    max(1, len(expected)),
+                    f"invalid ZMK JSON source file {source_file!r}: {e}",
+                )
+            )
+            continue
+        if not isinstance(source_json, dict):
+            results.append(
+                Result(
+                    result_id,
+                    "zmk_inventory",
+                    0,
+                    max(1, len(expected)),
+                    f"ZMK JSON source file {source_file!r} must contain an object at the root",
+                )
+            )
+            continue
+        actual = zmk_json_layout_entry_inventory(source_json, layout_name)
         results.append(ordered_inventory_result(result_id, "zmk_inventory", expected, actual))
     return results
 
@@ -2798,6 +2883,7 @@ def check_zmk_source(
     results.extend(check_zmk_build_file_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_workflow_file_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_json_file_inventory(manifest, zmk_config_dir))
+    results.extend(check_zmk_json_layout_entry_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_config_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_dts_status_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_pin_values(manifest, keyboard, zmk_config_dir))
