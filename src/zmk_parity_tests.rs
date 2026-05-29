@@ -246,8 +246,8 @@ ported = 1
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("porting coverage baseline drift:"));
-    assert!(stderr.contains("coverage.total: expected baseline 1, got 2675"));
-    assert!(stderr.contains("coverage.result_count: expected baseline 1, got 453"));
+    assert!(stderr.contains("coverage.total: expected baseline 1, got 2747"));
+    assert!(stderr.contains("coverage.result_count: expected baseline 1, got 456"));
     assert!(stderr.contains("coverage.result_inventory_sha256: expected baseline bad"));
     assert!(
         stderr.contains("coverage.by_kind.behavior: actual report kind is missing from baseline")
@@ -526,7 +526,7 @@ fn migration_status_combines_software_and_hardware_progress() {
     );
     let stdout = String::from_utf8_lossy(&markdown.stdout);
     assert!(stdout.contains("## RMK Migration Status"));
-    assert!(stdout.contains("| Software coverage | 2675 | 2675 | 100.00% |"));
+    assert!(stdout.contains("| Software coverage | 2747 | 2747 | 100.00% |"));
     assert!(stdout.contains("### Hardware Progress By Area"));
     assert!(stdout.contains("| trackpad | 0 | 7 | 0.00% |"));
     assert!(stdout.contains("### Hardware Progress By Side"));
@@ -539,7 +539,7 @@ fn migration_status_combines_software_and_hardware_progress() {
 fn migration_status_rejects_coverage_baseline_drift() {
     let bad_baseline = r#"
 [coverage]
-passed = 2675
+passed = 2747
 total = 1
 result_count = 1
 result_inventory_sha256 = "bad"
@@ -576,8 +576,8 @@ ported_by_config_image = 6
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("Software failures:"));
-    assert!(stdout.contains("coverage.total: expected baseline 1, got 2675"));
-    assert!(stdout.contains("coverage.result_count: expected baseline 1, got 453"));
+    assert!(stdout.contains("coverage.total: expected baseline 1, got 2747"));
+    assert!(stdout.contains("coverage.result_count: expected baseline 1, got 456"));
     assert!(stdout.contains("coverage.result_inventory_sha256: expected baseline bad"));
 }
 
@@ -2789,6 +2789,110 @@ print(json.dumps({
 }
 
 #[test]
+fn porting_coverage_rejects_vial_identity_and_serial_drift() {
+    let output = run_python(
+        r#"
+import copy
+import importlib.util
+import json
+import sys
+import tempfile
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("porting_coverage", "tools/porting_coverage.py")
+pc = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = pc
+spec.loader.exec_module(pc)
+
+manifest = pc.load_toml(Path("tools/porting_coverage_manifest.toml"))
+keyboard = pc.load_toml(Path("keyboard.toml"))
+vial = pc.load_json(Path("vial.json"))
+
+with tempfile.TemporaryDirectory() as root_dir:
+    Path(root_dir, "vial.json").write_text(json.dumps(vial), encoding="utf-8")
+    ok = pc.check_vial_keyboard_toml_layout(manifest, keyboard, Path(root_dir))
+
+bad_keyboard = copy.deepcopy(keyboard)
+bad_keyboard["keyboard"]["serial_number"] = "not-vial"
+bad_vial = copy.deepcopy(vial)
+bad_vial["productId"] = "0xFFFF"
+with tempfile.TemporaryDirectory() as root_dir:
+    Path(root_dir, "vial.json").write_text(json.dumps(bad_vial), encoding="utf-8")
+    bad = pc.check_vial_keyboard_toml_layout(manifest, bad_keyboard, Path(root_dir))
+
+def pack(results):
+    return [result.__dict__ | {"ok": result.ok} for result in results]
+
+print(json.dumps({
+    "ok": pack(ok),
+    "bad": pack(bad),
+}))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "Vial identity check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let ok_identity = parsed["ok"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "vial_identity_matches_keyboard_toml")
+        .expect("Vial identity result is missing");
+    assert_eq!(ok_identity["kind"], "vial");
+    assert_eq!(ok_identity["passed"].as_i64(), Some(3));
+    assert_eq!(ok_identity["total"].as_i64(), Some(3));
+    assert_eq!(ok_identity["ok"], true);
+
+    let ok_serial = parsed["ok"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "vial_keyboard_serial_number_prefix")
+        .expect("Vial serial prefix result is missing");
+    assert_eq!(ok_serial["passed"].as_i64(), Some(1));
+    assert_eq!(ok_serial["total"].as_i64(), Some(1));
+    assert_eq!(ok_serial["ok"], true);
+
+    let bad_identity = parsed["bad"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "vial_identity_matches_keyboard_toml")
+        .expect("changed Vial identity result is missing");
+    assert_eq!(bad_identity["passed"].as_i64(), Some(2));
+    assert_eq!(bad_identity["total"].as_i64(), Some(3));
+    assert_eq!(bad_identity["ok"], false);
+    assert!(
+        bad_identity["message"]
+            .as_str()
+            .unwrap()
+            .contains("productId expected '0x4C32', got '0xFFFF'")
+    );
+
+    let bad_serial = parsed["bad"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "vial_keyboard_serial_number_prefix")
+        .expect("changed Vial serial prefix result is missing");
+    assert_eq!(bad_serial["passed"].as_i64(), Some(0));
+    assert_eq!(bad_serial["total"].as_i64(), Some(1));
+    assert_eq!(bad_serial["ok"], false);
+    assert!(
+        bad_serial["message"]
+            .as_str()
+            .unwrap()
+            .contains("keyboard.serial_number must start with 'vial:f64c2b3c:'")
+    );
+}
+
+#[test]
 fn porting_coverage_rejects_vial_keyboard_toml_position_drift() {
     let output = run_python(
         r#"
@@ -2818,12 +2922,19 @@ with tempfile.TemporaryDirectory() as bad_dir:
     Path(bad_dir, "vial.json").write_text(json.dumps(bad_vial), encoding="utf-8")
     bad = pc.check_vial_keyboard_toml_layout(manifest, keyboard, Path(bad_dir))
 
+extra_vial = copy.deepcopy(vial)
+extra_vial["layouts"]["keymap"].append(["0,5"])
+with tempfile.TemporaryDirectory() as extra_dir:
+    Path(extra_dir, "vial.json").write_text(json.dumps(extra_vial), encoding="utf-8")
+    extra = pc.check_vial_keyboard_toml_layout(manifest, keyboard, Path(extra_dir))
+
 def pack(results):
     return [result.__dict__ | {"ok": result.ok} for result in results]
 
 print(json.dumps({
     "ok": pack(ok),
     "bad": pack(bad),
+    "extra": pack(extra),
     "keyboard_positions": pc.keyboard_toml_vial_positions(keyboard),
     "vial_positions": pc.collect_vial_positions(vial["layouts"]["keymap"]),
 }))
@@ -2863,6 +2974,17 @@ print(json.dumps({
     assert_eq!(ok_coverage["total"].as_i64(), Some(66));
     assert_eq!(ok_coverage["ok"], true);
 
+    let ok_exposed = parsed["ok"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "vial_positions_match_keyboard_toml_exposed_positions")
+        .expect("Vial keyboard.toml exact exposed-position result is missing");
+    assert_eq!(ok_exposed["kind"], "vial");
+    assert_eq!(ok_exposed["passed"].as_i64(), Some(68));
+    assert_eq!(ok_exposed["total"].as_i64(), Some(68));
+    assert_eq!(ok_exposed["ok"], true);
+
     let bad_bounds = parsed["bad"]
         .as_array()
         .unwrap()
@@ -2895,6 +3017,40 @@ print(json.dumps({
             .as_str()
             .unwrap()
             .contains("missing keyboard.toml action positions [(0, 0)]")
+    );
+
+    let bad_exposed = parsed["bad"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "vial_positions_match_keyboard_toml_exposed_positions")
+        .expect("changed Vial exact exposed-position result is missing");
+    assert_eq!(bad_exposed["kind"], "vial");
+    assert_eq!(bad_exposed["passed"].as_i64(), Some(67));
+    assert_eq!(bad_exposed["total"].as_i64(), Some(68));
+    assert_eq!(bad_exposed["ok"], false);
+    assert!(
+        bad_exposed["message"]
+            .as_str()
+            .unwrap()
+            .contains("missing expected exposed positions [(0, 0)]")
+    );
+
+    let extra_exposed = parsed["extra"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "vial_positions_match_keyboard_toml_exposed_positions")
+        .expect("extra Vial exact exposed-position result is missing");
+    assert_eq!(extra_exposed["kind"], "vial");
+    assert_eq!(extra_exposed["passed"].as_i64(), Some(68));
+    assert_eq!(extra_exposed["total"].as_i64(), Some(69));
+    assert_eq!(extra_exposed["ok"], false);
+    assert!(
+        extra_exposed["message"]
+            .as_str()
+            .unwrap()
+            .contains("unexpected Vial positions [(0, 5)]")
     );
 }
 

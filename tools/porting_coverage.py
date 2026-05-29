@@ -3415,6 +3415,59 @@ def check_vial_keyboard_toml_layout(
     expected_layout = manifest["layout"]
     results: list[Result] = []
 
+    def normalized_hex_u16(value: Any) -> str:
+        if isinstance(value, int):
+            return f"0x{value:04X}"
+        if isinstance(value, str):
+            try:
+                return f"0x{int(value.strip(), 0):04X}"
+            except ValueError:
+                return value
+        return str(value)
+
+    identity_checks = [
+        ("name", vial.get("name"), path_get(config, "keyboard.name")),
+        (
+            "vendorId",
+            normalized_hex_u16(vial.get("vendorId")),
+            normalized_hex_u16(path_get(config, "keyboard.vendor_id")),
+        ),
+        (
+            "productId",
+            normalized_hex_u16(vial.get("productId")),
+            normalized_hex_u16(path_get(config, "keyboard.product_id")),
+        ),
+    ]
+    identity_passed = sum(1 for _, actual, expected in identity_checks if actual == expected)
+    identity_messages = [
+        f"{name} expected {expected!r}, got {actual!r}"
+        for name, actual, expected in identity_checks
+        if actual != expected
+    ]
+    results.append(
+        Result(
+            "vial_identity_matches_keyboard_toml",
+            "vial",
+            identity_passed,
+            len(identity_checks),
+            "ok" if not identity_messages else "; ".join(identity_messages),
+        )
+    )
+
+    serial_number = str(path_get(config, "keyboard.serial_number"))
+    serial_prefix_ok = serial_number.startswith("vial:f64c2b3c:")
+    results.append(
+        Result(
+            "vial_keyboard_serial_number_prefix",
+            "vial",
+            1 if serial_prefix_ok else 0,
+            1,
+            "ok"
+            if serial_prefix_ok
+            else f"keyboard.serial_number must start with 'vial:f64c2b3c:', got {serial_number!r}",
+        )
+    )
+
     matrix_checks = [
         ("rows", vial["matrix"].get("rows"), expected_layout["rows"]),
         ("cols", vial["matrix"].get("cols"), expected_layout["cols"]),
@@ -3437,6 +3490,11 @@ def check_vial_keyboard_toml_layout(
 
     required_positions = keyboard_toml_vial_positions(config)
     actual_positions = collect_vial_positions(vial["layouts"]["keymap"])
+    allowed_no_action_positions = {
+        (int(position["row"]), int(position["col"]))
+        for position in manifest.get("layout", {}).get("vial_allowed_no_action_positions", [])
+    }
+    expected_exposed_positions = set(required_positions) | allowed_no_action_positions
     rows = int(config["layout"]["rows"])
     cols = int(config["layout"]["cols"])
     bound_messages: list[str] = []
@@ -3474,6 +3532,24 @@ def check_vial_keyboard_toml_layout(
             "ok"
             if not missing_required
             else f"missing keyboard.toml action positions {missing_required[:8]!r}",
+        )
+    )
+    missing_exposed = sorted(expected_exposed_positions - actual_set)
+    extra_exposed = sorted(actual_set - expected_exposed_positions)
+    exact_total = len(expected_exposed_positions | actual_set)
+    exact_passed = len(expected_exposed_positions & actual_set)
+    exact_mismatches = []
+    if missing_exposed:
+        exact_mismatches.append(f"missing expected exposed positions {missing_exposed[:8]!r}")
+    if extra_exposed:
+        exact_mismatches.append(f"unexpected Vial positions {extra_exposed[:8]!r}")
+    results.append(
+        Result(
+            "vial_positions_match_keyboard_toml_exposed_positions",
+            "vial",
+            exact_passed,
+            exact_total,
+            "ok" if not exact_mismatches else "; ".join(exact_mismatches[:8]),
         )
     )
     return results

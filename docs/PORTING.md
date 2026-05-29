@@ -280,8 +280,8 @@ The text and JSON reports also include a `by_kind` breakdown of the same
 coverage results, so a regression can be traced to RMK keymap/config checks,
 ZMK source inventories, Kconfig/DTS mirrors, Cargo dependency resolution, Rust
 constants, IQS9151 byte arrays, local RMK composite mouse and dynamic-scale
-storage patch invariants, Vial custom-key semantics, or firmware code-needle
-checks instead of treating the total percentage as a black box.
+storage patch invariants, Vial identity and custom-key semantics, or firmware
+code-needle checks instead of treating the total percentage as a black box.
 `tools/porting_coverage_baseline.toml` records the current
 overall denominator, result-id inventory hash, and per-kind denominator. Use
 `--coverage-baseline` in CI and release checks so a removed or swapped check

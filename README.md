@@ -166,10 +166,11 @@ ZMK behavior-node and combo-node property inventories, ZMK include inventory,
 active and disabled Kconfig lines, Kconfig shield/default entries, DTS aliases
 and DTS root/overlay node inventories,
 west module inventory, ZMK trackpad virtual-position
-defines, RMK custom keycode order and labels, ZMK `INPUT_BTN_*` to virtual-position
-bindings, ZMK trackpad-to-position behavior and input-processor properties, ZMK
-split-input container properties, ZMK trackpad listener device and
-normal/low-speed input-processor chains, selected
+defines, RMK custom keycode order and labels, Vial name/VID/PID identity and
+Vial serial-number prefix, ZMK `INPUT_BTN_*` to virtual-position bindings, ZMK
+trackpad-to-position behavior and input-processor properties, ZMK split-input
+container properties, ZMK trackpad listener device and normal/low-speed
+input-processor chains, selected
 ZMK DTS properties for split input, dynamic scaling, right-half column offset,
 overlay trackpad routing overrides, matrix transform, physical-layout, I2C,
 RGB LED, and charge-indicator nodes, ZMK GPIO pin flags, the ZMK DTS/overlay
@@ -186,8 +187,12 @@ thumb hold's active layer from the `LT(...)`/`MO(...)` action instead of trustin
 the scenario metadata alone. It also checks that
 Vial's `customKeycodes` names, titles, and short labels match RMK's
 `User0..User13` BLE and dynamic-scale handler semantics, so host-side remapping
-cannot silently point at the wrong firmware action. The Vial position gate also compares `vial.json` against
-`keyboard.toml` bounds and all non-empty firmware key positions without needing
+cannot silently point at the wrong firmware action. The Vial identity gate also
+checks that `vial.json` still targets the same `keyboard.toml` name, VID, and
+PID, and that the firmware serial number keeps RMK's Vial recognition prefix.
+The Vial position gate also compares `vial.json` against
+`keyboard.toml` bounds, all non-empty firmware key positions, and the explicitly
+classified no-action physical positions without needing
 the upstream ZMK checkout. It also resolves every
 position on layer 1, layer 2, and the system tri-layer against the ZMK source
 keymap to catch transparent-key fallthrough drift. ZMK hold-tap timing values

@@ -517,6 +517,10 @@ vial_custom_keycodes = [
   { name = "TP_SC_DEC", title = "Decrease trackpad scroll scale", shortName = "Scroll\n-" },
   { name = "TP_SCALE_RST", title = "Reset trackpad cursor and scroll scale", shortName = "Scale\nReset" },
 ]
+vial_allowed_no_action_positions = [
+  { row = 4, col = 1 },
+  { row = 4, col = 10 },
+]
 vial_user_key_semantics = [
   { key = "User0", name = "BT0", handler_needles = ["id < NUM_BLE_PROFILE as u8", "SwitchProfile(id)"] },
   { key = "User1", name = "BT1", handler_needles = ["id < NUM_BLE_PROFILE as u8", "SwitchProfile(id)"] },
