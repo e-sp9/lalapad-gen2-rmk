@@ -1,8 +1,8 @@
 [coverage]
-passed = 2941
-total = 2941
-result_count = 482
-result_inventory_sha256 = "bf6b1895b086a30d15bad7b0d507cc82f3ec4be3e27df880cbc65062a63e7071"
+passed = 2977
+total = 2977
+result_count = 488
+result_inventory_sha256 = "98440e6dee169a7fad3c7a566386ccb489fcd6facabdbdfda77ad131269d0015"
 
 [coverage.by_kind.behavior]
 passed = 10
@@ -31,6 +31,10 @@ total = 14
 [coverage.by_kind.dependency]
 passed = 11
 total = 11
+
+[coverage.by_kind.gpio_flag_mirror]
+passed = 36
+total = 36
 
 [coverage.by_kind.iqs9151_bit_porting]
 passed = 96

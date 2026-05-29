@@ -1325,6 +1325,71 @@ source_block = "led2"
 source_property = "gpios"
 expected = ["P1_07"]
 
+[[gpio_flag_mirrors]]
+id = "charge_state_gpio_active_low"
+source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi"
+source_block = "easy_charge_indicator"
+source_property = "charge-gpios"
+expected_source = "gpio0:17:GPIO_ACTIVE_LOW"
+target_pin_paths = ["ble.charge_state.pin"]
+target_low_active_path = "ble.charge_state.low_active"
+required_flags = ["GPIO_ACTIVE_LOW"]
+
+[[gpio_flag_mirrors]]
+id = "charge_led_gpio_active_low_open_drain"
+source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi"
+source_block = "easy_charge_indicator"
+source_property = "led-gpios"
+expected_source = "gpio0:10:GPIO_ACTIVE_LOW|GPIO_OPEN_DRAIN"
+target_pin_paths = ["ble.charge_led.pin"]
+target_low_active_path = "ble.charge_led.low_active"
+required_flags = ["GPIO_ACTIVE_LOW", "GPIO_OPEN_DRAIN"]
+
+[[gpio_flag_mirrors]]
+id = "iqs9151_irq_gpio_active_low_pull_up"
+source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi"
+source_block = "iqs9151"
+source_property = "irq-gpios"
+expected_source = "xiao_d:6:GPIO_ACTIVE_LOW|GPIO_PULL_UP"
+target_files = ["src/central.rs", "src/peripheral.rs"]
+target_pin_needle = true
+target_active_low_needle = "Iqs9151ReadyPin::active_low"
+target_pull_up_needle = "::embassy_nrf::gpio::Pull::Up"
+required_flags = ["GPIO_ACTIVE_LOW", "GPIO_PULL_UP"]
+
+[[gpio_flag_mirrors]]
+id = "rgb_red_gpio_active_low"
+source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi"
+source_block = "led0"
+source_property = "gpios"
+expected_source = "gpio1:3:GPIO_ACTIVE_LOW"
+target_files = ["src/central.rs", "src/peripheral.rs"]
+target_pin_needle = true
+target_needles = ["RgbLedWidget::new(red, green, blue, true,"]
+required_flags = ["GPIO_ACTIVE_LOW"]
+
+[[gpio_flag_mirrors]]
+id = "rgb_green_gpio_active_low"
+source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi"
+source_block = "led1"
+source_property = "gpios"
+expected_source = "gpio1:5:GPIO_ACTIVE_LOW"
+target_files = ["src/central.rs", "src/peripheral.rs"]
+target_pin_needle = true
+target_needles = ["RgbLedWidget::new(red, green, blue, true,"]
+required_flags = ["GPIO_ACTIVE_LOW"]
+
+[[gpio_flag_mirrors]]
+id = "rgb_blue_gpio_active_low"
+source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi"
+source_block = "led2"
+source_property = "gpios"
+expected_source = "gpio1:7:GPIO_ACTIVE_LOW"
+target_files = ["src/central.rs", "src/peripheral.rs"]
+target_pin_needle = true
+target_needles = ["RgbLedWidget::new(red, green, blue, true,"]
+required_flags = ["GPIO_ACTIVE_LOW"]
+
 [[iqs9151_register_porting]]
 source_const = "IQS9151_ADDR_PRODUCT_NUMBER"
 source_value = 4096

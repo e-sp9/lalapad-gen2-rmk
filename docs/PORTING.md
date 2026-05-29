@@ -229,9 +229,10 @@ split-input container properties, checks the ZMK trackpad listener device and
 normal/low-speed input-processor chains, checks
 selected ZMK DTS properties for split input, dynamic scaling, right-half column
 offset, overlay trackpad routing, matrix transform, physical-layout, RGB LED,
-I2C, and charge-indicator nodes, checks source GPIO pin flags,
-checks the ZMK `*.dtsi` / `*.overlay` status-node inventory, and checks the RMK
-custom keycode order and labels used for the ZMK Bluetooth and trackpad scale actions.
+I2C, and charge-indicator nodes, checks source GPIO pin flags and their RMK
+target polarity mirrors, checks the ZMK `*.dtsi` / `*.overlay` status-node
+inventory, and checks the RMK custom keycode order and labels used for the ZMK
+Bluetooth and trackpad scale actions.
 These high-risk ZMK source checks are represented as structured inventories
 rather than regex-only checks.
 The thumb tap/hold layer-resolution scenarios are also cross-checked against
@@ -282,6 +283,9 @@ ZMK source inventories, Kconfig/DTS mirrors, Cargo dependency resolution, Rust
 constants, IQS9151 byte arrays, local RMK composite mouse and dynamic-scale
 storage patch invariants, Vial identity and custom-key semantics, or firmware
 code-needle checks instead of treating the total percentage as a black box.
+GPIO flag mirror checks specifically tie active-low, pull-up, and open-drain
+ZMK DTS flags to the RMK TOML fields and Rust constructor paths that implement
+the same electrical behavior.
 Trackpad virtual-button checks compare the IQS9151 runtime input button code
 mapping, left/right button-position arrays, layer-0 key actions, and
 Vial-exposed positions together so a gesture cannot silently move to a different

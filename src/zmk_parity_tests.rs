@@ -158,6 +158,7 @@ fn porting_coverage_complete_gate_accepts_explicit_status_completion() {
     assert!(stdout.contains("Porting coverage by kind:"));
     assert!(stdout.contains("- code_topology: 28/28 = 100.00%"));
     assert!(stdout.contains("- dependency: 11/11 = 100.00%"));
+    assert!(stdout.contains("- gpio_flag_mirror: 36/36 = 100.00%"));
     assert!(stdout.contains("- rmk_patch: 59/59 = 100.00%"));
     assert!(stdout.contains("- scenario:"));
     assert!(stdout.contains("- split: 100/100 = 100.00%"));
@@ -249,8 +250,8 @@ ported = 1
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("porting coverage baseline drift:"));
-    assert!(stderr.contains("coverage.total: expected baseline 1, got 2941"));
-    assert!(stderr.contains("coverage.result_count: expected baseline 1, got 482"));
+    assert!(stderr.contains("coverage.total: expected baseline 1, got 2977"));
+    assert!(stderr.contains("coverage.result_count: expected baseline 1, got 488"));
     assert!(stderr.contains("coverage.result_inventory_sha256: expected baseline bad"));
     assert!(
         stderr.contains("coverage.by_kind.behavior: actual report kind is missing from baseline")
@@ -529,7 +530,7 @@ fn migration_status_combines_software_and_hardware_progress() {
     );
     let stdout = String::from_utf8_lossy(&markdown.stdout);
     assert!(stdout.contains("## RMK Migration Status"));
-    assert!(stdout.contains("| Software coverage | 2941 | 2941 | 100.00% |"));
+    assert!(stdout.contains("| Software coverage | 2977 | 2977 | 100.00% |"));
     assert!(stdout.contains("### Hardware Progress By Area"));
     assert!(stdout.contains("| trackpad | 0 | 7 | 0.00% |"));
     assert!(stdout.contains("### Hardware Progress By Side"));
@@ -542,7 +543,7 @@ fn migration_status_combines_software_and_hardware_progress() {
 fn migration_status_rejects_coverage_baseline_drift() {
     let bad_baseline = r#"
 [coverage]
-passed = 2941
+passed = 2977
 total = 1
 result_count = 1
 result_inventory_sha256 = "bad"
@@ -579,8 +580,8 @@ ported_by_config_image = 6
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("Software failures:"));
-    assert!(stdout.contains("coverage.total: expected baseline 1, got 2941"));
-    assert!(stdout.contains("coverage.result_count: expected baseline 1, got 482"));
+    assert!(stdout.contains("coverage.total: expected baseline 1, got 2977"));
+    assert!(stdout.contains("coverage.result_count: expected baseline 1, got 488"));
     assert!(stdout.contains("coverage.result_inventory_sha256: expected baseline bad"));
 }
 
@@ -3204,6 +3205,166 @@ print(json.dumps({
             .unwrap()
             .contains("Vial layout missing (6, 11)")
     );
+}
+
+#[test]
+fn porting_coverage_rejects_gpio_flag_mirror_drift() {
+    let output = run_python(
+        r#"
+import copy
+import importlib.util
+import json
+import shutil
+import sys
+import tempfile
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("porting_coverage", "tools/porting_coverage.py")
+pc = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = pc
+spec.loader.exec_module(pc)
+
+manifest = pc.load_toml(Path("tools/porting_coverage_manifest.toml"))
+keyboard = pc.load_toml(Path("keyboard.toml"))
+
+dtsi = """
+/ {
+    easy_charge_indicator: easy_charge_indicator {
+        charge-gpios = <&gpio0 17 GPIO_ACTIVE_LOW>;
+        led-gpios = <&gpio0 10 (GPIO_ACTIVE_LOW | GPIO_OPEN_DRAIN)>;
+    };
+    iqs9151: iqs9151@56 {
+        irq-gpios = <&xiao_d 6 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+    };
+    leds {
+        led0: led0 { gpios = <&gpio1 3 GPIO_ACTIVE_LOW>; };
+        led1: led1 { gpios = <&gpio1 5 GPIO_ACTIVE_LOW>; };
+        led2: led2 { gpios = <&gpio1 7 GPIO_ACTIVE_LOW>; };
+    };
+};
+"""
+
+def write_project(root, central_text=None, peripheral_text=None, dtsi_text=None):
+    zmk = root / "zmk" / "boards" / "shields" / "lalapadgen2"
+    zmk.mkdir(parents=True)
+    (zmk / "lalapadgen2.dtsi").write_text(dtsi_text if dtsi_text is not None else dtsi, encoding="utf-8")
+    (root / "src").mkdir()
+    (root / "src/central.rs").write_text(
+        central_text if central_text is not None else Path("src/central.rs").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    (root / "src/peripheral.rs").write_text(
+        peripheral_text if peripheral_text is not None else Path("src/peripheral.rs").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    return root / "zmk"
+
+with tempfile.TemporaryDirectory() as root_dir:
+    root = Path(root_dir)
+    zmk = write_project(root)
+    ok = pc.check_gpio_flag_mirrors(manifest, keyboard, zmk, root)
+
+bad_keyboard = copy.deepcopy(keyboard)
+bad_keyboard["ble"]["charge_state"]["low_active"] = False
+with tempfile.TemporaryDirectory() as root_dir:
+    root = Path(root_dir)
+    zmk = write_project(root)
+    bad_low_active = pc.check_gpio_flag_mirrors(manifest, bad_keyboard, zmk, root)
+
+bad_central = Path("src/central.rs").read_text(encoding="utf-8").replace(
+    "Iqs9151ReadyPin::active_low",
+    "Iqs9151ReadyPin::active_high",
+    1,
+)
+with tempfile.TemporaryDirectory() as root_dir:
+    root = Path(root_dir)
+    zmk = write_project(root, central_text=bad_central)
+    bad_irq = pc.check_gpio_flag_mirrors(manifest, keyboard, zmk, root)
+
+bad_dtsi = dtsi.replace("GPIO_ACTIVE_LOW | GPIO_OPEN_DRAIN", "GPIO_ACTIVE_LOW")
+with tempfile.TemporaryDirectory() as root_dir:
+    root = Path(root_dir)
+    zmk = write_project(root, dtsi_text=bad_dtsi)
+    bad_open_drain = pc.check_gpio_flag_mirrors(manifest, keyboard, zmk, root)
+
+def pack(results):
+    return [result.__dict__ | {"ok": result.ok} for result in results]
+
+print(json.dumps({
+    "ok": pack(ok),
+    "bad_low_active": pack(bad_low_active),
+    "bad_irq": pack(bad_irq),
+    "bad_open_drain": pack(bad_open_drain),
+}))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "GPIO flag mirror check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let ok_charge = parsed["ok"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "charge_state_gpio_active_low")
+        .expect("charge-state GPIO flag mirror result is missing");
+    assert_eq!(ok_charge["kind"], "gpio_flag_mirror");
+    assert_eq!(ok_charge["passed"].as_i64(), Some(4));
+    assert_eq!(ok_charge["total"].as_i64(), Some(4));
+    assert_eq!(ok_charge["ok"], true);
+
+    let bad_low_active = parsed["bad_low_active"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "charge_state_gpio_active_low")
+        .expect("changed charge-state GPIO flag mirror result is missing");
+    assert_eq!(bad_low_active["kind"], "gpio_flag_mirror");
+    assert_eq!(bad_low_active["passed"].as_i64(), Some(3));
+    assert_eq!(bad_low_active["total"].as_i64(), Some(4));
+    assert_eq!(bad_low_active["ok"], false);
+    assert!(
+        bad_low_active["message"]
+            .as_str()
+            .unwrap()
+            .contains("ble.charge_state.low_active expected True, got False")
+    );
+
+    let bad_irq = parsed["bad_irq"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "iqs9151_irq_gpio_active_low_pull_up")
+        .expect("changed IQS9151 IRQ GPIO flag mirror result is missing");
+    assert_eq!(bad_irq["kind"], "gpio_flag_mirror");
+    assert_eq!(bad_irq["passed"].as_i64(), Some(8));
+    assert_eq!(bad_irq["total"].as_i64(), Some(9));
+    assert_eq!(bad_irq["ok"], false);
+    assert!(
+        bad_irq["message"]
+            .as_str()
+            .unwrap()
+            .contains("src/central.rs missing 'Iqs9151ReadyPin::active_low'")
+    );
+
+    let bad_open_drain = parsed["bad_open_drain"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "charge_led_gpio_active_low_open_drain")
+        .expect("changed charge LED GPIO flag mirror result is missing");
+    assert_eq!(bad_open_drain["kind"], "gpio_flag_mirror");
+    assert_eq!(bad_open_drain["passed"].as_i64(), Some(3));
+    assert_eq!(bad_open_drain["total"].as_i64(), Some(5));
+    assert_eq!(bad_open_drain["ok"], false);
+    let bad_open_drain_message = bad_open_drain["message"].as_str().unwrap();
+    assert!(bad_open_drain_message.contains("source expected"));
+    assert!(bad_open_drain_message.contains("source missing GPIO flag 'GPIO_OPEN_DRAIN'"));
 }
 
 #[test]

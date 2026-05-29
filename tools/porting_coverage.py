@@ -1356,6 +1356,17 @@ def parse_gpio_property_with_flags(block: str, name: str) -> list[str]:
     return entries
 
 
+def gpio_entry_pin_and_flags(entry: str) -> tuple[str, set[str]]:
+    controller, pin_text, flags_text = entry.split(":", 2)
+    return zmk_pin_to_rmk(controller, int(pin_text)), set(flags_text.split("|"))
+
+
+def rust_text_contains_all(project_root: Path, file_name: str, needles: list[str]) -> tuple[int, list[str]]:
+    text = (project_root / file_name).read_text()
+    missing = [needle for needle in needles if needle not in text]
+    return len(needles) - len(missing), missing
+
+
 def parse_kconfig(path: Path) -> dict[str, str]:
     values: dict[str, str] = {}
     text = path.read_text()
@@ -2806,6 +2817,93 @@ def check_zmk_pin_values(
                 passed,
                 total,
                 "ok" if passed == total else "; ".join(messages),
+            )
+        )
+    return results
+
+
+def check_gpio_flag_mirrors(
+    manifest: dict[str, Any],
+    keyboard: dict[str, Any],
+    zmk_config_dir: Path,
+    project_root: Path,
+) -> list[Result]:
+    results: list[Result] = []
+    for check in manifest.get("gpio_flag_mirrors", []):
+        source_path = zmk_config_dir / check["source_file"]
+        block = extract_block(source_path.read_text(), check["source_block"])
+        entries = parse_gpio_property_with_flags(block, check["source_property"])
+        index = int(check.get("source_index", 0))
+        source_entry = entries[index] if index < len(entries) else ""
+        expected_source = str(check["expected_source"])
+
+        passed = 0
+        total = 1
+        messages: list[str] = []
+        if source_entry == expected_source:
+            passed += 1
+        else:
+            messages.append(f"source expected {expected_source!r}, got {source_entry!r}")
+
+        try:
+            source_pin, flags = gpio_entry_pin_and_flags(source_entry)
+        except ValueError:
+            source_pin, flags = "", set()
+
+        for target_path in check.get("target_pin_paths", []):
+            try:
+                actual_pin = path_get(keyboard, target_path)
+            except KeyError:
+                actual_pin = None
+            total += 1
+            if actual_pin == source_pin:
+                passed += 1
+            else:
+                messages.append(f"{target_path} expected {source_pin!r}, got {actual_pin!r}")
+
+        if "target_low_active_path" in check:
+            try:
+                actual_low_active = path_get(keyboard, check["target_low_active_path"])
+            except KeyError:
+                actual_low_active = None
+            expected_low_active = "GPIO_ACTIVE_LOW" in flags
+            total += 1
+            if actual_low_active == expected_low_active:
+                passed += 1
+            else:
+                messages.append(
+                    f"{check['target_low_active_path']} expected {expected_low_active!r}, "
+                    f"got {actual_low_active!r}"
+                )
+
+        for flag in check.get("required_flags", []):
+            total += 1
+            if flag in flags:
+                passed += 1
+            else:
+                messages.append(f"source missing GPIO flag {flag!r}")
+
+        expected_needles = list(check.get("target_needles", []))
+        if check.get("target_pin_needle"):
+            expected_needles.append(source_pin)
+        if check.get("target_active_low_needle") and "GPIO_ACTIVE_LOW" in flags:
+            expected_needles.append(str(check["target_active_low_needle"]))
+        if check.get("target_pull_up_needle") and "GPIO_PULL_UP" in flags:
+            expected_needles.append(str(check["target_pull_up_needle"]))
+
+        for target_file in check.get("target_files", []):
+            needle_passed, missing = rust_text_contains_all(project_root, target_file, expected_needles)
+            passed += needle_passed
+            total += len(expected_needles)
+            messages.extend(f"{target_file} missing {needle!r}" for needle in missing)
+
+        results.append(
+            Result(
+                check["id"],
+                "gpio_flag_mirror",
+                passed,
+                total,
+                "ok" if not messages else "; ".join(messages),
             )
         )
     return results
@@ -4365,6 +4463,7 @@ def check_zmk_source(
     results.extend(check_zmk_config_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_dts_status_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_pin_values(manifest, keyboard, zmk_config_dir))
+    results.extend(check_gpio_flag_mirrors(manifest, keyboard, zmk_config_dir, project_root))
     results.extend(check_source_regex_values(manifest, zmk_config_dir))
     results.extend(check_zmk_matrix_transform(manifest, zmk_config_dir))
     results.extend(check_rust_const_values(manifest, zmk_config_dir, project_root))

@@ -177,8 +177,9 @@ ZMK trackpad listener device and normal/low-speed
 input-processor chains, selected
 ZMK DTS properties for split input, dynamic scaling, right-half column offset,
 overlay trackpad routing overrides, matrix transform, physical-layout, I2C,
-RGB LED, and charge-indicator nodes, ZMK GPIO pin flags, the ZMK DTS/overlay
-status-node inventory, exact RMK keymap array shape, and the exact RMK combo
+RGB LED, and charge-indicator nodes, ZMK GPIO pin flags, GPIO flag-to-target
+polarity mirrors, the ZMK DTS/overlay status-node inventory, exact RMK keymap
+array shape, and the exact RMK combo
 inventory. It also freezes both the Cargo dependency resolution that keeps the
 local RMK patch active and the patch invariants for the HID descriptor, BLE
 mouse feature report, high-resolution wheel, horizontal pan handling, and
