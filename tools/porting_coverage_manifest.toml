@@ -1258,14 +1258,14 @@ target_const = "ADDR_ALP_COMPENSATION"
 [[iqs9151_register_porting]]
 source_const = "IQS9151_ADDR_I2C_UPDATE_KEY"
 source_value = 4470
-status = "not_ported"
-reason = "RMK does not change the IQS9151 I2C address at runtime."
+status = "ported"
+target_const = "ADDR_I2C_UPDATE_KEY"
 
 [[iqs9151_register_porting]]
 source_const = "IQS9151_ADDR_I2C_ADDR"
 source_value = 4471
-status = "not_ported"
-reason = "RMK uses the fixed upstream I2C address and does not persist a rewritten slave address."
+status = "ported"
+target_const = "ADDR_I2C_ADDR"
 
 [[iqs9151_register_porting]]
 source_const = "IQS9151_ADDR_SETTINGS_MINOR"
@@ -1276,8 +1276,8 @@ target_const = "ADDR_SETTINGS_MINOR"
 [[iqs9151_register_porting]]
 source_const = "IQS9151_ADDR_SETTINGS_MAJOR"
 source_value = 4473
-status = "not_ported"
-reason = "The current RMK startup sequence does not branch on the IQS9151 settings major version."
+status = "ported"
+target_const = "ADDR_SETTINGS_MAJOR"
 
 [[iqs9151_register_porting]]
 source_const = "IQS9151_ADDR_ATI_MULTIPLIERS"
@@ -1390,8 +1390,8 @@ target_const = "ADDR_SNAP_ENABLE"
 [[iqs9151_register_porting]]
 source_const = "IQS9151_ADDR_TOUCH_THRESHOLD_ADJUST"
 source_value = 4854
-status = "not_ported"
-reason = "The current RMK port does not expose the upstream driver's touch-threshold adjustment register as a standalone runtime setting."
+status = "ported"
+target_const = "ADDR_TOUCH_THRESHOLD_ADJUST"
 
 [[iqs9151_bit_porting]]
 source_const = "IQS9151_INFO_SHOW_RESET"
@@ -1528,8 +1528,8 @@ target_const = "SYS_CTRL_TP_RE_ATI"
 [[iqs9151_bit_porting]]
 source_const = "IQS9151_SYS_CTRL_TP_RESEED"
 source_value = 8
-status = "not_ported"
-reason = "RMK runs ALP/trackpad re-ATI during startup but does not issue the optional TP reseed control bit."
+status = "ported"
+target_const = "SYS_CTRL_TP_RESEED"
 
 [[iqs9151_bit_porting]]
 source_const = "IQS9151_CFG_SNAP_EVENT_EN"
@@ -1582,8 +1582,8 @@ target_const = "CFG_EVENT_MODE"
 [[iqs9151_bit_porting]]
 source_const = "IQS9151_CFG_MANUAL_MODE"
 source_value = 128
-status = "not_ported"
-reason = "RMK keeps the sensor in event mode and does not expose the upstream manual-mode bit as a runtime setting."
+status = "ported"
+target_const = "CFG_MANUAL_MODE"
 
 [[rust_const_values]]
 id = "iqs9151_i2c_address"
@@ -2243,7 +2243,10 @@ expected = [
   "ADDR_FINGER2_Y",
   "ADDR_TOUCH_STATUS",
   "ADDR_ALP_COMPENSATION",
+  "ADDR_I2C_UPDATE_KEY",
+  "ADDR_I2C_ADDR",
   "ADDR_SETTINGS_MINOR",
+  "ADDR_SETTINGS_MAJOR",
   "ADDR_TIMING_SETTINGS",
   "ADDR_TRACKPAD_ATI_TARGET",
   "ADDR_SYSTEM_CONTROL",
@@ -2259,6 +2262,7 @@ expected = [
   "ADDR_RX_TX_MAPPING",
   "ADDR_CHANNEL_DISABLE",
   "ADDR_SNAP_ENABLE",
+  "ADDR_TOUCH_THRESHOLD_ADJUST",
 ]
 
 [[rust_byte_arrays]]

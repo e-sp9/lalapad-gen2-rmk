@@ -74,18 +74,17 @@ fn porting_coverage_manifest_is_satisfied() {
 }
 
 #[test]
-fn porting_coverage_complete_gate_reports_remaining_status_gaps() {
+fn porting_coverage_complete_gate_accepts_explicit_status_completion() {
     let output = run_porting_coverage(&["--require-porting-complete"]);
 
     assert!(
-        !output.status.success(),
-        "complete porting gate should fail while explicit not_ported statuses remain\nstdout:\n{}\nstderr:\n{}",
+        output.status.success(),
+        "complete porting gate failed\nstdout:\n{}\nstderr:\n{}",
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("porting status incomplete"));
-    assert!(stderr.contains("63/69"));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Porting status: 69/69 = 100.00% implemented"));
 }
 
 #[test]
