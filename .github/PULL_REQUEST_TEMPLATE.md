@@ -17,7 +17,7 @@
 - [ ] `python3 -c 'import tomllib; [tomllib.load(open(path, "rb")) for path in ("keyboard.toml", "Cargo.toml", "Makefile.toml", "tools/porting_coverage_manifest.toml", "tools/porting_coverage_baseline.toml", "tools/hardware_validation_manifest.toml", "tools/hardware_validation_baseline.toml", "tools/hardware_validation_evidence.example.toml")]; print("toml ok")'`
 - [ ] `rmkit get-chip --keyboard-toml-path keyboard.toml`
 - [ ] `rmkit get-project-name --keyboard-toml-path keyboard.toml`
-- [ ] `python3 tools/porting_coverage.py --coverage-baseline tools/porting_coverage_baseline.toml --require-zmk-source --require-porting-complete`
+- [ ] `cargo make porting-coverage`
 - [ ] `python3 tools/migration_status.py --coverage-baseline tools/porting_coverage_baseline.toml --hardware-baseline tools/hardware_validation_baseline.toml --require-zmk-source --require-software-complete --require-hardware-classified`
 - [ ] `cargo make migration-status-report`
 - [ ] `HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-report`, if reviewing partial hardware evidence
@@ -33,6 +33,7 @@
 - [ ] `python3 tools/hardware_validation.py --evidence-template --firmware-ref-template <tag-or-commit>`, if preparing hardware evidence for a release
 - [ ] `python3 tools/hardware_validation.py --evidence path/to/evidence.toml --markdown`, if hardware evidence changed
 - [ ] `python3 tools/hardware_validation.py --evidence path/to/evidence.toml --require-validated --require-firmware-ref <tag-or-commit>`, if claiming complete hardware validation for a release
+- [ ] `cargo make rmk-zmk-scenario-tests`, if Space/Enter layer-tap behavior or RMK behavior profiles changed
 - [ ] `cargo make rmk-behavior-tests`
 - [ ] `cargo check --release --bin central`
 - [ ] `cargo check --release --bin peripheral`

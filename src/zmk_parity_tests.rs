@@ -196,8 +196,15 @@ fn porting_coverage_complete_gate_accepts_explicit_status_completion() {
         String::from_utf8_lossy(&output.stderr)
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
+    let baseline = porting_coverage_baseline_toml();
+    let baseline_by_kind = baseline["coverage"]["by_kind"].as_table().unwrap();
+    for kind in ["build_task", "runtime_scenario"] {
+        let expected = baseline_by_kind[kind].as_table().unwrap();
+        let passed = expected["passed"].as_integer().unwrap();
+        let total = expected["total"].as_integer().unwrap();
+        assert!(stdout.contains(&format!("- {kind}: {passed}/{total} = 100.00%")));
+    }
     assert!(stdout.contains("Porting coverage by kind:"));
-    assert!(stdout.contains("- build_task: 49/49 = 100.00%"));
     assert!(stdout.contains("- code_topology: 28/28 = 100.00%"));
     assert!(stdout.contains("- dependency: 21/21 = 100.00%"));
     assert!(stdout.contains("- gpio_flag_mirror: 36/36 = 100.00%"));
@@ -293,9 +300,16 @@ ported = 1
         String::from_utf8_lossy(&output.stderr)
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
+    let baseline = porting_coverage_baseline_toml();
+    let expected_total = baseline["coverage"]["total"].as_integer().unwrap();
+    let expected_result_count = baseline["coverage"]["result_count"].as_integer().unwrap();
     assert!(stderr.contains("porting coverage baseline drift:"));
-    assert!(stderr.contains("coverage.total: expected baseline 1, got 3078"));
-    assert!(stderr.contains("coverage.result_count: expected baseline 1, got 508"));
+    assert!(stderr.contains(&format!(
+        "coverage.total: expected baseline 1, got {expected_total}"
+    )));
+    assert!(stderr.contains(&format!(
+        "coverage.result_count: expected baseline 1, got {expected_result_count}"
+    )));
     assert!(stderr.contains("coverage.result_inventory_sha256: expected baseline bad"));
     assert!(
         stderr.contains("coverage.by_kind.behavior: actual report kind is missing from baseline")
@@ -304,19 +318,22 @@ ported = 1
 
 #[test]
 fn firmware_ci_runs_complete_porting_gate_before_builds() {
-    let gate_command = "python3 tools/porting_coverage.py";
+    let gate_command = "cargo make porting-coverage";
+    let migration_status_command = "python3 tools/migration_status.py";
     let baseline_arg = "--coverage-baseline";
     let zmk_required_flag = "--require-zmk-source";
     let complete_required_flag = "--require-porting-complete";
+    let software_required_flag = "--require-software-complete";
     let host_tests = "cargo test --lib --target x86_64-unknown-linux-gnu";
     let release_build = "cargo make build";
 
     for required in [
         gate_command,
+        migration_status_command,
         baseline_arg,
         "tools/porting_coverage_baseline.toml",
         zmk_required_flag,
-        complete_required_flag,
+        software_required_flag,
     ] {
         assert!(
             FIRMWARE_WORKFLOW_YAML.contains(required),
@@ -325,26 +342,30 @@ fn firmware_ci_runs_complete_porting_gate_before_builds() {
     }
 
     let gate_index = FIRMWARE_WORKFLOW_YAML.find(gate_command).unwrap();
-    let baseline_index = FIRMWARE_WORKFLOW_YAML.find(baseline_arg).unwrap();
-    let zmk_required_index = FIRMWARE_WORKFLOW_YAML.find(zmk_required_flag).unwrap();
-    let complete_required_index = FIRMWARE_WORKFLOW_YAML.find(complete_required_flag).unwrap();
+    let migration_status_index = FIRMWARE_WORKFLOW_YAML
+        .find(migration_status_command)
+        .unwrap();
     let host_tests_index = FIRMWARE_WORKFLOW_YAML.find(host_tests).unwrap();
     let release_build_index = FIRMWARE_WORKFLOW_YAML.find(release_build).unwrap();
 
-    assert!(gate_index < zmk_required_index);
-    assert!(gate_index < baseline_index);
-    assert!(gate_index < complete_required_index);
     assert!(
-        baseline_index < host_tests_index,
-        "coverage denominator baseline must run before host parity tests"
+        gate_index < migration_status_index,
+        "runtime scenario coverage gate should run before migration status reporting"
     );
     assert!(
-        complete_required_index < host_tests_index,
+        gate_index < host_tests_index,
         "complete porting gate must run before host parity tests"
     );
     assert!(
-        complete_required_index < release_build_index,
+        gate_index < release_build_index,
         "complete porting gate must run before release binaries are built"
+    );
+
+    let porting_coverage_task = makefile_task_block("porting-coverage");
+    assert!(
+        porting_coverage_task.contains(complete_required_flag)
+            && porting_coverage_task.contains("dependencies = [\"rmk-zmk-scenario-tests\"]"),
+        "cargo make porting-coverage should require the complete porting gate and run runtime scenarios first"
     );
 }
 
@@ -583,7 +604,12 @@ fn migration_status_combines_software_and_hardware_progress() {
     );
     let stdout = String::from_utf8_lossy(&markdown.stdout);
     assert!(stdout.contains("## RMK Migration Status"));
-    assert!(stdout.contains("| Software coverage | 3078 | 3078 | 100.00% |"));
+    let baseline = porting_coverage_baseline_toml();
+    let expected_passed = baseline["coverage"]["passed"].as_integer().unwrap();
+    let expected_total = baseline["coverage"]["total"].as_integer().unwrap();
+    assert!(stdout.contains(&format!(
+        "| Software coverage | {expected_passed} | {expected_total} | 100.00% |"
+    )));
     assert!(stdout.contains("### Hardware Progress By Area"));
     assert!(stdout.contains("| trackpad | 0 | 7 | 0.00% |"));
     assert!(stdout.contains("### Hardware Progress By Side"));
@@ -640,9 +666,14 @@ print(migration_status.markdown_table([
 
 #[test]
 fn migration_status_rejects_coverage_baseline_drift() {
-    let bad_baseline = r#"
+    let baseline = porting_coverage_baseline_toml();
+    let expected_passed = baseline["coverage"]["passed"].as_integer().unwrap();
+    let expected_total = baseline["coverage"]["total"].as_integer().unwrap();
+    let expected_result_count = baseline["coverage"]["result_count"].as_integer().unwrap();
+    let bad_baseline = format!(
+        r#"
 [coverage]
-passed = 3078
+passed = {expected_passed}
 total = 1
 result_count = 1
 result_inventory_sha256 = "bad"
@@ -660,8 +691,9 @@ not_ported = 0
 ported = 57
 ported_by_behavior = 6
 ported_by_config_image = 6
-"#;
-    let path = write_temp_file("migration-status-bad-baseline", bad_baseline);
+"#
+    );
+    let path = write_temp_file("migration-status-bad-baseline", &bad_baseline);
     let output = run_migration_status(&[
         "--coverage-baseline",
         path.to_str().unwrap(),
@@ -679,8 +711,12 @@ ported_by_config_image = 6
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("Software failures:"));
-    assert!(stdout.contains("coverage.total: expected baseline 1, got 3078"));
-    assert!(stdout.contains("coverage.result_count: expected baseline 1, got 508"));
+    assert!(stdout.contains(&format!(
+        "coverage.total: expected baseline 1, got {expected_total}"
+    )));
+    assert!(stdout.contains(&format!(
+        "coverage.result_count: expected baseline 1, got {expected_result_count}"
+    )));
     assert!(stdout.contains("coverage.result_inventory_sha256: expected baseline bad"));
 }
 
@@ -1931,7 +1967,9 @@ artifact_or_notes = "duplicate"
 #[test]
 fn local_validation_entrypoints_match_ci_gates() {
     let clean_current_git_ref_task = makefile_task_block("clean-current-git-ref");
+    let porting_coverage_task = makefile_task_block("porting-coverage");
     let rmk_behavior_tests_task = makefile_task_block("rmk-behavior-tests");
+    let rmk_zmk_scenario_tests_task = makefile_task_block("rmk-zmk-scenario-tests");
     let migration_status_task = makefile_task_block("migration-status");
     let migration_status_report_task = makefile_task_block("migration-status-report");
     let migration_status_final_task = makefile_task_block("migration-status-final");
@@ -1959,9 +1997,10 @@ fn local_validation_entrypoints_match_ci_gates() {
     );
 
     assert!(
-        MAKEFILE_TOML.contains("--coverage-baseline")
-            && MAKEFILE_TOML.contains("tools/porting_coverage_baseline.toml")
-            && MAKEFILE_TOML.contains("--require-porting-complete"),
+        porting_coverage_task.contains("--coverage-baseline")
+            && porting_coverage_task.contains("tools/porting_coverage_baseline.toml")
+            && porting_coverage_task.contains("--require-porting-complete")
+            && porting_coverage_task.contains("dependencies = [\"rmk-zmk-scenario-tests\"]"),
         "cargo make porting-coverage should require complete implementation status and a stable denominator baseline"
     );
     assert!(
@@ -1971,6 +2010,14 @@ fn local_validation_entrypoints_match_ci_gates() {
             && rmk_behavior_tests_task.contains("--tests")
             && rmk_behavior_tests_task.contains("--features \"std host log\""),
         "cargo make rmk-behavior-tests should run the vendored RMK host regression suite on the host target"
+    );
+    assert!(
+        rmk_zmk_scenario_tests_task.contains("KEYBOARD_TOML_PATH=\"$rmk_host_keyboard\"")
+            && rmk_zmk_scenario_tests_task.contains("vendor/rmk-0.8.2/Cargo.toml")
+            && rmk_zmk_scenario_tests_task.contains("--target x86_64-unknown-linux-gnu")
+            && rmk_zmk_scenario_tests_task.contains("--test keyboard_lalapad_zmk_scenarios_test")
+            && rmk_zmk_scenario_tests_task.contains("--features \"std host log\""),
+        "cargo make rmk-zmk-scenario-tests should run the LaLaPad ZMK-derived runtime scenario suite"
     );
     assert!(
         migration_status_task.contains("tools/migration_status.py")
@@ -2133,8 +2180,7 @@ fn local_validation_entrypoints_match_ci_gates() {
         "local generated hardware evidence overlays, checklists, and firmware artifact manifests should be ignored by default"
     );
     for required in [
-        "--require-porting-complete",
-        "tools/porting_coverage.py --coverage-baseline tools/porting_coverage_baseline.toml --require-zmk-source --require-porting-complete",
+        "cargo make porting-coverage",
         "tools/migration_status.py --coverage-baseline tools/porting_coverage_baseline.toml --hardware-baseline tools/hardware_validation_baseline.toml --require-zmk-source --require-software-complete --require-hardware-classified",
         "cargo make migration-status-report",
         "HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-report",
@@ -2152,6 +2198,7 @@ fn local_validation_entrypoints_match_ci_gates() {
         "tools/hardware_validation.py --evidence path/to/evidence.toml --require-validated --require-firmware-ref <tag-or-commit>",
         "python3 tools/firmware_artifact_manifest.py --require-uf2 > firmware-artifacts.local.json",
         "cargo make firmware-artifact-manifest-current",
+        "cargo make rmk-zmk-scenario-tests",
         "cargo make rmk-behavior-tests",
         "tools/firmware_artifact_manifest.py",
         "tools/porting_coverage_baseline.toml",
@@ -2202,6 +2249,7 @@ fn local_validation_entrypoints_match_ci_gates() {
     );
     assert!(
         README_MD.contains("cargo make migration-status-report")
+            && README_MD.contains("cargo make rmk-zmk-scenario-tests")
             && README_MD.contains("cargo make rmk-behavior-tests")
             && README_MD.contains("python3 tools/firmware_artifact_manifest.py --require-uf2 > firmware-artifacts.local.json")
             && README_MD.contains("cargo make firmware-artifact-manifest-current")
@@ -2210,6 +2258,7 @@ fn local_validation_entrypoints_match_ci_gates() {
             && README_MD.contains("HARDWARE_EVIDENCE=hardware-validation-evidence.local.toml cargo make migration-status-final-current")
             && README_MD.contains("HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-report")
             && PORTING_MD.contains("cargo make migration-status-report")
+            && PORTING_MD.contains("cargo make rmk-zmk-scenario-tests")
             && PORTING_MD.contains("cargo make rmk-behavior-tests")
             && PORTING_MD.contains("python3 tools/firmware_artifact_manifest.py --require-uf2 > firmware-artifacts.local.json")
             && PORTING_MD.contains("cargo make firmware-artifact-manifest-current")
@@ -2406,6 +2455,16 @@ fn porting_coverage_includes_exact_rmk_inventory_gates() {
             .find(|result| result["id"] == scenario_id)
             .unwrap_or_else(|| panic!("RMK semantic scenario result is missing for {scenario_id}"));
         assert_eq!(scenario_result["kind"], "scenario");
+        assert_eq!(scenario_result["ok"], true);
+    }
+
+    for runtime_scenario in manifest["runtime_scenario_tests"].as_array().unwrap() {
+        let scenario_id = runtime_scenario["id"].as_str().unwrap();
+        let scenario_result = results
+            .iter()
+            .find(|result| result["id"] == scenario_id)
+            .unwrap_or_else(|| panic!("RMK runtime scenario result is missing for {scenario_id}"));
+        assert_eq!(scenario_result["kind"], "runtime_scenario");
         assert_eq!(scenario_result["ok"], true);
     }
 
@@ -4882,6 +4941,14 @@ ok = pc.check_makefile_task_invariants(manifest, Path("."))
 with tempfile.TemporaryDirectory() as tempdir:
     root = Path(tempdir)
     (root / "Makefile.toml").write_text(
+        Path("Makefile.toml").read_text().replace('dependencies = ["rmk-zmk-scenario-tests"]', 'dependencies = []', 1),
+        encoding="utf-8",
+    )
+    bad_porting_coverage_task = pc.check_makefile_task_invariants(manifest, root)
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    (root / "Makefile.toml").write_text(
         Path("Makefile.toml").read_text().replace('"nrf52840"', '"rp2040"', 1),
         encoding="utf-8",
     )
@@ -4902,6 +4969,14 @@ with tempfile.TemporaryDirectory() as tempdir:
         encoding="utf-8",
     )
     bad_rmk_behavior_task = pc.check_makefile_task_invariants(manifest, root)
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    (root / "Makefile.toml").write_text(
+        Path("Makefile.toml").read_text().replace("--test keyboard_lalapad_zmk_scenarios_test", "--test keyboard_morse_test", 1),
+        encoding="utf-8",
+    )
+    bad_rmk_zmk_scenario_task = pc.check_makefile_task_invariants(manifest, root)
 
 with tempfile.TemporaryDirectory() as tempdir:
     root = Path(tempdir)
@@ -4971,9 +5046,11 @@ def pack(results):
 
 print(json.dumps({
     "ok": pack(ok),
+    "bad_porting_coverage_task": pack(bad_porting_coverage_task),
     "bad_family": pack(bad_family),
     "bad_uf2_gate": pack(bad_uf2_gate),
     "bad_rmk_behavior_task": pack(bad_rmk_behavior_task),
+    "bad_rmk_zmk_scenario_task": pack(bad_rmk_zmk_scenario_task),
     "bad_artifact_manifest_task": pack(bad_artifact_manifest_task),
     "bad_current_artifact_manifest_task": pack(bad_current_artifact_manifest_task),
     "bad_clean_current_task": pack(bad_clean_current_task),
@@ -4994,19 +5071,34 @@ print(json.dumps({
 
     let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     let ok = parsed["ok"].as_array().unwrap();
-    assert_eq!(ok.len(), 15);
+    assert_eq!(ok.len(), 17);
     assert!(ok.iter().all(|result| result["kind"] == "build_task"));
     assert_eq!(
         ok.iter()
             .map(|result| result["passed"].as_i64().unwrap())
             .sum::<i64>(),
-        49
+        55
     );
     assert_eq!(
         ok.iter()
             .map(|result| result["total"].as_i64().unwrap())
             .sum::<i64>(),
-        49
+        55
+    );
+
+    let bad_porting_coverage_task = parsed["bad_porting_coverage_task"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "makefile_porting_coverage_runs_runtime_scenarios_first")
+        .expect("changed porting coverage task result is missing");
+    assert_eq!(bad_porting_coverage_task["kind"], "build_task");
+    assert_eq!(bad_porting_coverage_task["ok"], false);
+    assert!(
+        bad_porting_coverage_task["message"]
+            .as_str()
+            .unwrap()
+            .contains("tasks.porting-coverage.dependencies missing required values ['rmk-zmk-scenario-tests']")
     );
 
     let bad_family = parsed["bad_family"]
@@ -5052,6 +5144,21 @@ print(json.dumps({
             .as_str()
             .unwrap()
             .contains("tasks.rmk-behavior-tests.script missing required values ['--tests']")
+    );
+
+    let bad_rmk_zmk_scenario_task = parsed["bad_rmk_zmk_scenario_task"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "makefile_rmk_zmk_scenario_tests_run_runtime_subset")
+        .expect("changed RMK ZMK scenario test task result is missing");
+    assert_eq!(bad_rmk_zmk_scenario_task["kind"], "build_task");
+    assert_eq!(bad_rmk_zmk_scenario_task["ok"], false);
+    assert!(
+        bad_rmk_zmk_scenario_task["message"]
+            .as_str()
+            .unwrap()
+            .contains("tasks.rmk-zmk-scenario-tests.script missing required values ['--test keyboard_lalapad_zmk_scenarios_test']")
     );
 
     let bad_artifact_manifest_task = parsed["bad_artifact_manifest_task"]

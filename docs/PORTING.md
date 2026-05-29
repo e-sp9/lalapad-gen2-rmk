@@ -256,7 +256,7 @@ mandatory in a different checkout layout.
 Run:
 
 ```sh
-python3 tools/porting_coverage.py --coverage-baseline tools/porting_coverage_baseline.toml --require-zmk-source --require-porting-complete
+cargo make porting-coverage
 python3 tools/migration_status.py --coverage-baseline tools/porting_coverage_baseline.toml --hardware-baseline tools/hardware_validation_baseline.toml --require-zmk-source --require-software-complete --require-hardware-classified
 ```
 
@@ -404,6 +404,7 @@ python3 tools/hardware_validation.py --checklist
 python3 tools/hardware_validation.py --evidence-template
 cargo make hardware-validation-evidence-template-current
 cargo make hardware-validation-session-current
+cargo make rmk-zmk-scenario-tests
 python3 tools/firmware_artifact_manifest.py --require-uf2 > firmware-artifacts.local.json
 cargo make firmware-artifact-manifest-current
 python3 tools/hardware_validation.py --evidence-template --firmware-ref-template <tag-or-commit>

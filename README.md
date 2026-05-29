@@ -130,9 +130,10 @@ python3 -m json.tool vial.json >/tmp/lalapad-vial-check.json
 python3 -c 'import tomllib; [tomllib.load(open(path, "rb")) for path in ("keyboard.toml", "Cargo.toml", "Makefile.toml", "tools/porting_coverage_manifest.toml", "tools/porting_coverage_baseline.toml", "tools/hardware_validation_manifest.toml", "tools/hardware_validation_baseline.toml", "tools/hardware_validation_evidence.example.toml")]; print("toml ok")'
 rmkit get-chip --keyboard-toml-path keyboard.toml
 rmkit get-project-name --keyboard-toml-path keyboard.toml
-python3 tools/porting_coverage.py --coverage-baseline tools/porting_coverage_baseline.toml --require-zmk-source --require-porting-complete
+cargo make porting-coverage
 python3 tools/migration_status.py --coverage-baseline tools/porting_coverage_baseline.toml --hardware-baseline tools/hardware_validation_baseline.toml --require-zmk-source --require-software-complete --require-hardware-classified
 cargo make migration-status-report
+cargo make rmk-zmk-scenario-tests
 cargo make rmk-behavior-tests
 python3 tools/hardware_validation.py --hardware-baseline tools/hardware_validation_baseline.toml --require-classified
 python3 tools/hardware_validation.py --markdown
@@ -161,12 +162,16 @@ cargo make firmware-artifact-manifest-current
 python3 tools/hardware_validation.py --evidence hardware-validation-evidence.local.toml --markdown
 ```
 
-`tools/porting_coverage.py` reads `tools/porting_coverage_manifest.toml` and,
+`cargo make porting-coverage` first runs the RMK host-runtime Space/Enter
+layer-tap scenarios, then `tools/porting_coverage.py` reads
+`tools/porting_coverage_manifest.toml` and,
 when the upstream ZMK checkout from the manifest is present, also parses
 `config/lalapadgen2.keymap`, shield overlays, ZMK Kconfig values, and selected
 RMK Rust constants to verify that the migration contract still matches the
-source firmware. It reports both migration-contract coverage and an explicit
-IQS9151 symbol implementation status summary. `--require-porting-complete`
+source firmware. It also tracks the RMK host-runtime Space/Enter layer-tap
+scenario test inventory in `vendor/rmk-0.8.2/tests/keyboard_lalapad_zmk_scenarios_test.rs`.
+It reports both migration-contract coverage and an explicit IQS9151 symbol
+implementation status summary. `--require-porting-complete`
 makes both metrics hard gates, so release builds fail if any source item is
 unclassified or any explicit implementation status is non-implemented. The
 text and JSON reports also include coverage grouped by result kind, making it

@@ -156,6 +156,10 @@ name = "keyboard_layer_test"
 path = "tests/keyboard_layer_test.rs"
 
 [[test]]
+name = "keyboard_lalapad_zmk_scenarios_test"
+path = "tests/keyboard_lalapad_zmk_scenarios_test.rs"
+
+[[test]]
 name = "keyboard_macro_test"
 path = "tests/keyboard_macro_test.rs"
 

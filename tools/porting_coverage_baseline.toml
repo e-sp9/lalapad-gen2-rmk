@@ -1,16 +1,20 @@
 [coverage]
-passed = 3078
-total = 3078
-result_count = 508
-result_inventory_sha256 = "9009e9816180197a8b33d7b95153cf8fcc320d7b065ac3714a5a694014b63b3a"
+passed = 3134
+total = 3134
+result_count = 523
+result_inventory_sha256 = "19cf1603ac5706909b8b5214d68de47391df56cce37794a80663c78901d25a62"
 
 [coverage.by_kind.behavior]
 passed = 10
 total = 10
 
 [coverage.by_kind.build_task]
-passed = 49
-total = 49
+passed = 55
+total = 55
+
+[coverage.by_kind.runtime_scenario]
+passed = 50
+total = 50
 
 [coverage.by_kind.code]
 passed = 21

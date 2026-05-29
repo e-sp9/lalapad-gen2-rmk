@@ -3683,6 +3683,30 @@ def check_file_contains_invariants(manifest: dict[str, Any], project_root: Path)
     return results
 
 
+def check_runtime_scenario_tests(manifest: dict[str, Any], project_root: Path) -> list[Result]:
+    results: list[Result] = []
+    for check in manifest.get("runtime_scenario_tests", []):
+        target_file = str(check["file"])
+        needles = list(check["needles"])
+        try:
+            text = (project_root / target_file).read_text()
+        except OSError as e:
+            results.append(Result(check["id"], "runtime_scenario", 0, len(needles), str(e)))
+            continue
+        passed = sum(1 for needle in needles if needle in text)
+        missing = [needle for needle in needles if needle not in text]
+        results.append(
+            Result(
+                check["id"],
+                "runtime_scenario",
+                passed,
+                len(needles),
+                "ok" if not missing else f"{target_file} missing {missing!r}",
+            )
+        )
+    return results
+
+
 def rust_trackpad_button_order(text: str) -> list[str]:
     match = re.search(
         r"const\s+TRACKPAD_BUTTONS_BY_INPUT_CODE\s*:\s*\[TrackpadButton;\s*\d+\]\s*=\s*\[(.*?)\];",
@@ -4749,6 +4773,7 @@ def run(
     results.extend(check_code_contains(manifest, project_root))
     results.extend(check_code_topology(manifest, project_root))
     results.extend(check_file_contains_invariants(manifest, project_root))
+    results.extend(check_runtime_scenario_tests(manifest, project_root))
     results.extend(check_makefile_task_invariants(manifest, project_root))
     results.extend(check_trackpad_virtual_buttons(manifest, keyboard, project_root))
     results.extend(check_vial_keyboard_toml_layout(manifest, keyboard, project_root))
