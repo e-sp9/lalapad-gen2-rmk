@@ -403,6 +403,7 @@ python3 tools/hardware_validation.py --markdown
 python3 tools/hardware_validation.py --checklist
 python3 tools/hardware_validation.py --evidence-template
 cargo make hardware-validation-evidence-template-current
+cargo make hardware-validation-session-current
 python3 tools/firmware_artifact_manifest.py --require-uf2 > firmware-artifacts.local.json
 cargo make firmware-artifact-manifest-current
 python3 tools/hardware_validation.py --evidence-template --firmware-ref-template <tag-or-commit>
@@ -455,3 +456,7 @@ sizes and SHA256 hashes alongside the hardware evidence overlay. Prefer
 `cargo make firmware-artifact-manifest-current` for a clean local build; it
 creates `firmware-artifacts.local.json` with the current exact tag or short
 commit as `firmware_ref` and refuses tracked or untracked non-ignored changes.
+Use `cargo make hardware-validation-session-current` to prepare a complete
+current-ref bench packet in one step: rebuilt UF2 artifact hashes, a
+firmware-ref-prefilled evidence overlay, a hardware checklist, and a local
+Markdown migration status report.

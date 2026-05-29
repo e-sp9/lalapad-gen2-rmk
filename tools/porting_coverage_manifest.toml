@@ -2700,7 +2700,7 @@ dependencies_include = ["uf2"]
 [[makefile_task_invariants]]
 id = "makefile_current_firmware_artifact_manifest_uses_clean_git_ref"
 task = "firmware-artifact-manifest-current"
-dependencies_include = ["uf2"]
+dependencies_equal = ["clean-current-git-ref", "uf2"]
 script_contains = [
   "git status --porcelain --untracked-files=normal",
   "git describe --tags --exact-match",
@@ -2709,6 +2709,15 @@ script_contains = [
   "--require-uf2",
   "--firmware-ref \"$firmware_ref\"",
   "--output firmware-artifacts.local.json",
+]
+
+[[makefile_task_invariants]]
+id = "makefile_clean_current_git_ref_rejects_mutable_state"
+task = "clean-current-git-ref"
+script_contains = [
+  "git status --porcelain --untracked-files=normal",
+  "working tree has tracked or untracked non-ignored changes",
+  "deriving a current firmware ref",
 ]
 
 [[makefile_task_invariants]]
@@ -2726,6 +2735,7 @@ script_contains = [
 [[makefile_task_invariants]]
 id = "makefile_current_hardware_evidence_template_uses_clean_git_ref"
 task = "hardware-validation-evidence-template-current"
+dependencies_equal = ["clean-current-git-ref"]
 script_contains = [
   "git status --porcelain --untracked-files=normal",
   "git describe --tags --exact-match",
@@ -2736,8 +2746,29 @@ script_contains = [
 ]
 
 [[makefile_task_invariants]]
+id = "makefile_current_hardware_session_bundles_clean_ref_evidence"
+task = "hardware-validation-session-current"
+dependencies_equal = ["clean-current-git-ref", "firmware-artifact-manifest-current"]
+script_contains = [
+  "git status --porcelain --untracked-files=normal",
+  "git describe --tags --exact-match",
+  "git rev-parse --short=12 HEAD",
+  "tools/hardware_validation.py",
+  "--evidence-template",
+  "--firmware-ref-template \"$firmware_ref\"",
+  "hardware-validation-evidence.local.toml",
+  "--checklist",
+  "hardware-validation-checklist.local.md",
+  "tools/migration_status.py",
+  "--evidence hardware-validation-evidence.local.toml",
+  "--require-firmware-ref \"$firmware_ref\"",
+  "migration-status.local.md",
+]
+
+[[makefile_task_invariants]]
 id = "makefile_current_migration_final_uses_clean_git_ref"
 task = "migration-status-final-current"
+dependencies_equal = ["clean-current-git-ref"]
 script_contains = [
   "HARDWARE_EVIDENCE",
   "git status --porcelain --untracked-files=normal",

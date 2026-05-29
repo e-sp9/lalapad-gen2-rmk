@@ -197,7 +197,7 @@ fn porting_coverage_complete_gate_accepts_explicit_status_completion() {
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("Porting coverage by kind:"));
-    assert!(stdout.contains("- build_task: 42/42 = 100.00%"));
+    assert!(stdout.contains("- build_task: 49/49 = 100.00%"));
     assert!(stdout.contains("- code_topology: 28/28 = 100.00%"));
     assert!(stdout.contains("- dependency: 21/21 = 100.00%"));
     assert!(stdout.contains("- gpio_flag_mirror: 36/36 = 100.00%"));
@@ -294,8 +294,8 @@ ported = 1
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("porting coverage baseline drift:"));
-    assert!(stderr.contains("coverage.total: expected baseline 1, got 3071"));
-    assert!(stderr.contains("coverage.result_count: expected baseline 1, got 506"));
+    assert!(stderr.contains("coverage.total: expected baseline 1, got 3078"));
+    assert!(stderr.contains("coverage.result_count: expected baseline 1, got 508"));
     assert!(stderr.contains("coverage.result_inventory_sha256: expected baseline bad"));
     assert!(
         stderr.contains("coverage.by_kind.behavior: actual report kind is missing from baseline")
@@ -583,7 +583,7 @@ fn migration_status_combines_software_and_hardware_progress() {
     );
     let stdout = String::from_utf8_lossy(&markdown.stdout);
     assert!(stdout.contains("## RMK Migration Status"));
-    assert!(stdout.contains("| Software coverage | 3071 | 3071 | 100.00% |"));
+    assert!(stdout.contains("| Software coverage | 3078 | 3078 | 100.00% |"));
     assert!(stdout.contains("### Hardware Progress By Area"));
     assert!(stdout.contains("| trackpad | 0 | 7 | 0.00% |"));
     assert!(stdout.contains("### Hardware Progress By Side"));
@@ -642,7 +642,7 @@ print(migration_status.markdown_table([
 fn migration_status_rejects_coverage_baseline_drift() {
     let bad_baseline = r#"
 [coverage]
-passed = 3071
+passed = 3078
 total = 1
 result_count = 1
 result_inventory_sha256 = "bad"
@@ -679,8 +679,8 @@ ported_by_config_image = 6
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("Software failures:"));
-    assert!(stdout.contains("coverage.total: expected baseline 1, got 3071"));
-    assert!(stdout.contains("coverage.result_count: expected baseline 1, got 506"));
+    assert!(stdout.contains("coverage.total: expected baseline 1, got 3078"));
+    assert!(stdout.contains("coverage.result_count: expected baseline 1, got 508"));
     assert!(stdout.contains("coverage.result_inventory_sha256: expected baseline bad"));
 }
 
@@ -1930,6 +1930,7 @@ artifact_or_notes = "duplicate"
 
 #[test]
 fn local_validation_entrypoints_match_ci_gates() {
+    let clean_current_git_ref_task = makefile_task_block("clean-current-git-ref");
     let rmk_behavior_tests_task = makefile_task_block("rmk-behavior-tests");
     let migration_status_task = makefile_task_block("migration-status");
     let migration_status_report_task = makefile_task_block("migration-status-report");
@@ -1945,6 +1946,8 @@ fn local_validation_entrypoints_match_ci_gates() {
         makefile_task_block("hardware-validation-evidence-template");
     let hardware_validation_current_template_task =
         makefile_task_block("hardware-validation-evidence-template-current");
+    let hardware_validation_session_current_task =
+        makefile_task_block("hardware-validation-session-current");
     assert_task_prefers_sibling_zmk_checkout(
         "migration-status-report",
         migration_status_report_task,
@@ -2013,7 +2016,16 @@ fn local_validation_entrypoints_match_ci_gates() {
         "cargo make migration-status-final should require ZMK source, evidence, and firmware_ref for complete validation claims"
     );
     assert!(
+        clean_current_git_ref_task.contains("git status --porcelain --untracked-files=normal")
+            && clean_current_git_ref_task
+                .contains("working tree has tracked or untracked non-ignored changes")
+            && clean_current_git_ref_task.contains("deriving a current firmware ref"),
+        "current-ref tasks should share a pre-build mutable-worktree guard"
+    );
+    assert!(
         migration_status_final_current_task.contains("HARDWARE_EVIDENCE")
+            && migration_status_final_current_task
+                .contains("dependencies = [\"clean-current-git-ref\"]")
             && migration_status_final_current_task
                 .contains("git status --porcelain --untracked-files=normal")
             && migration_status_final_current_task.contains("git describe --tags --exact-match")
@@ -2036,14 +2048,15 @@ fn local_validation_entrypoints_match_ci_gates() {
     );
     assert!(
         firmware_artifact_manifest_current_task
-            .contains("git status --porcelain --untracked-files=normal")
+            .contains("dependencies = [\"clean-current-git-ref\", \"uf2\"]")
+            && firmware_artifact_manifest_current_task
+                .contains("git status --porcelain --untracked-files=normal")
             && firmware_artifact_manifest_current_task
                 .contains("git describe --tags --exact-match")
             && firmware_artifact_manifest_current_task.contains("git rev-parse --short=12 HEAD")
             && firmware_artifact_manifest_current_task
                 .contains("tools/firmware_artifact_manifest.py")
             && firmware_artifact_manifest_current_task.contains("--require-uf2")
-            && firmware_artifact_manifest_current_task.contains("dependencies = [\"uf2\"]")
             && firmware_artifact_manifest_current_task.contains("--firmware-ref \"$firmware_ref\"")
             && firmware_artifact_manifest_current_task
                 .contains("--output firmware-artifacts.local.json"),
@@ -2072,7 +2085,9 @@ fn local_validation_entrypoints_match_ci_gates() {
     );
     assert!(
         hardware_validation_current_template_task
-            .contains("git status --porcelain --untracked-files=normal")
+            .contains("dependencies = [\"clean-current-git-ref\"]")
+            && hardware_validation_current_template_task
+                .contains("git status --porcelain --untracked-files=normal")
             && hardware_validation_current_template_task
                 .contains("git describe --tags --exact-match")
             && hardware_validation_current_template_task.contains("git rev-parse --short=12 HEAD")
@@ -2083,10 +2098,38 @@ fn local_validation_entrypoints_match_ci_gates() {
         "Makefile.toml should expose a clean-current-git evidence template generator"
     );
     assert!(
+        hardware_validation_session_current_task.contains(
+            "dependencies = [\"clean-current-git-ref\", \"firmware-artifact-manifest-current\"]",
+        ) && hardware_validation_session_current_task
+            .contains("git status --porcelain --untracked-files=normal")
+            && hardware_validation_session_current_task
+                .contains("git describe --tags --exact-match")
+            && hardware_validation_session_current_task.contains("git rev-parse --short=12 HEAD")
+            && hardware_validation_session_current_task.contains("tools/hardware_validation.py")
+            && hardware_validation_session_current_task.contains("--evidence-template")
+            && hardware_validation_session_current_task
+                .contains("--firmware-ref-template \"$firmware_ref\"")
+            && hardware_validation_session_current_task
+                .contains("hardware-validation-evidence.local.toml")
+            && hardware_validation_session_current_task.contains("--checklist")
+            && hardware_validation_session_current_task
+                .contains("hardware-validation-checklist.local.md")
+            && hardware_validation_session_current_task.contains("tools/migration_status.py")
+            && hardware_validation_session_current_task
+                .contains("--evidence hardware-validation-evidence.local.toml")
+            && hardware_validation_session_current_task
+                .contains("--require-firmware-ref \"$firmware_ref\"")
+            && hardware_validation_session_current_task.contains("migration-status.local.md"),
+        "Makefile.toml should expose a clean-current hardware validation session bundle"
+    );
+    assert!(
         include_str!("../.gitignore").contains("hardware-validation-evidence*.toml")
             && include_str!("../.gitignore").contains("hardware-validation-checklist*.md")
+            && include_str!("../.gitignore").contains("migration-status*.md")
             && include_str!("../.gitignore").contains("firmware-artifacts*.json")
-            && include_str!("../.gitignore").contains("firmware-artifacts*.md"),
+            && include_str!("../.gitignore").contains("firmware-artifacts*.md")
+            && include_str!("../.gitignore").contains("__pycache__/")
+            && include_str!("../.gitignore").contains("*.py[cod]"),
         "local generated hardware evidence overlays, checklists, and firmware artifact manifests should be ignored by default"
     );
     for required in [
@@ -2103,6 +2146,7 @@ fn local_validation_entrypoints_match_ci_gates() {
         "tools/hardware_validation.py --checklist",
         "tools/hardware_validation.py --evidence-template",
         "cargo make hardware-validation-evidence-template-current",
+        "cargo make hardware-validation-session-current",
         "tools/hardware_validation.py --evidence-template --firmware-ref-template <tag-or-commit>",
         "tools/hardware_validation.py --evidence path/to/evidence.toml --markdown",
         "tools/hardware_validation.py --evidence path/to/evidence.toml --require-validated --require-firmware-ref <tag-or-commit>",
@@ -2162,6 +2206,7 @@ fn local_validation_entrypoints_match_ci_gates() {
             && README_MD.contains("python3 tools/firmware_artifact_manifest.py --require-uf2 > firmware-artifacts.local.json")
             && README_MD.contains("cargo make firmware-artifact-manifest-current")
             && README_MD.contains("cargo make hardware-validation-evidence-template-current")
+            && README_MD.contains("cargo make hardware-validation-session-current")
             && README_MD.contains("HARDWARE_EVIDENCE=hardware-validation-evidence.local.toml cargo make migration-status-final-current")
             && README_MD.contains("HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-report")
             && PORTING_MD.contains("cargo make migration-status-report")
@@ -2169,6 +2214,7 @@ fn local_validation_entrypoints_match_ci_gates() {
             && PORTING_MD.contains("python3 tools/firmware_artifact_manifest.py --require-uf2 > firmware-artifacts.local.json")
             && PORTING_MD.contains("cargo make firmware-artifact-manifest-current")
             && PORTING_MD.contains("cargo make hardware-validation-evidence-template-current")
+            && PORTING_MD.contains("cargo make hardware-validation-session-current")
             && PORTING_MD.contains("HARDWARE_EVIDENCE=hardware-validation-evidence.local.toml cargo make migration-status-final-current"),
         "README and porting notes should document the local Markdown migration dashboard, RMK behavior regression suite, artifact manifest, current-ref evidence template, and current-ref final gate"
     );
@@ -4879,12 +4925,43 @@ with tempfile.TemporaryDirectory() as tempdir:
         Path("Makefile.toml").read_text().replace("git status --porcelain --untracked-files=normal", "git status --short", 1),
         encoding="utf-8",
     )
+    bad_clean_current_task = pc.check_makefile_task_invariants(manifest, root)
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    makefile = Path("Makefile.toml").read_text()
+    before, marker, after = makefile.partition("[tasks.hardware-validation-evidence-template-current]")
+    assert marker
+    (root / "Makefile.toml").write_text(
+        before + marker + after.replace("git status --porcelain --untracked-files=normal", "git status --short", 1),
+        encoding="utf-8",
+    )
     bad_current_template_task = pc.check_makefile_task_invariants(manifest, root)
 
 with tempfile.TemporaryDirectory() as tempdir:
     root = Path(tempdir)
     (root / "Makefile.toml").write_text(
-        Path("Makefile.toml").read_text().replace('--require-firmware-ref "$firmware_ref"', '--require-firmware-ref "$FIRMWARE_REF"', 1),
+        Path("Makefile.toml").read_text().replace("migration-status.local.md", "migration-status.md", 1),
+        encoding="utf-8",
+    )
+    bad_current_hardware_session_task = pc.check_makefile_task_invariants(manifest, root)
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    (root / "Makefile.toml").write_text(
+        Path("Makefile.toml").read_text().replace(
+            'dependencies = ["clean-current-git-ref", "firmware-artifact-manifest-current"]',
+            'dependencies = ["firmware-artifact-manifest-current", "clean-current-git-ref"]',
+            1,
+        ),
+        encoding="utf-8",
+    )
+    bad_current_hardware_session_dependency_order = pc.check_makefile_task_invariants(manifest, root)
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    (root / "Makefile.toml").write_text(
+        Path("Makefile.toml").read_text().replace('--require-firmware-ref "$firmware_ref"', '--require-firmware-ref "$FIRMWARE_REF"'),
         encoding="utf-8",
     )
     bad_current_final_task = pc.check_makefile_task_invariants(manifest, root)
@@ -4899,7 +4976,10 @@ print(json.dumps({
     "bad_rmk_behavior_task": pack(bad_rmk_behavior_task),
     "bad_artifact_manifest_task": pack(bad_artifact_manifest_task),
     "bad_current_artifact_manifest_task": pack(bad_current_artifact_manifest_task),
+    "bad_clean_current_task": pack(bad_clean_current_task),
     "bad_current_template_task": pack(bad_current_template_task),
+    "bad_current_hardware_session_task": pack(bad_current_hardware_session_task),
+    "bad_current_hardware_session_dependency_order": pack(bad_current_hardware_session_dependency_order),
     "bad_current_final_task": pack(bad_current_final_task),
 }))
 "#,
@@ -4914,19 +4994,19 @@ print(json.dumps({
 
     let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     let ok = parsed["ok"].as_array().unwrap();
-    assert_eq!(ok.len(), 13);
+    assert_eq!(ok.len(), 15);
     assert!(ok.iter().all(|result| result["kind"] == "build_task"));
     assert_eq!(
         ok.iter()
             .map(|result| result["passed"].as_i64().unwrap())
             .sum::<i64>(),
-        42
+        49
     );
     assert_eq!(
         ok.iter()
             .map(|result| result["total"].as_i64().unwrap())
             .sum::<i64>(),
-        42
+        49
     );
 
     let bad_family = parsed["bad_family"]
@@ -5006,6 +5086,21 @@ print(json.dumps({
             .contains("tasks.firmware-artifact-manifest-current.script missing required values ['--output firmware-artifacts.local.json']")
     );
 
+    let bad_clean_current_task = parsed["bad_clean_current_task"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "makefile_clean_current_git_ref_rejects_mutable_state")
+        .expect("changed clean current git ref task result is missing");
+    assert_eq!(bad_clean_current_task["kind"], "build_task");
+    assert_eq!(bad_clean_current_task["ok"], false);
+    assert!(
+        bad_clean_current_task["message"]
+            .as_str()
+            .unwrap()
+            .contains("tasks.clean-current-git-ref.script missing required values ['git status --porcelain --untracked-files=normal']")
+    );
+
     let bad_current_template_task = parsed["bad_current_template_task"]
         .as_array()
         .unwrap()
@@ -5021,6 +5116,44 @@ print(json.dumps({
             .as_str()
             .unwrap()
             .contains("tasks.hardware-validation-evidence-template-current.script missing required values ['git status --porcelain --untracked-files=normal']")
+    );
+
+    let bad_current_hardware_session_task = parsed["bad_current_hardware_session_task"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| {
+            result["id"] == "makefile_current_hardware_session_bundles_clean_ref_evidence"
+        })
+        .expect("changed current hardware validation session task result is missing");
+    assert_eq!(bad_current_hardware_session_task["kind"], "build_task");
+    assert_eq!(bad_current_hardware_session_task["ok"], false);
+    assert!(
+        bad_current_hardware_session_task["message"]
+            .as_str()
+            .unwrap()
+            .contains("tasks.hardware-validation-session-current.script missing required values ['migration-status.local.md']")
+    );
+
+    let bad_current_hardware_session_dependency_order =
+        parsed["bad_current_hardware_session_dependency_order"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|result| {
+                result["id"] == "makefile_current_hardware_session_bundles_clean_ref_evidence"
+            })
+            .expect("changed current hardware validation session dependency result is missing");
+    assert_eq!(
+        bad_current_hardware_session_dependency_order["kind"],
+        "build_task"
+    );
+    assert_eq!(bad_current_hardware_session_dependency_order["ok"], false);
+    assert!(
+        bad_current_hardware_session_dependency_order["message"]
+            .as_str()
+            .unwrap()
+            .contains("tasks.hardware-validation-session-current.dependencies expected ['clean-current-git-ref', 'firmware-artifact-manifest-current']")
     );
 
     let bad_current_final_task = parsed["bad_current_final_task"]

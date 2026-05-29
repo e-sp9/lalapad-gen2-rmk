@@ -37,6 +37,7 @@ Generate a local artifact hash manifest after the UF2 files are built:
 ```sh
 python3 tools/firmware_artifact_manifest.py --require-uf2 > firmware-artifacts.local.json
 cargo make firmware-artifact-manifest-current
+cargo make hardware-validation-session-current
 ```
 
 Generated firmware files are ignored by git and should not be committed.

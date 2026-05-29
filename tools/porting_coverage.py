@@ -3281,6 +3281,17 @@ def check_makefile_task_invariants(manifest: dict[str, Any], project_root: Path)
             else:
                 messages.append(f"tasks.{task_name}.{actual_field} missing required values {missing!r}")
 
+        if "dependencies_equal" in check:
+            total += 1
+            expected_values = list(check["dependencies_equal"])
+            actual_values = list(task.get("dependencies", []))
+            if actual_values == expected_values:
+                passed += 1
+            else:
+                messages.append(
+                    f"tasks.{task_name}.dependencies expected {expected_values!r}, got {actual_values!r}"
+                )
+
         if "script_contains" in check:
             total += 1
             expected_values = list(check["script_contains"])

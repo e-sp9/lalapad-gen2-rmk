@@ -55,7 +55,16 @@ args = ["tools/hardware_validation.py", "--markdown"]
 command = "python3"
 args = ["tools/hardware_validation.py", "--evidence-template"]
 
+[tasks.clean-current-git-ref]
+script = '''
+if [ -n "$(git status --porcelain --untracked-files=normal)" ]; then
+  echo "working tree has tracked or untracked non-ignored changes; commit or stash them before deriving a current firmware ref" >&2
+  exit 1
+fi
+'''
+
 [tasks.hardware-validation-evidence-template-current]
+dependencies = ["clean-current-git-ref"]
 script = '''
 if [ -n "$(git status --porcelain --untracked-files=normal)" ]; then
   echo "working tree has tracked or untracked non-ignored changes; commit or stash them, or pass --firmware-ref-template manually" >&2
@@ -66,6 +75,51 @@ firmware_ref="$(git describe --tags --exact-match 2>/dev/null || git rev-parse -
 python3 tools/hardware_validation.py \
   --evidence-template \
   --firmware-ref-template "$firmware_ref"
+'''
+
+[tasks.hardware-validation-session-current]
+dependencies = ["clean-current-git-ref", "firmware-artifact-manifest-current"]
+script = '''
+if [ -n "$(git status --porcelain --untracked-files=normal)" ]; then
+  echo "working tree has tracked or untracked non-ignored changes; commit or stash them before preparing current-ref hardware evidence" >&2
+  exit 1
+fi
+
+firmware_ref="$(git describe --tags --exact-match 2>/dev/null || git rev-parse --short=12 HEAD)"
+zmk_keymap="${ZMK_KEYMAP:-}"
+if [ -z "$zmk_keymap" ]; then
+  if [ -f ../zmk-config-LalaPadGen2/config/lalapadgen2.keymap ]; then
+    zmk_keymap="../zmk-config-LalaPadGen2/config/lalapadgen2.keymap"
+  elif [ -f zmk-config-LalaPadGen2/config/lalapadgen2.keymap ]; then
+    zmk_keymap="zmk-config-LalaPadGen2/config/lalapadgen2.keymap"
+  fi
+fi
+
+python3 tools/hardware_validation.py \
+  --evidence-template \
+  --firmware-ref-template "$firmware_ref" \
+  > hardware-validation-evidence.local.toml
+
+python3 tools/hardware_validation.py \
+  --checklist \
+  > hardware-validation-checklist.local.md
+
+set -- \
+  tools/migration_status.py \
+  --coverage-baseline tools/porting_coverage_baseline.toml \
+  --hardware-baseline tools/hardware_validation_baseline.toml \
+  --evidence hardware-validation-evidence.local.toml \
+  --require-zmk-source \
+  --require-software-complete \
+  --require-hardware-classified \
+  --require-firmware-ref "$firmware_ref" \
+  --markdown
+
+if [ -n "$zmk_keymap" ]; then
+  set -- "$@" --zmk-keymap "$zmk_keymap"
+fi
+
+python3 "$@" > migration-status.local.md
 '''
 
 [tasks.hardware-validation-checklist]
@@ -152,6 +206,7 @@ python3 "$@"
 '''
 
 [tasks.migration-status-final-current]
+dependencies = ["clean-current-git-ref"]
 script = '''
 : "${HARDWARE_EVIDENCE:?set HARDWARE_EVIDENCE=path/to/evidence.toml}"
 if [ -n "$(git status --porcelain --untracked-files=normal)" ]; then
@@ -272,7 +327,7 @@ args = ["tools/firmware_artifact_manifest.py", "--require-uf2"]
 dependencies = ["uf2"]
 
 [tasks.firmware-artifact-manifest-current]
-dependencies = ["uf2"]
+dependencies = ["clean-current-git-ref", "uf2"]
 script = '''
 if [ -n "$(git status --porcelain --untracked-files=normal)" ]; then
   echo "working tree has tracked or untracked non-ignored changes; commit or stash them, or pass --firmware-ref manually" >&2

@@ -1,9 +1,12 @@
 target
+__pycache__/
+*.py[cod]
 .venv-libclang
 .bindgen-headers
 .codex
 hardware-validation-evidence*.toml
 hardware-validation-checklist*.md
+migration-status*.md
 firmware-artifacts*.json
 firmware-artifacts*.md
 

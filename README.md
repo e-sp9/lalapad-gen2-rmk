@@ -144,7 +144,14 @@ cargo check --release --bin peripheral
 cargo build --release
 ```
 
-When real hardware evidence changed, also run:
+When preparing a clean current commit for a hardware bench session, run:
+
+```shell
+cargo make hardware-validation-session-current
+```
+
+For manual or release-specific evidence preparation, the equivalent individual
+steps are:
 
 ```shell
 cargo make hardware-validation-evidence-template-current > hardware-validation-evidence.local.toml
@@ -285,9 +292,13 @@ changes, which avoids recording evidence against a mutable local build.
 file sizes and SHA256 hashes so `artifact_or_notes` can point to an exact
 artifact set. `cargo make firmware-artifact-manifest-current` records the same
 hashes in `firmware-artifacts.local.json` and requires a clean current tag or
-commit for its `firmware_ref`. Generated `hardware-validation-evidence*.toml`,
-`hardware-validation-checklist*.md`, and `firmware-artifacts*.json` files are
-ignored by default.
+commit for its `firmware_ref`. `cargo make
+hardware-validation-session-current` runs the current-ref firmware artifact
+manifest task, then writes `hardware-validation-evidence.local.toml`,
+`hardware-validation-checklist.local.md`, and `migration-status.local.md` for a
+single hardware bench session. Generated `hardware-validation-evidence*.toml`,
+`hardware-validation-checklist*.md`, `migration-status*.md`, and
+`firmware-artifacts*.json` files are ignored by default.
 For the combined final gate, run:
 
 ```shell
