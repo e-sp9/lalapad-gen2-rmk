@@ -358,6 +358,13 @@ run:
 cargo make migration-status-report
 ```
 
+When reviewing partial hardware evidence before the final all-validated gate,
+include the local evidence overlay and flashed firmware reference:
+
+```sh
+HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-report
+```
+
 ## Real-Hardware Validation Gate
 
 `tools/hardware_validation_manifest.toml` is the separate tracker for evidence

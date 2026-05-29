@@ -77,6 +77,14 @@ if [ -n "$zmk_keymap" ]; then
   set -- "$@" --zmk-keymap "$zmk_keymap"
 fi
 
+if [ -n "${HARDWARE_EVIDENCE:-}" ]; then
+  set -- "$@" --evidence "$HARDWARE_EVIDENCE"
+fi
+
+if [ -n "${FIRMWARE_REF:-}" ]; then
+  set -- "$@" --require-firmware-ref "$FIRMWARE_REF"
+fi
+
 python3 "$@"
 '''
 

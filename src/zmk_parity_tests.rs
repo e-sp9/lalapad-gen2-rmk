@@ -768,6 +768,136 @@ fn migration_status_accepts_complete_hardware_evidence_for_final_gate() {
 }
 
 #[test]
+fn migration_status_reports_partial_hardware_evidence_progress() {
+    let firmware_ref = "partial-hardware-evidence-ref";
+    let evidence = format!(
+        r#"
+[[evidence]]
+id = "iqs9151_right_i2c_identity"
+status = "validated"
+validated_at = "2026-05-29"
+tester = "hardware bench"
+firmware_ref = "{firmware_ref}"
+artifact_or_notes = "log: /tmp/right-i2c.log; I2C scan found 0x56 and product register 0x1000 read 0x09bc on the right half."
+"#
+    );
+    let path = write_temp_file("migration-status-partial-evidence", &evidence);
+
+    let output = run_migration_status(&[
+        "--json",
+        "--coverage-baseline",
+        "tools/porting_coverage_baseline.toml",
+        "--hardware-baseline",
+        "tools/hardware_validation_baseline.toml",
+        "--evidence",
+        path.to_str().unwrap(),
+        "--require-firmware-ref",
+        firmware_ref,
+        "--require-software-complete",
+        "--require-hardware-classified",
+    ]);
+    assert!(
+        output.status.success(),
+        "partial migration status failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(parsed["hardware"]["validated"].as_i64(), Some(1));
+    assert_eq!(parsed["hardware"]["total"].as_i64(), Some(12));
+    assert_eq!(
+        parsed["hardware"]["by_area"]["trackpad"]["validated"].as_i64(),
+        Some(1)
+    );
+    assert_eq!(
+        parsed["hardware"]["by_side"]["right"]["validated"].as_i64(),
+        Some(1)
+    );
+    let remaining = parsed["hardware"]["remaining"].as_array().unwrap();
+    assert_eq!(remaining.len(), 11);
+    assert_eq!(
+        remaining
+            .iter()
+            .any(|item| item["id"] == "iqs9151_right_i2c_identity"),
+        false
+    );
+    assert!(
+        remaining
+            .iter()
+            .any(|item| item["id"] == "iqs9151_left_i2c_identity"),
+        "unvalidated checks should remain visible after partial evidence"
+    );
+    assert_eq!(
+        parsed["ready_for_release_without_hardware"].as_bool(),
+        Some(true)
+    );
+    assert_eq!(parsed["fully_validated"].as_bool(), Some(false));
+
+    let markdown = run_migration_status(&[
+        "--markdown",
+        "--coverage-baseline",
+        "tools/porting_coverage_baseline.toml",
+        "--hardware-baseline",
+        "tools/hardware_validation_baseline.toml",
+        "--evidence",
+        path.to_str().unwrap(),
+        "--require-firmware-ref",
+        firmware_ref,
+    ]);
+    let _ = std::fs::remove_file(&path);
+    assert!(
+        markdown.status.success(),
+        "partial migration status markdown failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&markdown.stdout),
+        String::from_utf8_lossy(&markdown.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&markdown.stdout);
+    assert!(stdout.contains("| Hardware validation | 1 | 12 | 8.33% |"));
+    assert!(stdout.contains("| trackpad | 1 | 7 | 14.29% |"));
+    assert!(stdout.contains("| right | 1 | 5 | 20.00% |"));
+    assert!(!stdout.contains("| iqs9151_right_i2c_identity |"));
+    assert!(stdout.contains("| iqs9151_left_i2c_identity |"));
+}
+
+#[test]
+fn migration_status_markdown_shows_stale_hardware_evidence_errors() {
+    let evidence = r#"
+[[evidence]]
+id = "iqs9151_right_i2c_identity"
+status = "validated"
+validated_at = "2026-05-29"
+tester = "hardware bench"
+firmware_ref = "actual-firmware-ref"
+artifact_or_notes = "log: /tmp/right-i2c.log; I2C scan found 0x56 and product register 0x1000 read 0x09bc on the right half."
+"#;
+    let path = write_temp_file("migration-status-stale-partial-evidence", evidence);
+
+    let output = run_migration_status(&[
+        "--markdown",
+        "--coverage-baseline",
+        "tools/porting_coverage_baseline.toml",
+        "--hardware-baseline",
+        "tools/hardware_validation_baseline.toml",
+        "--evidence",
+        path.to_str().unwrap(),
+        "--require-firmware-ref",
+        "stale-firmware-ref",
+    ]);
+    let _ = std::fs::remove_file(&path);
+
+    assert!(
+        !output.status.success(),
+        "stale partial migration status unexpectedly passed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("### Hardware Validation Failures"));
+    assert!(stdout.contains("iqs9151_right_i2c_identity: validated firmware_ref"));
+    assert!(stdout.contains("does not match required"));
+}
+
+#[test]
 fn hardware_validation_markdown_report_lists_required_evidence() {
     let output = run_hardware_validation(&["--markdown"]);
 
@@ -1585,6 +1715,10 @@ fn local_validation_entrypoints_match_ci_gates() {
             && migration_status_report_task.contains("--require-hardware-classified")
             && migration_status_report_task.contains("--markdown")
             && migration_status_report_task.contains("--zmk-keymap")
+            && migration_status_report_task.contains("HARDWARE_EVIDENCE")
+            && migration_status_report_task.contains("--evidence \"$HARDWARE_EVIDENCE\"")
+            && migration_status_report_task.contains("FIRMWARE_REF")
+            && migration_status_report_task.contains("--require-firmware-ref \"$FIRMWARE_REF\"")
             && migration_status_report_task
                 .contains("zmk-config-LalaPadGen2/config/lalapadgen2.keymap")
             && migration_status_report_task
@@ -1625,6 +1759,7 @@ fn local_validation_entrypoints_match_ci_gates() {
         "tools/porting_coverage.py --coverage-baseline tools/porting_coverage_baseline.toml --require-zmk-source --require-porting-complete",
         "tools/migration_status.py --coverage-baseline tools/porting_coverage_baseline.toml --hardware-baseline tools/hardware_validation_baseline.toml --require-zmk-source --require-software-complete --require-hardware-classified",
         "cargo make migration-status-report",
+        "HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-report",
         "tools/migration_status.py --coverage-baseline tools/porting_coverage_baseline.toml --hardware-baseline tools/hardware_validation_baseline.toml --evidence path/to/evidence.toml --require-software-complete --require-hardware-classified --require-hardware-validated --require-firmware-ref <tag-or-commit>",
         "HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-final",
         "tools/hardware_validation.py --hardware-baseline tools/hardware_validation_baseline.toml --require-classified",
@@ -1665,8 +1800,13 @@ fn local_validation_entrypoints_match_ci_gates() {
     );
     assert!(
         README_MD.contains("cargo make migration-status-report")
+            && README_MD.contains("HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-report")
             && PORTING_MD.contains("cargo make migration-status-report"),
         "README and porting notes should document the local Markdown migration dashboard"
+    );
+    assert!(
+        PORTING_MD.contains("HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-report"),
+        "porting notes should document partial hardware evidence dashboards"
     );
     assert!(
         FIRMWARE_WORKFLOW_YAML.contains(".github/workflows/auto-tag.yml"),

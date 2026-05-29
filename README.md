@@ -283,6 +283,13 @@ For a local Markdown dashboard matching the CI summary, run:
 cargo make migration-status-report
 ```
 
+When reviewing partial hardware evidence, include the overlay and flashed
+firmware reference:
+
+```shell
+HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-report
+```
+
 Host-side parity tests can be run explicitly with:
 
 ```shell

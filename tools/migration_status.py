@@ -305,6 +305,24 @@ def print_markdown(status: MigrationStatus) -> None:
     )
     print()
     print(f"Full validation: {'pass' if status.fully_validated else 'fail'}")
+    if status.software.failed:
+        print()
+        print("### Software Failures")
+        print()
+        for failure in status.software.failed:
+            kind = hardware_validation.markdown_escape(failure["kind"])
+            failure_id = hardware_validation.markdown_escape(failure["id"])
+            message = hardware_validation.markdown_escape(failure["message"])
+            print(
+                f"- `{kind}` `{failure_id}`: "
+                f"{failure['passed']}/{failure['total']} {message}"
+            )
+    if hardware["errors"]:
+        print()
+        print("### Hardware Validation Failures")
+        print()
+        for error in hardware["errors"]:
+            print(f"- {hardware_validation.markdown_escape(error)}")
     if hardware["by_area"]:
         print()
         print("### Hardware Progress By Area")
