@@ -55,6 +55,19 @@ args = ["tools/hardware_validation.py", "--markdown"]
 command = "python3"
 args = ["tools/hardware_validation.py", "--evidence-template"]
 
+[tasks.hardware-validation-evidence-template-current]
+script = '''
+if [ -n "$(git status --porcelain --untracked-files=normal)" ]; then
+  echo "working tree has tracked or untracked non-ignored changes; commit or stash them, or pass --firmware-ref-template manually" >&2
+  exit 1
+fi
+
+firmware_ref="$(git describe --tags --exact-match 2>/dev/null || git rev-parse --short=12 HEAD)"
+python3 tools/hardware_validation.py \
+  --evidence-template \
+  --firmware-ref-template "$firmware_ref"
+'''
+
 [tasks.hardware-validation-checklist]
 command = "python3"
 args = ["tools/hardware_validation.py", "--checklist"]

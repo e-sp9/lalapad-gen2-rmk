@@ -132,7 +132,7 @@ cargo build --release
 When real hardware evidence changed, also run:
 
 ```shell
-python3 tools/hardware_validation.py --evidence-template > hardware-validation-evidence.local.toml
+cargo make hardware-validation-evidence-template-current > hardware-validation-evidence.local.toml
 python3 tools/hardware_validation.py --checklist > hardware-validation-checklist.local.md
 python3 tools/hardware_validation.py --evidence hardware-validation-evidence.local.toml --markdown
 ```
@@ -260,8 +260,12 @@ command generates a complete local overlay file containing every current
 hardware check; pass `--firmware-ref-template <tag-or-commit>` with it to
 pre-fill the flashed firmware reference in every entry. Generated
 `--checklist` output turns the same manifest into a bench checklist for
-collecting those observations. Generated `hardware-validation-evidence*.toml`
-and `hardware-validation-checklist*.md` files are ignored by default.
+collecting those observations. `cargo make
+hardware-validation-evidence-template-current` fills the template from the
+current tag or commit and refuses to run with tracked or untracked non-ignored
+changes, which avoids recording evidence against a mutable local build. Generated
+`hardware-validation-evidence*.toml` and `hardware-validation-checklist*.md`
+files are ignored by default.
 For the combined final gate, run:
 
 ```shell

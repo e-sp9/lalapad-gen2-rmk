@@ -197,7 +197,7 @@ fn porting_coverage_complete_gate_accepts_explicit_status_completion() {
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("Porting coverage by kind:"));
-    assert!(stdout.contains("- build_task: 31/31 = 100.00%"));
+    assert!(stdout.contains("- build_task: 33/33 = 100.00%"));
     assert!(stdout.contains("- code_topology: 28/28 = 100.00%"));
     assert!(stdout.contains("- dependency: 21/21 = 100.00%"));
     assert!(stdout.contains("- gpio_flag_mirror: 36/36 = 100.00%"));
@@ -294,8 +294,8 @@ ported = 1
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("porting coverage baseline drift:"));
-    assert!(stderr.contains("coverage.total: expected baseline 1, got 3055"));
-    assert!(stderr.contains("coverage.result_count: expected baseline 1, got 502"));
+    assert!(stderr.contains("coverage.total: expected baseline 1, got 3057"));
+    assert!(stderr.contains("coverage.result_count: expected baseline 1, got 503"));
     assert!(stderr.contains("coverage.result_inventory_sha256: expected baseline bad"));
     assert!(
         stderr.contains("coverage.by_kind.behavior: actual report kind is missing from baseline")
@@ -583,7 +583,7 @@ fn migration_status_combines_software_and_hardware_progress() {
     );
     let stdout = String::from_utf8_lossy(&markdown.stdout);
     assert!(stdout.contains("## RMK Migration Status"));
-    assert!(stdout.contains("| Software coverage | 3055 | 3055 | 100.00% |"));
+    assert!(stdout.contains("| Software coverage | 3057 | 3057 | 100.00% |"));
     assert!(stdout.contains("### Hardware Progress By Area"));
     assert!(stdout.contains("| trackpad | 0 | 7 | 0.00% |"));
     assert!(stdout.contains("### Hardware Progress By Side"));
@@ -642,7 +642,7 @@ print(migration_status.markdown_table([
 fn migration_status_rejects_coverage_baseline_drift() {
     let bad_baseline = r#"
 [coverage]
-passed = 3055
+passed = 3057
 total = 1
 result_count = 1
 result_inventory_sha256 = "bad"
@@ -679,8 +679,8 @@ ported_by_config_image = 6
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("Software failures:"));
-    assert!(stdout.contains("coverage.total: expected baseline 1, got 3055"));
-    assert!(stdout.contains("coverage.result_count: expected baseline 1, got 502"));
+    assert!(stdout.contains("coverage.total: expected baseline 1, got 3057"));
+    assert!(stdout.contains("coverage.result_count: expected baseline 1, got 503"));
     assert!(stdout.contains("coverage.result_inventory_sha256: expected baseline bad"));
 }
 
@@ -1794,6 +1794,8 @@ fn local_validation_entrypoints_match_ci_gates() {
     let hardware_validation_checklist_task = makefile_task_block("hardware-validation-checklist");
     let hardware_validation_template_task =
         makefile_task_block("hardware-validation-evidence-template");
+    let hardware_validation_current_template_task =
+        makefile_task_block("hardware-validation-evidence-template-current");
     assert_task_prefers_sibling_zmk_checkout(
         "migration-status-report",
         migration_status_report_task,
@@ -1879,6 +1881,18 @@ fn local_validation_entrypoints_match_ci_gates() {
         "Makefile.toml should expose a full hardware evidence template generator"
     );
     assert!(
+        hardware_validation_current_template_task
+            .contains("git status --porcelain --untracked-files=normal")
+            && hardware_validation_current_template_task
+                .contains("git describe --tags --exact-match")
+            && hardware_validation_current_template_task.contains("git rev-parse --short=12 HEAD")
+            && hardware_validation_current_template_task.contains("tools/hardware_validation.py")
+            && hardware_validation_current_template_task.contains("--evidence-template")
+            && hardware_validation_current_template_task
+                .contains("--firmware-ref-template \"$firmware_ref\""),
+        "Makefile.toml should expose a clean-current-git evidence template generator"
+    );
+    assert!(
         include_str!("../.gitignore").contains("hardware-validation-evidence*.toml")
             && include_str!("../.gitignore").contains("hardware-validation-checklist*.md"),
         "local generated hardware evidence overlays and checklists should be ignored by default"
@@ -1895,6 +1909,7 @@ fn local_validation_entrypoints_match_ci_gates() {
         "tools/hardware_validation.py --markdown",
         "tools/hardware_validation.py --checklist",
         "tools/hardware_validation.py --evidence-template",
+        "cargo make hardware-validation-evidence-template-current",
         "tools/hardware_validation.py --evidence-template --firmware-ref-template <tag-or-commit>",
         "tools/hardware_validation.py --evidence path/to/evidence.toml --markdown",
         "tools/hardware_validation.py --evidence path/to/evidence.toml --require-validated --require-firmware-ref <tag-or-commit>",
@@ -1937,10 +1952,12 @@ fn local_validation_entrypoints_match_ci_gates() {
     assert!(
         README_MD.contains("cargo make migration-status-report")
             && README_MD.contains("cargo make rmk-behavior-tests")
+            && README_MD.contains("cargo make hardware-validation-evidence-template-current")
             && README_MD.contains("HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-report")
             && PORTING_MD.contains("cargo make migration-status-report")
-            && PORTING_MD.contains("cargo make rmk-behavior-tests"),
-        "README and porting notes should document the local Markdown migration dashboard and RMK behavior regression suite"
+            && PORTING_MD.contains("cargo make rmk-behavior-tests")
+            && PORTING_MD.contains("cargo make hardware-validation-evidence-template-current"),
+        "README and porting notes should document the local Markdown migration dashboard, RMK behavior regression suite, and current-ref evidence template"
     );
     assert!(
         PORTING_MD.contains("HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-report"),
@@ -4627,6 +4644,14 @@ with tempfile.TemporaryDirectory() as tempdir:
     )
     bad_rmk_behavior_task = pc.check_makefile_task_invariants(manifest, root)
 
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    (root / "Makefile.toml").write_text(
+        Path("Makefile.toml").read_text().replace("git status --porcelain --untracked-files=normal", "git status --short", 1),
+        encoding="utf-8",
+    )
+    bad_current_template_task = pc.check_makefile_task_invariants(manifest, root)
+
 def pack(results):
     return [result.__dict__ | {"ok": result.ok} for result in results]
 
@@ -4635,6 +4660,7 @@ print(json.dumps({
     "bad_family": pack(bad_family),
     "bad_uf2_gate": pack(bad_uf2_gate),
     "bad_rmk_behavior_task": pack(bad_rmk_behavior_task),
+    "bad_current_template_task": pack(bad_current_template_task),
 }))
 "#,
     );
@@ -4648,19 +4674,19 @@ print(json.dumps({
 
     let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     let ok = parsed["ok"].as_array().unwrap();
-    assert_eq!(ok.len(), 9);
+    assert_eq!(ok.len(), 10);
     assert!(ok.iter().all(|result| result["kind"] == "build_task"));
     assert_eq!(
         ok.iter()
             .map(|result| result["passed"].as_i64().unwrap())
             .sum::<i64>(),
-        31
+        33
     );
     assert_eq!(
         ok.iter()
             .map(|result| result["total"].as_i64().unwrap())
             .sum::<i64>(),
-        31
+        33
     );
 
     let bad_family = parsed["bad_family"]
@@ -4706,6 +4732,23 @@ print(json.dumps({
             .as_str()
             .unwrap()
             .contains("tasks.rmk-behavior-tests.script missing required values ['--tests']")
+    );
+
+    let bad_current_template_task = parsed["bad_current_template_task"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| {
+            result["id"] == "makefile_current_hardware_evidence_template_uses_clean_git_ref"
+        })
+        .expect("changed current evidence template task result is missing");
+    assert_eq!(bad_current_template_task["kind"], "build_task");
+    assert_eq!(bad_current_template_task["ok"], false);
+    assert!(
+        bad_current_template_task["message"]
+            .as_str()
+            .unwrap()
+            .contains("tasks.hardware-validation-evidence-template-current.script missing required values ['git status --porcelain --untracked-files=normal']")
     );
 }
 

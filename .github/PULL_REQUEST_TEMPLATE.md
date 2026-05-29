@@ -27,6 +27,7 @@
 - [ ] `python3 tools/hardware_validation.py --markdown`
 - [ ] `python3 tools/hardware_validation.py --checklist`
 - [ ] `python3 tools/hardware_validation.py --evidence-template`
+- [ ] `cargo make hardware-validation-evidence-template-current`, if preparing hardware evidence from the current clean commit
 - [ ] `python3 tools/hardware_validation.py --evidence-template --firmware-ref-template <tag-or-commit>`, if preparing hardware evidence for a release
 - [ ] `python3 tools/hardware_validation.py --evidence path/to/evidence.toml --markdown`, if hardware evidence changed
 - [ ] `python3 tools/hardware_validation.py --evidence path/to/evidence.toml --require-validated --require-firmware-ref <tag-or-commit>`, if claiming complete hardware validation for a release

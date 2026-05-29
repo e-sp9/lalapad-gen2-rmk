@@ -392,6 +392,7 @@ python3 tools/hardware_validation.py --hardware-baseline tools/hardware_validati
 python3 tools/hardware_validation.py --markdown
 python3 tools/hardware_validation.py --checklist
 python3 tools/hardware_validation.py --evidence-template
+cargo make hardware-validation-evidence-template-current
 python3 tools/hardware_validation.py --evidence-template --firmware-ref-template <tag-or-commit>
 python3 tools/hardware_validation.py --evidence path/to/evidence.toml --markdown
 python3 tools/hardware_validation.py --evidence path/to/evidence.toml --require-validated --require-firmware-ref <tag-or-commit>
@@ -431,4 +432,7 @@ and must mention the check-specific observation terms declared by
 Use `--evidence-template > hardware-validation-evidence.local.toml` to generate
 a complete local overlay for all current hardware checks, or add
 `--firmware-ref-template <tag-or-commit>` to pre-fill the flashed firmware
-reference before testing.
+reference before testing. Prefer `cargo make
+hardware-validation-evidence-template-current` when validating a clean local
+build; it pre-fills the current exact tag or short commit and fails if the
+working tree has tracked or untracked non-ignored changes.

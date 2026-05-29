@@ -2702,6 +2702,18 @@ script_contains = [
   "--features \"std host log\"",
 ]
 
+[[makefile_task_invariants]]
+id = "makefile_current_hardware_evidence_template_uses_clean_git_ref"
+task = "hardware-validation-evidence-template-current"
+script_contains = [
+  "git status --porcelain --untracked-files=normal",
+  "git describe --tags --exact-match",
+  "git rev-parse --short=12 HEAD",
+  "tools/hardware_validation.py",
+  "--evidence-template",
+  "--firmware-ref-template \"$firmware_ref\"",
+]
+
 [[file_contains_invariants]]
 id = "firmware_workflow_dfu_and_release_artifacts"
 file = ".github/workflows/firmware.yml"
