@@ -37,6 +37,7 @@
 - [ ] `cargo check --release --bin peripheral`
 - [ ] `cargo build --release`
 - [ ] `cargo make uf2 --release`, if release artifacts or flashing changed
+- [ ] `python3 tools/firmware_artifact_manifest.py --require-uf2 > firmware-artifacts.local.json`, if release artifacts or flashed files changed
 
 ## Hardware Notes
 

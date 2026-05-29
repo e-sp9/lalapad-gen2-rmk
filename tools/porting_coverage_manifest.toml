@@ -2691,6 +2691,13 @@ task = "uf2"
 dependencies_include = ["flash-layout"]
 
 [[makefile_task_invariants]]
+id = "makefile_firmware_artifact_manifest_requires_built_uf2"
+task = "firmware-artifact-manifest"
+command = "python3"
+args_contains = ["tools/firmware_artifact_manifest.py", "--require-uf2"]
+dependencies_include = ["uf2"]
+
+[[makefile_task_invariants]]
 id = "makefile_rmk_behavior_tests_run_full_host_suite"
 task = "rmk-behavior-tests"
 script_contains = [
@@ -2742,6 +2749,11 @@ needles = [
   "firmware/lalapad-gen2-rmk-central-dfu.zip",
   "--application firmware/hex/lalapad-gen2-rmk-peripheral.hex",
   "firmware/lalapad-gen2-rmk-peripheral-dfu.zip",
+  "tools/firmware_artifact_manifest.py",
+  "--require-uf2",
+  "--require-dfu",
+  "--firmware-ref \"${GITHUB_REF_NAME:-$GITHUB_SHA}\"",
+  "firmware/lalapad-gen2-rmk-artifacts.json",
   "actions/upload-artifact@v4",
   "name: lalapad-gen2-rmk-firmware",
   "softprops/action-gh-release@v2",

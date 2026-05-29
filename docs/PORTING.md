@@ -279,10 +279,12 @@ disabled, and they pin the split firmware entrypoints to the expected
 The build-task checks pin the cargo-make release path as well: release builds
 must run the flash-layout config guard, objcopy the central and peripheral
 ELFs into matching HEX files, convert both halves to nRF52840 UF2 artifacts,
-and run the generated-UF2 flash-layout guard.
+run the generated-UF2 flash-layout guard, and expose a firmware artifact
+manifest command for recording file sizes and SHA256 hashes.
 Release-workflow checks keep the CI-generated DFU zip names, GitHub Release
-asset list, Pages bundling workflow, and web-flasher bundled URLs aligned so a
-renamed artifact cannot pass software migration while breaking browser flashing.
+asset list, generated artifact hash manifest, Pages bundling workflow, and
+web-flasher bundled URLs aligned so a renamed artifact cannot pass software
+migration while breaking browser flashing.
 The same command also prints an explicit IQS9151 symbol porting status summary:
 `ported`, `ported_by_behavior`, and `ported_by_config_image` count as
 implemented, while `not_ported` entries are the remaining software-porting
@@ -401,6 +403,7 @@ python3 tools/hardware_validation.py --markdown
 python3 tools/hardware_validation.py --checklist
 python3 tools/hardware_validation.py --evidence-template
 cargo make hardware-validation-evidence-template-current
+python3 tools/firmware_artifact_manifest.py --require-uf2 > firmware-artifacts.local.json
 python3 tools/hardware_validation.py --evidence-template --firmware-ref-template <tag-or-commit>
 python3 tools/hardware_validation.py --evidence path/to/evidence.toml --markdown
 python3 tools/hardware_validation.py --evidence path/to/evidence.toml --require-validated --require-firmware-ref <tag-or-commit>
@@ -444,3 +447,7 @@ reference before testing. Prefer `cargo make
 hardware-validation-evidence-template-current` when validating a clean local
 build; it pre-fills the current exact tag or short commit and fails if the
 working tree has tracked or untracked non-ignored changes.
+After building the UF2 files that will be flashed, use
+`python3 tools/firmware_artifact_manifest.py --require-uf2 >
+firmware-artifacts.local.json` to preserve the exact central/peripheral file
+sizes and SHA256 hashes alongside the hardware evidence overlay.

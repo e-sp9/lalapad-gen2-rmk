@@ -32,6 +32,12 @@ Outputs:
 - `firmware/normal/lalapad-gen2-rmk-central.uf2`
 - `firmware/normal/lalapad-gen2-rmk-peripheral.uf2`
 
+Generate a local artifact hash manifest after the UF2 files are built:
+
+```sh
+python3 tools/firmware_artifact_manifest.py --require-uf2 > firmware-artifacts.local.json
+```
+
 Generated firmware files are ignored by git and should not be committed.
 
 ## Final Migration Validation
@@ -92,7 +98,9 @@ Before announcing a release to the community:
 
 - CI firmware workflow is green for the release tag.
 - `cargo make migration-status-final` passes with the release evidence file and matching `FIRMWARE_REF`, if the announcement claims complete hardware validation.
+- The hardware evidence notes reference the artifact manifest SHA256 values for the flashed central/peripheral files.
 - GitHub Release contains central/peripheral UF2 and DFU zip assets.
+- GitHub Release contains `lalapad-gen2-rmk-artifacts.json`.
 - Web flasher loads the latest release metadata.
 - Both halves flash successfully.
 - BLE pairing works after deleting old host pairing.

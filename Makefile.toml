@@ -266,5 +266,10 @@ command = "python3"
 args = ["tools/check_flash_layout.py", "--require-uf2"]
 dependencies = ["uf2-central", "uf2-peripheral"]
 
+[tasks.firmware-artifact-manifest]
+command = "python3"
+args = ["tools/firmware_artifact_manifest.py", "--require-uf2"]
+dependencies = ["uf2"]
+
 [tasks.uf2]
 dependencies = ["flash-layout"]

@@ -106,6 +106,13 @@ The generated files are:
 - `firmware/normal/lalapad-gen2-rmk-central.uf2` for the right half
 - `firmware/normal/lalapad-gen2-rmk-peripheral.uf2` for the left half
 
+After building UF2 files, generate a local hash manifest for the exact files
+that will be flashed or referenced in hardware evidence:
+
+```shell
+python3 tools/firmware_artifact_manifest.py --require-uf2 > firmware-artifacts.local.json
+```
+
 Reset/storage-clear UF2 files, when generated for hardware testing, are kept under `firmware/reset/`.
 
 ## Validation
@@ -134,6 +141,7 @@ When real hardware evidence changed, also run:
 ```shell
 cargo make hardware-validation-evidence-template-current > hardware-validation-evidence.local.toml
 python3 tools/hardware_validation.py --checklist > hardware-validation-checklist.local.md
+python3 tools/firmware_artifact_manifest.py --require-uf2 > firmware-artifacts.local.json
 python3 tools/hardware_validation.py --evidence hardware-validation-evidence.local.toml --markdown
 ```
 
@@ -263,9 +271,12 @@ pre-fill the flashed firmware reference in every entry. Generated
 collecting those observations. `cargo make
 hardware-validation-evidence-template-current` fills the template from the
 current tag or commit and refuses to run with tracked or untracked non-ignored
-changes, which avoids recording evidence against a mutable local build. Generated
-`hardware-validation-evidence*.toml` and `hardware-validation-checklist*.md`
-files are ignored by default.
+changes, which avoids recording evidence against a mutable local build.
+`tools/firmware_artifact_manifest.py --require-uf2` records the flashed UF2
+file sizes and SHA256 hashes so `artifact_or_notes` can point to an exact
+artifact set. Generated `hardware-validation-evidence*.toml`,
+`hardware-validation-checklist*.md`, and `firmware-artifacts*.json` files are
+ignored by default.
 For the combined final gate, run:
 
 ```shell

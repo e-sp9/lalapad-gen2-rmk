@@ -4,6 +4,8 @@ target
 .codex
 hardware-validation-evidence*.toml
 hardware-validation-checklist*.md
+firmware-artifacts*.json
+firmware-artifacts*.md
 
 *.bin
 *.elf

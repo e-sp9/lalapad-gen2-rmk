@@ -23,6 +23,7 @@ on:
       - 'tools/hardware_validation_baseline.toml'
       - 'tools/hardware_validation_evidence.example.toml'
       - 'tools/hardware_validation_manifest.toml'
+      - 'tools/firmware_artifact_manifest.py'
       - 'tools/migration_status.py'
       - 'tools/porting_coverage.py'
       - 'tools/porting_coverage_baseline.toml'
@@ -164,6 +165,14 @@ jobs:
             firmware/lalapad-gen2-rmk-central-dfu.zip \
             firmware/lalapad-gen2-rmk-peripheral-dfu.zip
 
+      - name: Generate firmware artifact manifest
+        run: |
+          python3 tools/firmware_artifact_manifest.py \
+            --require-uf2 \
+            --require-dfu \
+            --firmware-ref "${GITHUB_REF_NAME:-$GITHUB_SHA}" \
+            > firmware/lalapad-gen2-rmk-artifacts.json
+
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
         with:
@@ -175,6 +184,7 @@ jobs:
             firmware/hex/lalapad-gen2-rmk-peripheral.hex
             firmware/lalapad-gen2-rmk-central-dfu.zip
             firmware/lalapad-gen2-rmk-peripheral-dfu.zip
+            firmware/lalapad-gen2-rmk-artifacts.json
           if-no-files-found: error
           retention-days: 90
 
@@ -189,6 +199,7 @@ jobs:
             firmware/hex/lalapad-gen2-rmk-peripheral.hex
             firmware/lalapad-gen2-rmk-central-dfu.zip
             firmware/lalapad-gen2-rmk-peripheral-dfu.zip
+            firmware/lalapad-gen2-rmk-artifacts.json
           generate_release_notes: true
           fail_on_unmatched_files: true
 
