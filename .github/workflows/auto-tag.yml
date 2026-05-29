@@ -16,6 +16,7 @@ on:
       - 'keyboard.toml'
       - 'vial.json'
       - 'Makefile.toml'
+      - 'vendor/rmk-0.8.2/**'
   # 任意のバンプ種別で手動実行できるようにする。
   workflow_dispatch:
     inputs:

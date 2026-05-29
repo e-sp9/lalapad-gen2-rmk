@@ -17,6 +17,7 @@ on:
       - 'keyboard.toml'
       - 'vial.json'
       - 'Makefile.toml'
+      - 'vendor/rmk-0.8.2/**'
       - 'tools/check_flash_layout.py'
       - 'tools/hardware_validation.py'
       - 'tools/hardware_validation_evidence.example.toml'
@@ -27,6 +28,7 @@ on:
       - 'docs/PORTING.md'
       - 'docs/TRACKPAD_HARDWARE_CHECK.md'
       - '.github/PULL_REQUEST_TEMPLATE.md'
+      - '.github/workflows/auto-tag.yml'
       - '.github/workflows/firmware.yml'
   workflow_dispatch:
 

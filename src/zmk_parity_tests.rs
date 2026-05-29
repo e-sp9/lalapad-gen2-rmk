@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use std::process::Command;
 
 const KEYBOARD_TOML: &str = include_str!("../keyboard.toml");
+const AUTO_TAG_WORKFLOW_YAML: &str = include_str!("../.github/workflows/auto-tag.yml");
 const FIRMWARE_WORKFLOW_YAML: &str = include_str!("../.github/workflows/firmware.yml");
 const HARDWARE_VALIDATION_MANIFEST_TOML: &str =
     include_str!("../tools/hardware_validation_manifest.toml");
@@ -790,6 +791,18 @@ fn local_validation_entrypoints_match_ci_gates() {
     assert!(
         FIRMWARE_WORKFLOW_YAML.contains("tools/hardware_validation_evidence.example.toml"),
         "firmware CI path filters should include the hardware evidence template"
+    );
+    assert!(
+        FIRMWARE_WORKFLOW_YAML.contains(".github/workflows/auto-tag.yml"),
+        "firmware CI path filters should include auto-tag workflow changes covered by host parity tests"
+    );
+    assert!(
+        FIRMWARE_WORKFLOW_YAML.contains("vendor/rmk-0.8.2/**"),
+        "firmware CI path filters should include the local RMK patch that affects HID behavior"
+    );
+    assert!(
+        AUTO_TAG_WORKFLOW_YAML.contains("vendor/rmk-0.8.2/**"),
+        "auto-tag path filters should release firmware changes caused by the local RMK patch"
     );
     assert!(
         HARDWARE_VALIDATION_EVIDENCE_EXAMPLE_TOML
