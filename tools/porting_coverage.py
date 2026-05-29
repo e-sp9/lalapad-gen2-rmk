@@ -2017,6 +2017,79 @@ def check_zmk_build_file_inventory(
     return results
 
 
+def zmk_workflow_file_inventory(text: str) -> list[str]:
+    items: list[str] = []
+    top_section: str | None = None
+    job_id: str | None = None
+
+    for raw_line in text.splitlines():
+        line = raw_line.split("#", 1)[0].rstrip()
+        if not line.strip() or line.strip() == "---":
+            continue
+
+        if match := re.fullmatch(r"([A-Za-z0-9_-]+):(?:\s+(.+?))?", line):
+            top_section = match.group(1)
+            job_id = None
+            value = yaml_scalar(match.group(2))
+            if top_section == "name":
+                items.append(f"workflow.name={value}")
+            elif top_section == "on":
+                if value.startswith("[") and value.endswith("]"):
+                    triggers = ",".join(part.strip() for part in value[1:-1].split(","))
+                    items.append(f"workflow.on={triggers}")
+                else:
+                    items.append(f"workflow.on={value}")
+            elif top_section != "jobs":
+                items.append(f"workflow.top_level.{top_section}={value}")
+            continue
+
+        if top_section == "jobs":
+            if match := re.fullmatch(r"  ([A-Za-z0-9_-]+):(?:\s+(.+?))?", line):
+                job_id = match.group(1)
+                if match.group(2):
+                    items.append(f"workflow.jobs.{job_id}={yaml_scalar(match.group(2))}")
+                continue
+            if job_id is not None:
+                if match := re.fullmatch(r"    ([A-Za-z0-9_-]+):\s+(.+?)", line):
+                    key = match.group(1)
+                    value = yaml_scalar(match.group(2))
+                    items.append(f"workflow.jobs.{job_id}.{key}={value}")
+                    continue
+            items.append(f"workflow.jobs.unparsed={line.strip()}")
+            continue
+
+        if top_section is not None:
+            items.append(f"workflow.{top_section}.unparsed={line.strip()}")
+        else:
+            items.append(f"workflow.unparsed={line.strip()}")
+    return items
+
+
+def check_zmk_workflow_file_inventory(
+    manifest: dict[str, Any], zmk_config_dir: Path
+) -> list[Result]:
+    results: list[Result] = []
+    for check in manifest.get("source_inventory", {}).get("workflow_files", []):
+        source_file = check["source_file"]
+        expected = list(check["expected"])
+        source_path = zmk_config_dir / source_file
+        result_id = f"zmk_source.workflow_file_inventory.{source_file}"
+        if not source_path.exists():
+            results.append(
+                Result(
+                    result_id,
+                    "zmk_inventory",
+                    0,
+                    max(1, len(expected)),
+                    f"missing ZMK workflow source file {source_file!r}",
+                )
+            )
+            continue
+        actual = zmk_workflow_file_inventory(source_path.read_text())
+        results.append(ordered_inventory_result(result_id, "zmk_inventory", expected, actual))
+    return results
+
+
 def check_zmk_dts_status_inventory(manifest: dict[str, Any], zmk_config_dir: Path) -> list[Result]:
     inventory = manifest.get("source_inventory", {})
     results: list[Result] = []
@@ -2631,6 +2704,7 @@ def check_zmk_source(
     results.extend(check_zmk_gpio_property_inventory(manifest, zmk_config_dir))
     results.extend(check_west_manifest_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_build_file_inventory(manifest, zmk_config_dir))
+    results.extend(check_zmk_workflow_file_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_config_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_dts_status_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_pin_values(manifest, keyboard, zmk_config_dir))

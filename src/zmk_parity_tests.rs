@@ -533,6 +533,28 @@ fn porting_coverage_includes_exact_rmk_inventory_gates() {
             assert_eq!(build_inventory["total"].as_i64(), Some(expected_items));
             assert_eq!(build_inventory["ok"], true);
         }
+
+        for workflow_file in porting_coverage_manifest_toml()["source_inventory"]["workflow_files"]
+            .as_array()
+            .unwrap()
+        {
+            let source_file = workflow_file["source_file"].as_str().unwrap();
+            let expected_items = workflow_file["expected"].as_array().unwrap().len() as i64;
+            let workflow_inventory = results
+                .iter()
+                .find(|result| {
+                    result["id"] == format!("zmk_source.workflow_file_inventory.{source_file}")
+                })
+                .unwrap_or_else(|| {
+                    panic!(
+                        "ZMK workflow file inventory coverage result is missing for {source_file}"
+                    )
+                });
+            assert_eq!(workflow_inventory["kind"], "zmk_inventory");
+            assert_eq!(workflow_inventory["passed"].as_i64(), Some(expected_items));
+            assert_eq!(workflow_inventory["total"].as_i64(), Some(expected_items));
+            assert_eq!(workflow_inventory["ok"], true);
+        }
     }
 }
 
@@ -2815,6 +2837,123 @@ print(json.dumps({
             .as_str()
             .unwrap()
             .contains("missing ZMK build source file")
+    );
+}
+
+#[test]
+fn porting_coverage_rejects_unclassified_zmk_workflow_files() {
+    let output = run_python(
+        r#"
+import importlib.util
+import json
+import sys
+import tempfile
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("porting_coverage", "tools/porting_coverage.py")
+pc = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = pc
+spec.loader.exec_module(pc)
+
+manifest = {
+    "source_inventory": {
+        "workflow_files": [{
+            "source_file": "../.github/workflows/build.yml",
+            "expected": [
+                "workflow.name=Build ZMK firmware",
+                "workflow.on=push,pull_request,workflow_dispatch",
+                "workflow.jobs.build.uses=zmkfirmware/zmk/.github/workflows/build-user-config.yml@v0.3",
+            ],
+        }],
+    },
+}
+
+def workflow(uses="zmkfirmware/zmk/.github/workflows/build-user-config.yml@v0.3", extra_top=""):
+    return f'''
+name: Build ZMK firmware
+on: [push, pull_request, workflow_dispatch]
+{extra_top}
+jobs:
+  build:
+    uses: {uses}
+'''
+
+def pack(results):
+    return [result.__dict__ | {"ok": result.ok} for result in results]
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    config = root / "config"
+    workflow_dir = root / ".github/workflows"
+    config.mkdir()
+    workflow_dir.mkdir(parents=True)
+    fixture = workflow_dir / "build.yml"
+    fixture.write_text(workflow())
+    ok = pack(pc.check_zmk_workflow_file_inventory(manifest, config))
+    fixture.write_text(workflow("zmkfirmware/zmk/.github/workflows/build-user-config.yml@main"))
+    changed_ref = pack(pc.check_zmk_workflow_file_inventory(manifest, config))
+    fixture.write_text(workflow(extra_top="permissions: read-all\n"))
+    extra_top = pack(pc.check_zmk_workflow_file_inventory(manifest, config))
+    fixture.unlink()
+    missing_file = pack(pc.check_zmk_workflow_file_inventory(manifest, config))
+
+print(json.dumps({
+    "ok": ok,
+    "changed_ref": changed_ref,
+    "extra_top": extra_top,
+    "missing_file": missing_file,
+}))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "ZMK workflow inventory parser check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let ok_inventory = &parsed["ok"][0];
+    assert_eq!(ok_inventory["kind"], "zmk_inventory");
+    assert_eq!(ok_inventory["passed"].as_i64(), Some(3));
+    assert_eq!(ok_inventory["total"].as_i64(), Some(3));
+    assert_eq!(ok_inventory["ok"], true);
+
+    let changed_ref_inventory = &parsed["changed_ref"][0];
+    assert_eq!(changed_ref_inventory["kind"], "zmk_inventory");
+    assert_eq!(changed_ref_inventory["passed"].as_i64(), Some(2));
+    assert_eq!(changed_ref_inventory["total"].as_i64(), Some(3));
+    assert_eq!(changed_ref_inventory["ok"], false);
+    assert!(
+        changed_ref_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("@main")
+    );
+
+    let extra_top_inventory = &parsed["extra_top"][0];
+    assert_eq!(extra_top_inventory["kind"], "zmk_inventory");
+    assert_eq!(extra_top_inventory["passed"].as_i64(), Some(2));
+    assert_eq!(extra_top_inventory["total"].as_i64(), Some(4));
+    assert_eq!(extra_top_inventory["ok"], false);
+    assert!(
+        extra_top_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("permissions")
+    );
+
+    let missing_file_inventory = &parsed["missing_file"][0];
+    assert_eq!(missing_file_inventory["kind"], "zmk_inventory");
+    assert_eq!(missing_file_inventory["passed"].as_i64(), Some(0));
+    assert_eq!(missing_file_inventory["total"].as_i64(), Some(3));
+    assert_eq!(missing_file_inventory["ok"], false);
+    assert!(
+        missing_file_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("missing ZMK workflow source file")
     );
 }
 

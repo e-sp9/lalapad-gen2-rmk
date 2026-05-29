@@ -31,6 +31,9 @@ build_files = [
   { source_file = "../build.yaml", expected = ["include:board=seeeduino_xiao_ble:shield=lalapadgen2_right rgbled_adapter:snippet=studio-rpc-usb-uart", "include:board=seeeduino_xiao_ble:shield=lalapadgen2_left rgbled_adapter", "include:board=seeeduino_xiao_ble:shield=settings_reset"] },
   { source_file = "../zephyr/module.yml", expected = ["build.settings.board_root=."] },
 ]
+workflow_files = [
+  { source_file = "../.github/workflows/build.yml", expected = ["workflow.name=Build ZMK firmware", "workflow.on=push,pull_request,workflow_dispatch", "workflow.jobs.build.uses=zmkfirmware/zmk/.github/workflows/build-user-config.yml@v0.3"] },
+]
 source_files = [
   "boards/shields/lalapadgen2/Kconfig.defconfig",
   "boards/shields/lalapadgen2/Kconfig.shield",
