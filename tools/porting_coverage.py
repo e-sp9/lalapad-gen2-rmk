@@ -1330,6 +1330,46 @@ def check_zmk_source_file_inventory(manifest: dict[str, Any], zmk_config_dir: Pa
     ]
 
 
+def check_zmk_repo_file_inventory(manifest: dict[str, Any], zmk_config_dir: Path) -> list[Result]:
+    expected = list(manifest.get("source_inventory", {}).get("repo_files", []))
+    if not expected:
+        return []
+
+    repo_root = zmk_config_dir.parent if zmk_config_dir.name == "config" else zmk_config_dir
+    ignored_dirs = {".git", ".west", "__pycache__"}
+    ignored_files = {".DS_Store"}
+    actual_list = sorted(
+        path.relative_to(repo_root).as_posix()
+        for path in repo_root.rglob("*")
+        if path.is_file()
+        and not any(part in ignored_dirs for part in path.relative_to(repo_root).parts)
+        and path.name not in ignored_files
+    )
+    actual = set(actual_list)
+    expected_set = set(expected)
+    missing = sorted(expected_set - actual)
+    extra = sorted(actual - expected_set)
+    duplicates = sorted(item for item in actual if actual_list.count(item) > 1)
+    passed = len(expected_set) - len(missing)
+    total = len(expected_set) + len(extra) + len(duplicates)
+    messages: list[str] = []
+    if missing:
+        messages.append(f"missing repo files {missing!r}")
+    if extra:
+        messages.append(f"unclassified repo files {extra!r}")
+    if duplicates:
+        messages.append(f"duplicated repo files {duplicates!r}")
+    return [
+        Result(
+            "zmk_source.repo_file_inventory",
+            "zmk_inventory",
+            passed,
+            total,
+            "ok" if not messages else "; ".join(messages),
+        )
+    ]
+
+
 def zmk_include_targets(text: str) -> list[str]:
     return [
         match.group("target")
@@ -2578,6 +2618,7 @@ def check_zmk_source(
     results.extend(check_zmk_config_values(manifest, keyboard, zmk_config_dir))
     results.extend(check_zmk_config_mirrors(manifest, zmk_config_dir))
     results.extend(check_zmk_source_file_inventory(manifest, zmk_config_dir))
+    results.extend(check_zmk_repo_file_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_include_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_kconfig_entry_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_behavior_property_inventory(manifest, zmk_config_dir))

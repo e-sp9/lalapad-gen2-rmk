@@ -130,9 +130,9 @@ source firmware. It also checks left/right IQS9151 Kconfig parity and the
 ZMK trackpad listener routing shape, verifies that every active ZMK Kconfig key
 in the source files is classified by the migration contract, and checks Vial's
 matrix positions, ZMK `default_transform` order, the active ZMK physical-layout
-chain and physical key attributes, ZMK source-file inventory, ZMK keymap layer
-and behavior inventories, ZMK behavior-node and combo-node property
-inventories, upstream ZMK build-matrix files, ZMK include inventory, Kconfig
+chain and physical key attributes, ZMK repo-level and config source-file
+inventories, ZMK keymap layer and behavior inventories, ZMK behavior-node and
+combo-node property inventories, upstream ZMK build-matrix files, ZMK include inventory, Kconfig
 shield/default entries, west module inventory, ZMK trackpad virtual-position
 defines, RMK custom keycode order, ZMK `INPUT_BTN_*` to virtual-position
 bindings, ZMK trackpad-to-position behavior and input-processor properties, ZMK

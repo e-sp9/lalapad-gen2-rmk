@@ -206,8 +206,9 @@ by the migration contract, compares the Vial matrix positions against the
 upstream ZMK layout JSON, verifies that ZMK's `default_transform` matrix map
 matches that same layout order, confirms the active ZMK physical layout points
 at that transform, checks the ZMK physical-layout key attributes, checks the ZMK
-source-file inventory, checks the ZMK keymap layer and behavior inventories,
-checks ZMK behavior-node and combo-node property inventories, checks ZMK
+repo-level and config source-file inventories, checks the ZMK keymap layer and
+behavior inventories, checks ZMK behavior-node and combo-node property
+inventories, checks ZMK
 build-matrix files, checks ZMK `#include` dependencies, checks the ZMK
 `Kconfig.*` shield/default entries, checks the `west.yml` ZMK module inventory,
 checks the ZMK trackpad virtual-position `#define` inventory, checks the ZMK

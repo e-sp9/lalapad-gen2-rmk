@@ -45,6 +45,25 @@ source_files = [
   "lalapadgen2.keymap",
   "west.yml",
 ]
+repo_files = [
+  ".github/workflows/build.yml",
+  "LICENSE",
+  "boards/shields/.gitkeep",
+  "build.yaml",
+  "config/boards/shields/lalapadgen2/Kconfig.defconfig",
+  "config/boards/shields/lalapadgen2/Kconfig.shield",
+  "config/boards/shields/lalapadgen2/lalapadgen2-layouts.dtsi",
+  "config/boards/shields/lalapadgen2/lalapadgen2.dtsi",
+  "config/boards/shields/lalapadgen2/lalapadgen2_left.conf",
+  "config/boards/shields/lalapadgen2/lalapadgen2_left.overlay",
+  "config/boards/shields/lalapadgen2/lalapadgen2_right.conf",
+  "config/boards/shields/lalapadgen2/lalapadgen2_right.overlay",
+  "config/lalapadgen2.conf",
+  "config/lalapadgen2.json",
+  "config/lalapadgen2.keymap",
+  "config/west.yml",
+  "zephyr/module.yml",
+]
 kconfig_files = [
   "lalapadgen2.conf",
   "boards/shields/lalapadgen2/lalapadgen2_left.conf",

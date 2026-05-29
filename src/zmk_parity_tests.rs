@@ -294,6 +294,25 @@ fn porting_coverage_includes_exact_rmk_inventory_gates() {
         );
         assert_eq!(file_inventory["ok"], true);
 
+        let repo_file_inventory = results
+            .iter()
+            .find(|result| result["id"] == "zmk_source.repo_file_inventory")
+            .expect("ZMK repo file inventory coverage result is missing");
+        let expected_repo_files = porting_coverage_manifest_toml()["source_inventory"]["repo_files"]
+            .as_array()
+            .unwrap()
+            .len() as i64;
+        assert_eq!(repo_file_inventory["kind"], "zmk_inventory");
+        assert_eq!(
+            repo_file_inventory["passed"].as_i64(),
+            Some(expected_repo_files)
+        );
+        assert_eq!(
+            repo_file_inventory["total"].as_i64(),
+            Some(expected_repo_files)
+        );
+        assert_eq!(repo_file_inventory["ok"], true);
+
         for include_file in porting_coverage_manifest_toml()["source_inventory"]["include_files"]
             .as_array()
             .unwrap()
@@ -1414,6 +1433,150 @@ print(json.dumps({"ok": ok, "extra": extra, "missing": missing}))
             .as_str()
             .unwrap()
             .contains("missing source files")
+    );
+}
+
+#[test]
+fn porting_coverage_rejects_unclassified_zmk_repo_files() {
+    let output = run_python(
+        r#"
+import importlib.util
+import json
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("porting_coverage", "tools/porting_coverage.py")
+pc = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = pc
+spec.loader.exec_module(pc)
+
+manifest = {
+    "source_inventory": {
+        "repo_files": [
+            ".github/workflows/build.yml",
+            "build.yaml",
+            "config/lalapadgen2.keymap",
+        ],
+    },
+}
+
+def pack(results):
+    return [result.__dict__ | {"ok": result.ok} for result in results]
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    config = root / "config"
+    workflow = root / ".github/workflows"
+    workflow.mkdir(parents=True)
+    config.mkdir()
+    (workflow / "build.yml").write_text("")
+    (root / "build.yaml").write_text("")
+    (config / "lalapadgen2.keymap").write_text("")
+    (root / ".git").mkdir()
+    (root / ".git" / "HEAD").write_text("")
+    (root / ".west").mkdir()
+    (root / ".west" / "config").write_text("")
+    (root / ".DS_Store").write_text("")
+    ok = pack(pc.check_zmk_repo_file_inventory(manifest, config))
+
+    (root / "README.md").write_text("")
+    extra = pack(pc.check_zmk_repo_file_inventory(manifest, config))
+    (root / "build.yaml").unlink()
+    missing = pack(pc.check_zmk_repo_file_inventory(manifest, config))
+
+with tempfile.TemporaryDirectory() as tempdir:
+    git_root = Path(tempdir)
+    config = git_root / "config"
+    workflow = git_root / ".github/workflows"
+    workflow.mkdir(parents=True)
+    config.mkdir()
+    (workflow / "build.yml").write_text("")
+    (git_root / "build.yaml").write_text("")
+    (config / "lalapadgen2.keymap").write_text("")
+    subprocess.run(["git", "init"], cwd=git_root, check=True, stdout=subprocess.DEVNULL)
+    subprocess.run(["git", "add", "."], cwd=git_root, check=True, stdout=subprocess.DEVNULL)
+    (git_root / "build.yaml").unlink()
+    (git_root / "README.md").write_text("")
+    dirty_git = pack(pc.check_zmk_repo_file_inventory(manifest, config))
+
+print(json.dumps({"ok": ok, "extra": extra, "missing": missing, "dirty_git": dirty_git}))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "repo file inventory parser check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let ok_inventory = &parsed["ok"][0];
+    assert_eq!(ok_inventory["kind"], "zmk_inventory");
+    assert_eq!(ok_inventory["passed"].as_i64(), Some(3));
+    assert_eq!(ok_inventory["total"].as_i64(), Some(3));
+    assert_eq!(ok_inventory["ok"], true);
+
+    let extra_inventory = &parsed["extra"][0];
+    assert_eq!(extra_inventory["kind"], "zmk_inventory");
+    assert_eq!(extra_inventory["passed"].as_i64(), Some(3));
+    assert_eq!(extra_inventory["total"].as_i64(), Some(4));
+    assert_eq!(extra_inventory["ok"], false);
+    assert!(
+        extra_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("README.md")
+    );
+    assert!(
+        !extra_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains(".git/HEAD")
+    );
+    assert!(
+        !extra_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains(".west/config")
+    );
+    assert!(
+        !extra_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains(".DS_Store")
+    );
+
+    let missing_inventory = &parsed["missing"][0];
+    assert_eq!(missing_inventory["kind"], "zmk_inventory");
+    assert_eq!(missing_inventory["passed"].as_i64(), Some(2));
+    assert_eq!(missing_inventory["total"].as_i64(), Some(4));
+    assert_eq!(missing_inventory["ok"], false);
+    assert!(
+        missing_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("build.yaml")
+    );
+
+    let dirty_git_inventory = &parsed["dirty_git"][0];
+    assert_eq!(dirty_git_inventory["kind"], "zmk_inventory");
+    assert_eq!(dirty_git_inventory["passed"].as_i64(), Some(2));
+    assert_eq!(dirty_git_inventory["total"].as_i64(), Some(4));
+    assert_eq!(dirty_git_inventory["ok"], false);
+    assert!(
+        dirty_git_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("build.yaml")
+    );
+    assert!(
+        dirty_git_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("README.md")
     );
 }
 
