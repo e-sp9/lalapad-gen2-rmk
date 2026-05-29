@@ -200,6 +200,34 @@ fn porting_coverage_includes_exact_rmk_inventory_gates() {
         );
         assert_eq!(behavior_inventory["ok"], true);
 
+        for behavior_property in
+            porting_coverage_manifest_toml()["source_inventory"]["behavior_properties"]
+                .as_array()
+                .unwrap()
+        {
+            let source_block = behavior_property["source_block"].as_str().unwrap();
+            let expected_properties =
+                behavior_property["expected"].as_array().unwrap().len() as i64;
+            let property_inventory = results
+                .iter()
+                .find(|result| {
+                    result["id"] == format!("zmk_source.behavior_properties.{source_block}")
+                })
+                .unwrap_or_else(|| {
+                    panic!("ZMK behavior property inventory coverage result is missing for {source_block}")
+                });
+            assert_eq!(property_inventory["kind"], "zmk_inventory");
+            assert_eq!(
+                property_inventory["passed"].as_i64(),
+                Some(expected_properties)
+            );
+            assert_eq!(
+                property_inventory["total"].as_i64(),
+                Some(expected_properties)
+            );
+            assert_eq!(property_inventory["ok"], true);
+        }
+
         for mirror in porting_coverage_manifest_toml()["zmk_behavior_mirrors"]
             .as_array()
             .unwrap()
@@ -931,6 +959,126 @@ print(json.dumps({
             .as_str()
             .unwrap()
             .contains("metadata")
+    );
+}
+
+#[test]
+fn porting_coverage_rejects_unclassified_zmk_behavior_properties() {
+    let output = run_python(
+        r#"
+import importlib.util
+import json
+import sys
+import tempfile
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("porting_coverage", "tools/porting_coverage.py")
+pc = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = pc
+spec.loader.exec_module(pc)
+
+manifest = {
+    "source_inventory": {
+        "behavior_properties": [{
+            "source_file": "lalapadgen2.keymap",
+            "source_block": "tap_dance_layer_1and2",
+            "expected": [
+                'compatible="zmk,behavior-tap-dance"',
+                'label="td_mo12"',
+                '#binding-cells=<0>',
+                'bindings=<&mo 1>, <&mo 2>',
+            ],
+        }],
+    },
+}
+
+def source(extra=""):
+    return f'''
+/ {{
+    behaviors {{
+        tap_dance_layer_1and2: tap_dance_layer_1and2 {{
+            compatible = "zmk,behavior-tap-dance";
+            label = "td_mo12";
+            #binding-cells = <0>;
+            bindings = <&mo 1>, <&mo 2>;
+            {extra}
+        }};
+    }};
+}};
+'''
+
+def pack(results):
+    return [result.__dict__ | {"ok": result.ok} for result in results]
+
+with tempfile.TemporaryDirectory() as tmp:
+    root = Path(tmp)
+    fixture = root / "lalapadgen2.keymap"
+    fixture.write_text(source())
+    ok = pack(pc.check_zmk_behavior_property_inventory(manifest, root))
+    fixture.write_text(source('quick-tap-ms = <200>;'))
+    changed = pack(pc.check_zmk_behavior_property_inventory(manifest, root))
+    fixture.write_text('/ { behaviors { other: other { compatible = "zmk,behavior-tap-dance"; }; }; };')
+    missing_block = pack(pc.check_zmk_behavior_property_inventory(manifest, root))
+    fixture.unlink()
+    missing_file = pack(pc.check_zmk_behavior_property_inventory(manifest, root))
+
+print(json.dumps({
+    "ok": ok,
+    "changed": changed,
+    "missing_block": missing_block,
+    "missing_file": missing_file,
+}))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "behavior property inventory parser check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let ok_inventory = &parsed["ok"][0];
+    assert_eq!(ok_inventory["kind"], "zmk_inventory");
+    assert_eq!(ok_inventory["passed"].as_i64(), Some(4));
+    assert_eq!(ok_inventory["total"].as_i64(), Some(4));
+    assert_eq!(ok_inventory["ok"], true);
+
+    let changed_inventory = &parsed["changed"][0];
+    assert_eq!(changed_inventory["kind"], "zmk_inventory");
+    assert_eq!(changed_inventory["passed"].as_i64(), Some(4));
+    assert_eq!(changed_inventory["total"].as_i64(), Some(5));
+    assert_eq!(changed_inventory["ok"], false);
+    assert!(
+        changed_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("quick-tap-ms=<200>")
+    );
+
+    let missing_block_inventory = &parsed["missing_block"][0];
+    assert_eq!(missing_block_inventory["kind"], "zmk_inventory");
+    assert_eq!(missing_block_inventory["passed"].as_i64(), Some(0));
+    assert_eq!(missing_block_inventory["total"].as_i64(), Some(4));
+    assert_eq!(missing_block_inventory["ok"], false);
+    assert!(
+        missing_block_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("invalid behavior property source")
+    );
+
+    let missing_file_inventory = &parsed["missing_file"][0];
+    assert_eq!(missing_file_inventory["kind"], "zmk_inventory");
+    assert_eq!(missing_file_inventory["passed"].as_i64(), Some(0));
+    assert_eq!(missing_file_inventory["total"].as_i64(), Some(4));
+    assert_eq!(missing_file_inventory["ok"], false);
+    assert!(
+        missing_file_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("missing behavior property source file")
     );
 }
 

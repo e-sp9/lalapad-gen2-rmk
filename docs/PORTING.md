@@ -207,15 +207,16 @@ upstream ZMK layout JSON, verifies that ZMK's `default_transform` matrix map
 matches that same layout order, confirms the active ZMK physical layout points
 at that transform, checks the ZMK physical-layout key attributes, checks the ZMK
 source-file inventory, checks the ZMK keymap layer and behavior inventories,
-checks ZMK `#include` dependencies, checks the ZMK `Kconfig.*` shield/default
-entries, checks the `west.yml` ZMK module inventory, checks the ZMK trackpad
-virtual-position `#define` inventory, checks the ZMK `INPUT_BTN_*` to
-virtual-position binding inventory, checks the ZMK trackpad listener device and
-normal/low-speed input-processor chains, checks selected ZMK DTS properties for
-split input, dynamic scaling, right-half column offset, and overlay trackpad
-routing overrides, checks source GPIO pin flags, checks the ZMK `*.dtsi` /
-`*.overlay` status-node inventory, and checks the RMK custom keycode order used
-for the ZMK Bluetooth and trackpad scale actions. These high-risk ZMK source
+checks ZMK behavior-node property inventories, checks ZMK `#include`
+dependencies, checks the ZMK `Kconfig.*` shield/default entries, checks the
+`west.yml` ZMK module inventory, checks the ZMK trackpad virtual-position
+`#define` inventory, checks the ZMK `INPUT_BTN_*` to virtual-position binding
+inventory, checks the ZMK trackpad listener device and normal/low-speed
+input-processor chains, checks selected ZMK DTS properties for split input,
+dynamic scaling, right-half column offset, and overlay trackpad routing
+overrides, checks source GPIO pin flags, checks the ZMK `*.dtsi` / `*.overlay`
+status-node inventory, and checks the RMK custom keycode order used for the ZMK
+Bluetooth and trackpad scale actions. These high-risk ZMK source
 checks are represented as structured inventories rather than regex-only checks.
 The thumb tap/hold layer-resolution scenarios are also cross-checked against
 the ZMK source keymap after documented RMK deltas are applied, so scenario

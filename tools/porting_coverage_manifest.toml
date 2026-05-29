@@ -16,6 +16,12 @@ behavior_nodes = [
   "mt2",
   "tap_dance_layer_1and2",
 ]
+behavior_properties = [
+  { source_file = "lalapadgen2.keymap", source_block = "zip_dyn_scale", expected = ["compatible=\"zmk,behavior-zip-dynamic-scale\"", "#binding-cells=<2>"] },
+  { source_file = "lalapadgen2.keymap", source_block = "zip_dyn_scale_set", expected = ["compatible=\"zmk,behavior-zip-dynamic-scale-set\"", "#binding-cells=<2>"] },
+  { source_file = "lalapadgen2.keymap", source_block = "mt2", expected = ["compatible=\"zmk,behavior-hold-tap\"", "#binding-cells=<2>", "flavor=\"tap-preferred\"", "tapping-term-ms=<200>", "quick-tap-ms=<200>", "require-prior-idle-ms=<125>", "bindings=<&kp>, <&kp>"] },
+  { source_file = "lalapadgen2.keymap", source_block = "tap_dance_layer_1and2", expected = ["compatible=\"zmk,behavior-tap-dance\"", "label=\"td_mo12\"", "#binding-cells=<0>", "bindings=<&mo 1>, <&mo 2>"] },
+]
 source_files = [
   "boards/shields/lalapadgen2/Kconfig.defconfig",
   "boards/shields/lalapadgen2/Kconfig.shield",
