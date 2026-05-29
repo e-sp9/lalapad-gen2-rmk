@@ -185,7 +185,9 @@ the host-side parity test suite before building release binaries.
 real-hardware validation tracker into a single release dashboard. In normal CI
 it must show software coverage and implementation at `100.00%`, while hardware
 validation can remain below 100% as long as every hardware-only check is still
-classified. Use `--require-hardware-validated --require-firmware-ref
+classified. Its Markdown report includes hardware area, side, and remaining
+check tables so release review can see which real-device evidence is still
+missing. Use `--require-hardware-validated --require-firmware-ref
 <tag-or-commit>` only when claiming that a specific flashed firmware has passed
 every real-device check.
 

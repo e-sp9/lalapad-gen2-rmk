@@ -273,6 +273,23 @@ fn migration_status_combines_software_and_hardware_progress() {
         Some(true)
     );
     assert_eq!(parsed["fully_validated"].as_bool(), Some(false));
+
+    let markdown = run_migration_status(&["--markdown"]);
+    assert!(
+        markdown.status.success(),
+        "migration status markdown failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&markdown.stdout),
+        String::from_utf8_lossy(&markdown.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&markdown.stdout);
+    assert!(stdout.contains("## RMK Migration Status"));
+    assert!(stdout.contains("| Software coverage | 2351 | 2351 | 100.00% |"));
+    assert!(stdout.contains("### Hardware Progress By Area"));
+    assert!(stdout.contains("| trackpad | 0 | 7 | 0.00% |"));
+    assert!(stdout.contains("### Hardware Progress By Side"));
+    assert!(stdout.contains("| right | 0 | 5 | 0.00% |"));
+    assert!(stdout.contains("### Hardware Remaining"));
+    assert!(stdout.contains("| vial_thumb_layer_taps | vial | both | requires_hardware |"));
 }
 
 #[test]

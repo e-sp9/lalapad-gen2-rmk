@@ -199,6 +199,21 @@ def markdown_table(rows: list[list[str]]) -> str:
     return "\n".join(lines)
 
 
+def progress_rows(label: str, group: dict[str, Any]) -> list[list[str]]:
+    rows = [[label, "Validated", "Total", "Rate"]]
+    for key, progress in group.items():
+        rate = progress.get("rate")
+        rows.append(
+            [
+                str(key or f"unknown {label.lower()}"),
+                str(progress.get("validated", 0)),
+                str(progress.get("total", 0)),
+                "n/a" if rate is None else f"{rate:.2f}%",
+            ]
+        )
+    return rows
+
+
 def print_markdown(status: MigrationStatus) -> None:
     implementation = status.software.implementation
     hardware = status.hardware
@@ -237,6 +252,31 @@ def print_markdown(status: MigrationStatus) -> None:
     )
     print()
     print(f"Full validation: {'pass' if status.fully_validated else 'fail'}")
+    if hardware["by_area"]:
+        print()
+        print("### Hardware Progress By Area")
+        print()
+        print(markdown_table(progress_rows("Area", hardware["by_area"])))
+    if hardware["by_side"]:
+        print()
+        print("### Hardware Progress By Side")
+        print()
+        print(markdown_table(progress_rows("Side", hardware["by_side"])))
+    if hardware["remaining"]:
+        print()
+        print("### Hardware Remaining")
+        print()
+        rows = [["ID", "Area", "Side", "Status"]]
+        rows.extend(
+            [
+                str(item["id"]),
+                str(item["area"]),
+                str(item["side"]),
+                str(item["status"]),
+            ]
+            for item in hardware["remaining"]
+        )
+        print(markdown_table(rows))
 
 
 def main() -> None:

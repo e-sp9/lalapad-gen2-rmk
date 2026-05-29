@@ -285,7 +285,9 @@ runs the same source-backed software checks and the hardware validation tracker
 in one report. The CI gate uses `--require-software-complete` and
 `--require-hardware-classified`, which means software migration must stay at
 100% while hardware-only checks are allowed to remain unvalidated but cannot
-become malformed or untracked. A true final hardware claim should add
+become malformed or untracked. The Markdown report includes hardware progress
+by area, by side, and by remaining check so the path from 0/12 to 12/12 stays
+visible in GitHub Actions summaries. A true final hardware claim should add
 `--require-hardware-validated --require-firmware-ref <tag-or-commit>`.
 
 ## Real-Hardware Validation Gate
