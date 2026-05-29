@@ -49,6 +49,7 @@ This wraps:
 
 ```sh
 python3 tools/migration_status.py --evidence path/to/evidence.toml \
+  --coverage-baseline tools/porting_coverage_baseline.toml \
   --require-software-complete \
   --require-hardware-classified \
   --require-hardware-validated \

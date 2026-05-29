@@ -112,11 +112,11 @@ Reset/storage-clear UF2 files, when generated for hardware testing, are kept und
 
 ```shell
 python3 -m json.tool vial.json >/tmp/lalapad-vial-check.json
-python3 -c 'import tomllib; [tomllib.load(open(path, "rb")) for path in ("keyboard.toml", "Cargo.toml", "Makefile.toml", "tools/porting_coverage_manifest.toml", "tools/hardware_validation_manifest.toml", "tools/hardware_validation_evidence.example.toml")]; print("toml ok")'
+python3 -c 'import tomllib; [tomllib.load(open(path, "rb")) for path in ("keyboard.toml", "Cargo.toml", "Makefile.toml", "tools/porting_coverage_manifest.toml", "tools/porting_coverage_baseline.toml", "tools/hardware_validation_manifest.toml", "tools/hardware_validation_evidence.example.toml")]; print("toml ok")'
 rmkit get-chip --keyboard-toml-path keyboard.toml
 rmkit get-project-name --keyboard-toml-path keyboard.toml
-python3 tools/porting_coverage.py --require-zmk-source --require-porting-complete
-python3 tools/migration_status.py --require-zmk-source --require-software-complete --require-hardware-classified
+python3 tools/porting_coverage.py --coverage-baseline tools/porting_coverage_baseline.toml --require-zmk-source --require-porting-complete
+python3 tools/migration_status.py --coverage-baseline tools/porting_coverage_baseline.toml --require-zmk-source --require-software-complete --require-hardware-classified
 python3 tools/hardware_validation.py --require-classified
 python3 tools/hardware_validation.py --markdown
 python3 tools/hardware_validation.py --evidence-template
@@ -144,7 +144,10 @@ unclassified or any explicit implementation status is non-implemented. The
 text and JSON reports also include coverage grouped by result kind, making it
 clear whether a regression is in RMK keymap/config checks, ZMK source
 inventory, DTS/Kconfig mirrors, Rust constants, or firmware code needles. The
-Rust checks cover the RMK-side IQS9151 register-address
+`--coverage-baseline tools/porting_coverage_baseline.toml` gate also freezes
+the current denominator and per-kind totals, so deleting coverage items cannot
+silently turn into a smaller `100.00%`. The Rust checks cover the RMK-side
+IQS9151 register-address
 inventory, upstream IQS9151 register and bit-flag porting classifications,
 product/register address values, reset/gesture bits, IQS9151 feature-enable
 flags, dynamic-scale bounds, timing values, and initialization byte-array
@@ -218,13 +221,20 @@ command generates a complete local overlay file containing every current
 hardware check; pass `--firmware-ref-template <tag-or-commit>` with it to
 pre-fill the flashed firmware reference in every entry. Generated
 `hardware-validation-evidence*.toml` files are ignored by default.
-For the combined final gate, run
-`python3 tools/migration_status.py --evidence path/to/evidence.toml
---require-software-complete --require-hardware-classified
---require-hardware-validated --require-firmware-ref <tag-or-commit>`; it must
-report `Full validation: pass` before claiming source-backed and real-device
-validation are both complete for that firmware. The equivalent cargo-make task
-is:
+For the combined final gate, run:
+
+```shell
+python3 tools/migration_status.py --coverage-baseline tools/porting_coverage_baseline.toml \
+  --evidence path/to/evidence.toml \
+  --require-software-complete \
+  --require-hardware-classified \
+  --require-hardware-validated \
+  --require-firmware-ref <tag-or-commit>
+```
+
+It must report `Full validation: pass` before claiming source-backed and
+real-device validation are both complete for that firmware. The equivalent
+cargo-make task is:
 
 ```shell
 HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-final

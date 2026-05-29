@@ -2857,6 +2857,97 @@ def coverage_by_kind(results: list[Result]) -> dict[str, CoverageBucket]:
     return dict(sorted(by_kind.items()))
 
 
+def compare_int_field(
+    errors: list[str],
+    label: str,
+    expected_root: dict[str, Any],
+    actual_root: dict[str, int],
+    field: str,
+) -> None:
+    if field not in expected_root:
+        errors.append(f"{label}: baseline missing field {field}")
+        return
+    expected = int(expected_root[field])
+    actual = int(actual_root[field])
+    if actual != expected:
+        errors.append(f"{label}.{field}: expected baseline {expected}, got {actual}")
+
+
+def baseline_errors(
+    baseline: dict[str, Any],
+    passed: int,
+    total: int,
+    by_kind: dict[str, CoverageBucket],
+    status_summary: PortingStatusSummary,
+) -> list[str]:
+    errors: list[str] = []
+    coverage = baseline.get("coverage", {})
+    if not isinstance(coverage, dict):
+        return ["coverage baseline must contain a [coverage] table"]
+    compare_int_field(errors, "coverage", coverage, {"passed": passed, "total": total}, "passed")
+    compare_int_field(errors, "coverage", coverage, {"passed": passed, "total": total}, "total")
+
+    expected_by_kind = coverage.get("by_kind", {})
+    if not isinstance(expected_by_kind, dict) or not expected_by_kind:
+        errors.append("coverage baseline must contain [coverage.by_kind.*] tables")
+    else:
+        actual_kind_names = set(by_kind)
+        expected_kind_names = set(expected_by_kind)
+        for kind in sorted(expected_kind_names - actual_kind_names):
+            errors.append(f"coverage.by_kind.{kind}: baseline kind is missing from actual report")
+        for kind in sorted(actual_kind_names - expected_kind_names):
+            errors.append(f"coverage.by_kind.{kind}: actual report kind is missing from baseline")
+        for kind in sorted(expected_kind_names & actual_kind_names):
+            expected = expected_by_kind[kind]
+            if not isinstance(expected, dict):
+                errors.append(f"coverage.by_kind.{kind}: baseline entry must be a table")
+                continue
+            bucket = by_kind[kind]
+            actual = {"passed": bucket.passed, "total": bucket.total}
+            compare_int_field(errors, f"coverage.by_kind.{kind}", expected, actual, "passed")
+            compare_int_field(errors, f"coverage.by_kind.{kind}", expected, actual, "total")
+
+    expected_status = baseline.get("porting_status", {})
+    if not isinstance(expected_status, dict):
+        errors.append("coverage baseline must contain a [porting_status] table")
+    else:
+        actual_status = {
+            "total": status_summary.total,
+            "implemented": status_summary.implemented,
+        }
+        compare_int_field(errors, "porting_status", expected_status, actual_status, "total")
+        compare_int_field(
+            errors,
+            "porting_status",
+            expected_status,
+            actual_status,
+            "implemented",
+        )
+        expected_by_status = expected_status.get("by_status", {})
+        if not isinstance(expected_by_status, dict) or not expected_by_status:
+            errors.append("coverage baseline must contain [porting_status.by_status]")
+        else:
+            actual_status_names = set(status_summary.by_status)
+            expected_status_names = set(expected_by_status)
+            for status in sorted(expected_status_names - actual_status_names):
+                errors.append(
+                    f"porting_status.by_status.{status}: baseline status is missing from actual report"
+                )
+            for status in sorted(actual_status_names - expected_status_names):
+                errors.append(
+                    f"porting_status.by_status.{status}: actual status is missing from baseline"
+                )
+            for status in sorted(expected_status_names & actual_status_names):
+                expected = int(expected_by_status[status])
+                actual = int(status_summary.by_status[status])
+                if actual != expected:
+                    errors.append(
+                        f"porting_status.by_status.{status}: expected baseline {expected}, got {actual}"
+                    )
+
+    return errors
+
+
 def check_code_contains(manifest: dict[str, Any], project_root: Path) -> list[Result]:
     results: list[Result] = []
     for check in manifest.get("code_contains", []):
@@ -3491,6 +3582,12 @@ def main(argv: list[str]) -> int:
         action="store_true",
         help="Fail if any explicit manifest status is not implemented.",
     )
+    parser.add_argument(
+        "--coverage-baseline",
+        type=Path,
+        default=None,
+        help="Fail if the coverage denominator or implementation-status snapshot drifts.",
+    )
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
 
@@ -3500,6 +3597,20 @@ def main(argv: list[str]) -> int:
     passed = sum(result.passed for result in results)
     total = sum(result.total for result in results)
     by_kind = coverage_by_kind(results)
+    baseline_failures: list[str] = []
+    if args.coverage_baseline is not None:
+        try:
+            baseline = load_toml(args.coverage_baseline)
+        except OSError as e:
+            baseline_failures = [f"failed to read {args.coverage_baseline}: {e}"]
+        else:
+            baseline_failures = baseline_errors(
+                baseline,
+                passed,
+                total,
+                by_kind,
+                status_summary,
+            )
     if args.json:
         print(
             json.dumps(
@@ -3522,6 +3633,7 @@ def main(argv: list[str]) -> int:
                         "by_status": status_summary.by_status,
                         "remaining": status_summary.remaining,
                     },
+                    "baseline_errors": baseline_failures,
                     "results": [result.__dict__ | {"ok": result.ok} for result in results],
                 },
                 indent=2,
@@ -3538,6 +3650,11 @@ def main(argv: list[str]) -> int:
             f"{status_summary.implemented}/{status_summary.total} explicit statuses implemented",
             file=sys.stderr,
         )
+        ok = False
+    if baseline_failures:
+        print("porting coverage baseline drift:", file=sys.stderr)
+        for failure in baseline_failures:
+            print(f"- {failure}", file=sys.stderr)
         ok = False
     return 0 if ok else 1
 

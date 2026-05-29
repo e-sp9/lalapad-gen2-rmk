@@ -41,6 +41,7 @@ def software_status(
     keyboard_path: Path,
     zmk_keymap_path: Path | None,
     require_zmk_source: bool,
+    coverage_baseline_path: Path | None,
 ) -> SoftwareStatus:
     results = porting_coverage.run(
         manifest_path,
@@ -52,6 +53,31 @@ def software_status(
     implementation = porting_coverage.porting_status_summary(manifest)
     passed = sum(result.passed for result in results)
     total = sum(result.total for result in results)
+    by_kind = porting_coverage.coverage_by_kind(results)
+    baseline_failures: list[dict[str, str | int]] = []
+    if coverage_baseline_path is not None:
+        try:
+            coverage_baseline = porting_coverage.load_toml(coverage_baseline_path)
+        except OSError as e:
+            failures = [f"failed to read {coverage_baseline_path}: {e}"]
+        else:
+            failures = porting_coverage.baseline_errors(
+                coverage_baseline,
+                passed,
+                total,
+                by_kind,
+                implementation,
+            )
+        baseline_failures = [
+            {
+                "id": "coverage_baseline",
+                "kind": "baseline",
+                "passed": 0,
+                "total": 1,
+                "message": failure,
+            }
+            for failure in failures
+        ]
     failed = [
         {
             "id": result.id,
@@ -62,14 +88,14 @@ def software_status(
         }
         for result in results
         if not result.ok
-    ]
-    by_kind = {
+    ] + baseline_failures
+    by_kind_json = {
         kind: {
             "passed": bucket.passed,
             "total": bucket.total,
             "rate": bucket.rate,
         }
-        for kind, bucket in porting_coverage.coverage_by_kind(results).items()
+        for kind, bucket in by_kind.items()
     }
     complete = (
         not failed
@@ -80,7 +106,7 @@ def software_status(
         passed=passed,
         total=total,
         rate=None if total == 0 else passed / total,
-        by_kind=by_kind,
+        by_kind=by_kind_json,
         implementation={
             "total": implementation.total,
             "implemented": implementation.implemented,
@@ -117,6 +143,7 @@ def build_status(args: argparse.Namespace) -> MigrationStatus:
         args.keyboard_toml,
         args.zmk_keymap,
         args.require_zmk_source,
+        args.coverage_baseline,
     )
     hardware = hardware_status(
         args.hardware_manifest,
@@ -289,6 +316,7 @@ def main() -> None:
     parser.add_argument("--keyboard-toml", type=Path, default=Path("keyboard.toml"))
     parser.add_argument("--zmk-keymap", type=Path, default=None)
     parser.add_argument("--require-zmk-source", action="store_true")
+    parser.add_argument("--coverage-baseline", type=Path, default=None)
     parser.add_argument(
         "--hardware-manifest",
         type=Path,

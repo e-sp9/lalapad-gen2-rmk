@@ -17,6 +17,8 @@ args = ["tools/check_flash_layout.py", "--config-only"]
 command = "python3"
 args = [
     "tools/porting_coverage.py",
+    "--coverage-baseline",
+    "tools/porting_coverage_baseline.toml",
     "--require-zmk-source",
     "--require-porting-complete",
 ]
@@ -37,6 +39,8 @@ args = ["tools/hardware_validation.py", "--evidence-template"]
 command = "python3"
 args = [
     "tools/migration_status.py",
+    "--coverage-baseline",
+    "tools/porting_coverage_baseline.toml",
     "--require-zmk-source",
     "--require-software-complete",
     "--require-hardware-classified",
@@ -47,6 +51,7 @@ script = '''
 : "${HARDWARE_EVIDENCE:?set HARDWARE_EVIDENCE=path/to/evidence.toml}"
 : "${FIRMWARE_REF:?set FIRMWARE_REF=<tag-or-commit>}"
 python3 tools/migration_status.py \
+  --coverage-baseline tools/porting_coverage_baseline.toml \
   --evidence "$HARDWARE_EVIDENCE" \
   --require-software-complete \
   --require-hardware-classified \

@@ -251,8 +251,8 @@ mandatory in a different checkout layout.
 Run:
 
 ```sh
-python3 tools/porting_coverage.py --require-zmk-source --require-porting-complete
-python3 tools/migration_status.py --require-zmk-source --require-software-complete --require-hardware-classified
+python3 tools/porting_coverage.py --coverage-baseline tools/porting_coverage_baseline.toml --require-zmk-source --require-porting-complete
+python3 tools/migration_status.py --coverage-baseline tools/porting_coverage_baseline.toml --require-zmk-source --require-software-complete --require-hardware-classified
 ```
 
 The firmware GitHub Actions workflow checks out `e-sp9/zmk-config-LalaPadGen2`,
@@ -276,24 +276,35 @@ The text and JSON reports also include a `by_kind` breakdown of the same
 coverage results, so a regression can be traced to RMK keymap/config checks,
 ZMK source inventories, Kconfig/DTS mirrors, Rust constants, IQS9151 byte
 arrays, or firmware code-needle checks instead of treating the total percentage
-as a black box.
+as a black box. `tools/porting_coverage_baseline.toml` records the current
+overall and per-kind denominator. Use `--coverage-baseline` in CI and release
+checks so a removed check fails explicitly instead of producing a smaller
+`100.00%`.
 It is intended to prevent regressions like a visible `LT(...)` binding whose
 tap-hold behavior is changed by RMK's global flow-tap setting.
 
 `tools/migration_status.py` is the combined dashboard for release review. It
-runs the same source-backed software checks and the hardware validation tracker
-in one report. The CI gate uses `--require-software-complete` and
+runs the same source-backed software checks, the coverage-denominator baseline,
+and the hardware validation tracker in one report. The CI gate uses
+`--require-software-complete` and
 `--require-hardware-classified`, which means software migration must stay at
 100% while hardware-only checks are allowed to remain unvalidated but cannot
 become malformed or untracked. The Markdown report includes hardware progress
 by area, by side, and by remaining check so the path from 0/12 to 12/12 stays
 visible in GitHub Actions summaries. A true final hardware claim should add
 `--require-hardware-validated --require-firmware-ref <tag-or-commit>`.
-The full release-validation command is
-`python3 tools/migration_status.py --evidence path/to/evidence.toml
---require-software-complete --require-hardware-classified
---require-hardware-validated --require-firmware-ref <tag-or-commit>`. The
-same final gate is available as:
+The full release-validation command is:
+
+```sh
+python3 tools/migration_status.py --coverage-baseline tools/porting_coverage_baseline.toml \
+  --evidence path/to/evidence.toml \
+  --require-software-complete \
+  --require-hardware-classified \
+  --require-hardware-validated \
+  --require-firmware-ref <tag-or-commit>
+```
+
+The same final gate is available as:
 
 ```sh
 HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-final

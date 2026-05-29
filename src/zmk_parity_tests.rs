@@ -10,6 +10,8 @@ const HARDWARE_VALIDATION_MANIFEST_TOML: &str =
 const HARDWARE_VALIDATION_EVIDENCE_EXAMPLE_TOML: &str =
     include_str!("../tools/hardware_validation_evidence.example.toml");
 const MAKEFILE_TOML: &str = include_str!("../Makefile.toml");
+const PORTING_COVERAGE_BASELINE_TOML: &str =
+    include_str!("../tools/porting_coverage_baseline.toml");
 const PORTING_COVERAGE_MANIFEST_TOML: &str =
     include_str!("../tools/porting_coverage_manifest.toml");
 const PULL_REQUEST_TEMPLATE_MD: &str = include_str!("../.github/PULL_REQUEST_TEMPLATE.md");
@@ -22,6 +24,10 @@ fn keyboard_toml() -> toml::Value {
 
 fn porting_coverage_manifest_toml() -> toml::Value {
     toml::from_str(PORTING_COVERAGE_MANIFEST_TOML).unwrap()
+}
+
+fn porting_coverage_baseline_toml() -> toml::Value {
+    toml::from_str(PORTING_COVERAGE_BASELINE_TOML).unwrap()
 }
 
 fn hardware_validation_manifest_toml() -> toml::Value {
@@ -130,7 +136,11 @@ fn porting_coverage_manifest_is_satisfied() {
 
 #[test]
 fn porting_coverage_complete_gate_accepts_explicit_status_completion() {
-    let output = run_porting_coverage(&["--require-porting-complete"]);
+    let output = run_porting_coverage(&[
+        "--coverage-baseline",
+        "tools/porting_coverage_baseline.toml",
+        "--require-porting-complete",
+    ]);
 
     assert!(
         output.status.success(),
@@ -146,14 +156,99 @@ fn porting_coverage_complete_gate_accepts_explicit_status_completion() {
 }
 
 #[test]
+fn porting_coverage_baseline_matches_current_denominator() {
+    let output = run_porting_coverage(&[
+        "--coverage-baseline",
+        "tools/porting_coverage_baseline.toml",
+        "--json",
+    ]);
+
+    assert!(
+        output.status.success(),
+        "porting coverage baseline failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let baseline = porting_coverage_baseline_toml();
+    assert_eq!(
+        parsed["passed"].as_i64(),
+        baseline["coverage"]["passed"].as_integer()
+    );
+    assert_eq!(
+        parsed["total"].as_i64(),
+        baseline["coverage"]["total"].as_integer()
+    );
+    assert_eq!(parsed["baseline_errors"].as_array().unwrap().len(), 0);
+
+    let baseline_by_kind = baseline["coverage"]["by_kind"].as_table().unwrap();
+    let actual_by_kind = parsed["by_kind"].as_object().unwrap();
+    assert_eq!(
+        actual_by_kind.len(),
+        baseline_by_kind.len(),
+        "coverage baseline should enumerate every result kind"
+    );
+    for (kind, expected) in baseline_by_kind {
+        let actual = actual_by_kind
+            .get(kind)
+            .unwrap_or_else(|| panic!("coverage baseline kind {kind} is missing"));
+        assert_eq!(actual["passed"].as_i64(), expected["passed"].as_integer());
+        assert_eq!(actual["total"].as_i64(), expected["total"].as_integer());
+    }
+}
+
+#[test]
+fn porting_coverage_rejects_denominator_baseline_drift() {
+    let bad_baseline = r#"
+[coverage]
+passed = 1
+total = 1
+
+[coverage.by_kind.layout]
+passed = 1
+total = 1
+
+[porting_status]
+total = 1
+implemented = 1
+
+[porting_status.by_status]
+ported = 1
+"#;
+    let path = write_temp_file("porting-coverage-bad-baseline", bad_baseline);
+    let output = run_porting_coverage(&["--coverage-baseline", path.to_str().unwrap()]);
+    let _ = std::fs::remove_file(&path);
+
+    assert!(
+        !output.status.success(),
+        "bad porting coverage baseline unexpectedly passed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("porting coverage baseline drift:"));
+    assert!(stderr.contains("coverage.total: expected baseline 1, got 2351"));
+    assert!(
+        stderr.contains("coverage.by_kind.behavior: actual report kind is missing from baseline")
+    );
+}
+
+#[test]
 fn firmware_ci_runs_complete_porting_gate_before_builds() {
     let gate_command = "python3 tools/porting_coverage.py";
+    let baseline_arg = "--coverage-baseline";
     let zmk_required_flag = "--require-zmk-source";
     let complete_required_flag = "--require-porting-complete";
     let host_tests = "cargo test --lib --target x86_64-unknown-linux-gnu";
     let release_build = "cargo make build";
 
-    for required in [gate_command, zmk_required_flag, complete_required_flag] {
+    for required in [
+        gate_command,
+        baseline_arg,
+        "tools/porting_coverage_baseline.toml",
+        zmk_required_flag,
+        complete_required_flag,
+    ] {
         assert!(
             FIRMWARE_WORKFLOW_YAML.contains(required),
             "firmware CI is missing complete porting gate component {required:?}"
@@ -161,13 +256,19 @@ fn firmware_ci_runs_complete_porting_gate_before_builds() {
     }
 
     let gate_index = FIRMWARE_WORKFLOW_YAML.find(gate_command).unwrap();
+    let baseline_index = FIRMWARE_WORKFLOW_YAML.find(baseline_arg).unwrap();
     let zmk_required_index = FIRMWARE_WORKFLOW_YAML.find(zmk_required_flag).unwrap();
     let complete_required_index = FIRMWARE_WORKFLOW_YAML.find(complete_required_flag).unwrap();
     let host_tests_index = FIRMWARE_WORKFLOW_YAML.find(host_tests).unwrap();
     let release_build_index = FIRMWARE_WORKFLOW_YAML.find(release_build).unwrap();
 
     assert!(gate_index < zmk_required_index);
+    assert!(gate_index < baseline_index);
     assert!(gate_index < complete_required_index);
+    assert!(
+        baseline_index < host_tests_index,
+        "coverage denominator baseline must run before host parity tests"
+    );
     assert!(
         complete_required_index < host_tests_index,
         "complete porting gate must run before host parity tests"
@@ -259,6 +360,8 @@ fn hardware_validation_manifest_is_classified_but_not_release_blocking() {
 fn migration_status_combines_software_and_hardware_progress() {
     let output = run_migration_status(&[
         "--json",
+        "--coverage-baseline",
+        "tools/porting_coverage_baseline.toml",
         "--require-software-complete",
         "--require-hardware-classified",
     ]);
@@ -293,7 +396,11 @@ fn migration_status_combines_software_and_hardware_progress() {
     );
     assert_eq!(parsed["fully_validated"].as_bool(), Some(false));
 
-    let markdown = run_migration_status(&["--markdown"]);
+    let markdown = run_migration_status(&[
+        "--markdown",
+        "--coverage-baseline",
+        "tools/porting_coverage_baseline.toml",
+    ]);
     assert!(
         markdown.status.success(),
         "migration status markdown failed\nstdout:\n{}\nstderr:\n{}",
@@ -312,6 +419,46 @@ fn migration_status_combines_software_and_hardware_progress() {
 }
 
 #[test]
+fn migration_status_rejects_coverage_baseline_drift() {
+    let bad_baseline = r#"
+[coverage]
+passed = 2351
+total = 1
+
+[coverage.by_kind.layout]
+passed = 3
+total = 3
+
+[porting_status]
+total = 69
+implemented = 69
+
+[porting_status.by_status]
+not_ported = 0
+ported = 57
+ported_by_behavior = 6
+ported_by_config_image = 6
+"#;
+    let path = write_temp_file("migration-status-bad-baseline", bad_baseline);
+    let output = run_migration_status(&[
+        "--coverage-baseline",
+        path.to_str().unwrap(),
+        "--require-software-complete",
+    ]);
+    let _ = std::fs::remove_file(&path);
+
+    assert!(
+        !output.status.success(),
+        "migration status accepted denominator baseline drift\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Software failures:"));
+    assert!(stdout.contains("coverage.total: expected baseline 1, got 2351"));
+}
+
+#[test]
 fn migration_status_accepts_complete_hardware_evidence_for_final_gate() {
     let firmware_ref = "test-firmware-ref";
     let evidence = complete_hardware_evidence_overlay(firmware_ref);
@@ -319,6 +466,8 @@ fn migration_status_accepts_complete_hardware_evidence_for_final_gate() {
 
     let output = run_migration_status(&[
         "--json",
+        "--coverage-baseline",
+        "tools/porting_coverage_baseline.toml",
         "--evidence",
         path.to_str().unwrap(),
         "--require-firmware-ref",
@@ -346,6 +495,8 @@ fn migration_status_accepts_complete_hardware_evidence_for_final_gate() {
     assert_eq!(parsed["fully_validated"].as_bool(), Some(true));
 
     let stale_output = run_migration_status(&[
+        "--coverage-baseline",
+        "tools/porting_coverage_baseline.toml",
         "--evidence",
         path.to_str().unwrap(),
         "--require-firmware-ref",
@@ -887,12 +1038,15 @@ artifact_or_notes = "duplicate"
 #[test]
 fn local_validation_entrypoints_match_ci_gates() {
     assert!(
-        MAKEFILE_TOML.contains("--require-porting-complete"),
-        "cargo make porting-coverage should require complete implementation status"
+        MAKEFILE_TOML.contains("--coverage-baseline")
+            && MAKEFILE_TOML.contains("tools/porting_coverage_baseline.toml")
+            && MAKEFILE_TOML.contains("--require-porting-complete"),
+        "cargo make porting-coverage should require complete implementation status and a stable denominator baseline"
     );
     assert!(
         MAKEFILE_TOML.contains("[tasks.migration-status]")
             && MAKEFILE_TOML.contains("tools/migration_status.py")
+            && MAKEFILE_TOML.contains("--coverage-baseline")
             && MAKEFILE_TOML.contains("--require-software-complete")
             && MAKEFILE_TOML.contains("--require-hardware-classified"),
         "cargo make migration-status should expose the combined release dashboard gate"
@@ -927,8 +1081,9 @@ fn local_validation_entrypoints_match_ci_gates() {
     );
     for required in [
         "--require-porting-complete",
-        "tools/migration_status.py --require-zmk-source --require-software-complete --require-hardware-classified",
-        "tools/migration_status.py --evidence path/to/evidence.toml --require-software-complete --require-hardware-classified --require-hardware-validated --require-firmware-ref <tag-or-commit>",
+        "tools/porting_coverage.py --coverage-baseline tools/porting_coverage_baseline.toml --require-zmk-source --require-porting-complete",
+        "tools/migration_status.py --coverage-baseline tools/porting_coverage_baseline.toml --require-zmk-source --require-software-complete --require-hardware-classified",
+        "tools/migration_status.py --coverage-baseline tools/porting_coverage_baseline.toml --evidence path/to/evidence.toml --require-software-complete --require-hardware-classified --require-hardware-validated --require-firmware-ref <tag-or-commit>",
         "HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-final",
         "tools/hardware_validation.py --require-classified",
         "tools/hardware_validation.py --markdown",
@@ -936,6 +1091,7 @@ fn local_validation_entrypoints_match_ci_gates() {
         "tools/hardware_validation.py --evidence-template --firmware-ref-template <tag-or-commit>",
         "tools/hardware_validation.py --evidence path/to/evidence.toml --markdown",
         "tools/hardware_validation.py --evidence path/to/evidence.toml --require-validated --require-firmware-ref <tag-or-commit>",
+        "tools/porting_coverage_baseline.toml",
         "tools/hardware_validation_manifest.toml",
         "tools/hardware_validation_evidence.example.toml",
     ] {
@@ -947,6 +1103,10 @@ fn local_validation_entrypoints_match_ci_gates() {
     assert!(
         FIRMWARE_WORKFLOW_YAML.contains("tools/hardware_validation_evidence.example.toml"),
         "firmware CI path filters should include the hardware evidence template"
+    );
+    assert!(
+        FIRMWARE_WORKFLOW_YAML.contains("tools/porting_coverage_baseline.toml"),
+        "firmware CI path filters should include the porting coverage denominator baseline"
     );
     assert!(
         FIRMWARE_WORKFLOW_YAML.contains("tools/migration_status.py")
