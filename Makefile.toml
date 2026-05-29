@@ -42,6 +42,18 @@ args = [
     "--require-hardware-classified",
 ]
 
+[tasks.migration-status-final]
+script = '''
+: "${HARDWARE_EVIDENCE:?set HARDWARE_EVIDENCE=path/to/evidence.toml}"
+: "${FIRMWARE_REF:?set FIRMWARE_REF=<tag-or-commit>}"
+python3 tools/migration_status.py \
+  --evidence "$HARDWARE_EVIDENCE" \
+  --require-software-complete \
+  --require-hardware-classified \
+  --require-hardware-validated \
+  --require-firmware-ref "$FIRMWARE_REF"
+'''
+
 [tasks.firmware-dirs]
 command = "mkdir"
 args = ["-p", "firmware/normal", "firmware/reset", "firmware/hex"]

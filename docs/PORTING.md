@@ -292,7 +292,12 @@ visible in GitHub Actions summaries. A true final hardware claim should add
 The full release-validation command is
 `python3 tools/migration_status.py --evidence path/to/evidence.toml
 --require-software-complete --require-hardware-classified
---require-hardware-validated --require-firmware-ref <tag-or-commit>`.
+--require-hardware-validated --require-firmware-ref <tag-or-commit>`. The
+same final gate is available as:
+
+```sh
+HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-final
+```
 
 ## Real-Hardware Validation Gate
 

@@ -13,6 +13,7 @@ const MAKEFILE_TOML: &str = include_str!("../Makefile.toml");
 const PORTING_COVERAGE_MANIFEST_TOML: &str =
     include_str!("../tools/porting_coverage_manifest.toml");
 const PULL_REQUEST_TEMPLATE_MD: &str = include_str!("../.github/PULL_REQUEST_TEMPLATE.md");
+const RELEASE_MD: &str = include_str!("../docs/RELEASE.md");
 const VIAL_JSON: &str = include_str!("../vial.json");
 
 fn keyboard_toml() -> toml::Value {
@@ -897,6 +898,14 @@ fn local_validation_entrypoints_match_ci_gates() {
         "cargo make migration-status should expose the combined release dashboard gate"
     );
     assert!(
+        MAKEFILE_TOML.contains("[tasks.migration-status-final]")
+            && MAKEFILE_TOML.contains("HARDWARE_EVIDENCE")
+            && MAKEFILE_TOML.contains("FIRMWARE_REF")
+            && MAKEFILE_TOML.contains("--require-hardware-validated")
+            && MAKEFILE_TOML.contains("--require-firmware-ref \"$FIRMWARE_REF\""),
+        "cargo make migration-status-final should require evidence and firmware_ref for complete validation claims"
+    );
+    assert!(
         MAKEFILE_TOML.contains("[tasks.hardware-validation]")
             && MAKEFILE_TOML.contains("tools/hardware_validation.py")
             && MAKEFILE_TOML.contains("--require-classified"),
@@ -920,6 +929,7 @@ fn local_validation_entrypoints_match_ci_gates() {
         "--require-porting-complete",
         "tools/migration_status.py --require-zmk-source --require-software-complete --require-hardware-classified",
         "tools/migration_status.py --evidence path/to/evidence.toml --require-software-complete --require-hardware-classified --require-hardware-validated --require-firmware-ref <tag-or-commit>",
+        "HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-final",
         "tools/hardware_validation.py --require-classified",
         "tools/hardware_validation.py --markdown",
         "tools/hardware_validation.py --evidence-template",
@@ -950,6 +960,10 @@ fn local_validation_entrypoints_match_ci_gates() {
         "firmware CI path filters should include auto-tag workflow changes covered by host parity tests"
     );
     assert!(
+        FIRMWARE_WORKFLOW_YAML.contains("docs/RELEASE.md"),
+        "firmware CI path filters should include release validation documentation covered by host parity tests"
+    );
+    assert!(
         FIRMWARE_WORKFLOW_YAML.contains("vendor/rmk-0.8.2/**"),
         "firmware CI path filters should include the local RMK patch that affects HID behavior"
     );
@@ -966,6 +980,12 @@ fn local_validation_entrypoints_match_ci_gates() {
         HARDWARE_VALIDATION_EVIDENCE_EXAMPLE_TOML
             .contains("tools/hardware_validation.py --evidence-template --firmware-ref-template <tag-or-commit>"),
         "hardware evidence example should document firmware_ref-prefilled template generation"
+    );
+    assert!(
+        RELEASE_MD.contains("HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-final")
+            && RELEASE_MD.contains("Full validation: pass")
+            && RELEASE_MD.contains("if the announcement claims complete hardware validation"),
+        "release guide should require the final migration status gate before complete hardware-validation claims"
     );
 
     let manifest = hardware_validation_manifest_toml();

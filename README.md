@@ -112,7 +112,7 @@ Reset/storage-clear UF2 files, when generated for hardware testing, are kept und
 
 ```shell
 python3 -m json.tool vial.json >/tmp/lalapad-vial-check.json
-python3 -c 'import tomllib; [tomllib.load(open(path, "rb")) for path in ("keyboard.toml", "Cargo.toml", "tools/porting_coverage_manifest.toml", "tools/hardware_validation_manifest.toml", "tools/hardware_validation_evidence.example.toml")]; print("toml ok")'
+python3 -c 'import tomllib; [tomllib.load(open(path, "rb")) for path in ("keyboard.toml", "Cargo.toml", "Makefile.toml", "tools/porting_coverage_manifest.toml", "tools/hardware_validation_manifest.toml", "tools/hardware_validation_evidence.example.toml")]; print("toml ok")'
 rmkit get-chip --keyboard-toml-path keyboard.toml
 rmkit get-project-name --keyboard-toml-path keyboard.toml
 python3 tools/porting_coverage.py --require-zmk-source --require-porting-complete
@@ -223,7 +223,12 @@ For the combined final gate, run
 --require-software-complete --require-hardware-classified
 --require-hardware-validated --require-firmware-ref <tag-or-commit>`; it must
 report `Full validation: pass` before claiming source-backed and real-device
-validation are both complete for that firmware.
+validation are both complete for that firmware. The equivalent cargo-make task
+is:
+
+```shell
+HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-final
+```
 
 Host-side parity tests can be run explicitly with:
 

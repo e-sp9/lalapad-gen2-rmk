@@ -34,6 +34,31 @@ Outputs:
 
 Generated firmware files are ignored by git and should not be committed.
 
+## Final Migration Validation
+
+The normal CI gate proves that the source-backed RMK migration is complete and
+that every hardware-only gap is classified. Before claiming a fully validated
+release, collect real-device evidence with the exact firmware pair that will be
+announced, then run:
+
+```sh
+HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-final
+```
+
+This wraps:
+
+```sh
+python3 tools/migration_status.py --evidence path/to/evidence.toml \
+  --require-software-complete \
+  --require-hardware-classified \
+  --require-hardware-validated \
+  --require-firmware-ref <tag-or-commit>
+```
+
+The command must report `Full validation: pass`. If it fails, the release may
+still be source-complete, but it is not yet fully validated against real
+hardware for that firmware reference.
+
 ## Flashing With UF2
 
 1. Put the left half into the XIAO BLE bootloader by double-tapping reset.
@@ -61,6 +86,7 @@ Use matching left/right firmware from the same release.
 Before announcing a release to the community:
 
 - CI firmware workflow is green for the release tag.
+- `cargo make migration-status-final` passes with the release evidence file and matching `FIRMWARE_REF`, if the announcement claims complete hardware validation.
 - GitHub Release contains central/peripheral UF2 and DFU zip assets.
 - Web flasher loads the latest release metadata.
 - Both halves flash successfully.

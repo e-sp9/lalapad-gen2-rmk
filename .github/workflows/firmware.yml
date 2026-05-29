@@ -27,6 +27,7 @@ on:
       - 'tools/porting_coverage_manifest.toml'
       - 'README.md'
       - 'docs/PORTING.md'
+      - 'docs/RELEASE.md'
       - 'docs/TRACKPAD_HARDWARE_CHECK.md'
       - '.github/PULL_REQUEST_TEMPLATE.md'
       - '.github/workflows/auto-tag.yml'
@@ -98,7 +99,7 @@ jobs:
       - name: Verify RMK config and flash layout
         run: |
           python3 -m json.tool vial.json >/tmp/lalapad-vial-check.json
-          python3 -c 'import tomllib; [tomllib.load(open(path, "rb")) for path in ("keyboard.toml", "Cargo.toml", "tools/porting_coverage_manifest.toml", "tools/hardware_validation_manifest.toml", "tools/hardware_validation_evidence.example.toml")]; print("toml ok")'
+          python3 -c 'import tomllib; [tomllib.load(open(path, "rb")) for path in ("keyboard.toml", "Cargo.toml", "Makefile.toml", "tools/porting_coverage_manifest.toml", "tools/hardware_validation_manifest.toml", "tools/hardware_validation_evidence.example.toml")]; print("toml ok")'
           python3 tools/check_flash_layout.py --config-only
           python3 tools/hardware_validation.py --markdown >> "$GITHUB_STEP_SUMMARY"
           python3 tools/hardware_validation.py --require-classified
