@@ -1602,6 +1602,49 @@ def check_zmk_define_entry_inventory(manifest: dict[str, Any], zmk_config_dir: P
     return results
 
 
+def dts_alias_inventory(text: str, block_name: str) -> list[str]:
+    block = top_level_text(extract_block(strip_c_style_comments(text), block_name))
+    return [
+        f"{match.group(1)}=&{match.group(2)}"
+        for match in re.finditer(r"(?m)^\s*([A-Za-z0-9_-]+)\s*=\s*&([A-Za-z0-9_]+)\s*;", block)
+    ]
+
+
+def check_zmk_dts_alias_inventory(manifest: dict[str, Any], zmk_config_dir: Path) -> list[Result]:
+    results: list[Result] = []
+    for check in manifest.get("source_inventory", {}).get("dts_aliases", []):
+        source_file = check["source_file"]
+        expected = list(check["expected"])
+        source_path = zmk_config_dir / source_file
+        result_id = f"zmk_source.dts_aliases.{source_file}.{check['source_block']}"
+        if not source_path.exists():
+            results.append(
+                Result(
+                    result_id,
+                    "zmk_inventory",
+                    0,
+                    max(1, len(expected)),
+                    f"missing DTS alias source file {source_file!r}",
+                )
+            )
+            continue
+        try:
+            actual = dts_alias_inventory(source_path.read_text(), check["source_block"])
+        except ValueError as e:
+            results.append(
+                Result(
+                    result_id,
+                    "zmk_inventory",
+                    0,
+                    max(1, len(expected)),
+                    f"invalid DTS alias source {source_file!r}: {e}",
+                )
+            )
+            continue
+        results.append(ordered_inventory_result(result_id, "zmk_inventory", expected, actual))
+    return results
+
+
 def physical_layout_attr_inventory(text: str, block_name: str) -> list[str]:
     block = extract_block(strip_c_style_comments(text), block_name)
     keys_body = extract_angle_property(block, "keys")
@@ -2937,6 +2980,7 @@ def check_zmk_source(
     results.extend(check_zmk_kconfig_entry_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_kconfig_line_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_disabled_kconfig_line_inventory(manifest, zmk_config_dir))
+    results.extend(check_zmk_dts_alias_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_behavior_property_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_combo_property_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_define_entry_inventory(manifest, zmk_config_dir))

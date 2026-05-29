@@ -419,6 +419,27 @@ fn porting_coverage_includes_exact_rmk_inventory_gates() {
             assert_eq!(define_inventory["ok"], true);
         }
 
+        for alias_file in porting_coverage_manifest_toml()["source_inventory"]["dts_aliases"]
+            .as_array()
+            .unwrap()
+        {
+            let source_file = alias_file["source_file"].as_str().unwrap();
+            let source_block = alias_file["source_block"].as_str().unwrap();
+            let expected_entries = alias_file["expected"].as_array().unwrap().len() as i64;
+            let alias_inventory = results
+                .iter()
+                .find(|result| {
+                    result["id"] == format!("zmk_source.dts_aliases.{source_file}.{source_block}")
+                })
+                .unwrap_or_else(|| {
+                    panic!("ZMK DTS alias inventory coverage result is missing for {source_file}")
+                });
+            assert_eq!(alias_inventory["kind"], "zmk_inventory");
+            assert_eq!(alias_inventory["passed"].as_i64(), Some(expected_entries));
+            assert_eq!(alias_inventory["total"].as_i64(), Some(expected_entries));
+            assert_eq!(alias_inventory["ok"], true);
+        }
+
         for layout_file in
             porting_coverage_manifest_toml()["source_inventory"]["physical_layout_attrs"]
                 .as_array()
@@ -2239,6 +2260,130 @@ print(json.dumps({"ok": ok, "changed": changed, "missing_file": missing_file}))
             .as_str()
             .unwrap()
             .contains("missing define source file")
+    );
+}
+
+#[test]
+fn porting_coverage_rejects_unclassified_zmk_dts_aliases() {
+    let output = run_python(
+        r#"
+import importlib.util
+import json
+import sys
+import tempfile
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("porting_coverage", "tools/porting_coverage.py")
+pc = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = pc
+spec.loader.exec_module(pc)
+
+manifest = {
+    "source_inventory": {
+        "dts_aliases": [{
+            "source_file": "lalapadgen2.dtsi",
+            "source_block": "aliases",
+            "expected": ["led-red=&led0", "led-green=&led1", "led-blue=&led2"],
+        }],
+    },
+}
+
+def pack(results):
+    return [result.__dict__ | {"ok": result.ok} for result in results]
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    fixture = root / "lalapadgen2.dtsi"
+    fixture.write_text('''
+    / {
+        aliases {
+            led-red = &led0;
+            led-green = &led1;
+            led-blue = &led2;
+        };
+        nested {
+            aliases {
+                led-red = &other;
+            };
+        };
+    };
+    ''')
+    ok = pack(pc.check_zmk_dts_alias_inventory(manifest, root))
+
+    fixture.write_text('''
+    / {
+        aliases {
+            led-red = &led1;
+            led-green = &led0;
+            led-blue = &led2;
+            led-white = &led3;
+        };
+    };
+    ''')
+    changed = pack(pc.check_zmk_dts_alias_inventory(manifest, root))
+
+    fixture.write_text('/ { chosen { zmk,physical-layout = &layout; }; };')
+    missing_block = pack(pc.check_zmk_dts_alias_inventory(manifest, root))
+    fixture.unlink()
+    missing_file = pack(pc.check_zmk_dts_alias_inventory(manifest, root))
+
+print(json.dumps({
+    "ok": ok,
+    "changed": changed,
+    "missing_block": missing_block,
+    "missing_file": missing_file,
+}))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "DTS alias inventory parser check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let ok_inventory = &parsed["ok"][0];
+    assert_eq!(ok_inventory["kind"], "zmk_inventory");
+    assert_eq!(ok_inventory["passed"].as_i64(), Some(3));
+    assert_eq!(ok_inventory["total"].as_i64(), Some(3));
+    assert_eq!(ok_inventory["ok"], true);
+
+    let changed_inventory = &parsed["changed"][0];
+    assert_eq!(changed_inventory["kind"], "zmk_inventory");
+    assert_eq!(changed_inventory["passed"].as_i64(), Some(1));
+    assert_eq!(changed_inventory["total"].as_i64(), Some(4));
+    assert_eq!(changed_inventory["ok"], false);
+    assert!(
+        changed_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("led-white=&led3")
+    );
+
+    let missing_block_inventory = &parsed["missing_block"][0];
+    assert_eq!(missing_block_inventory["kind"], "zmk_inventory");
+    assert_eq!(missing_block_inventory["passed"].as_i64(), Some(0));
+    assert_eq!(missing_block_inventory["total"].as_i64(), Some(3));
+    assert_eq!(missing_block_inventory["ok"], false);
+    assert!(
+        missing_block_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("block 'aliases' not found")
+    );
+
+    let missing_file_inventory = &parsed["missing_file"][0];
+    assert_eq!(missing_file_inventory["kind"], "zmk_inventory");
+    assert_eq!(missing_file_inventory["passed"].as_i64(), Some(0));
+    assert_eq!(missing_file_inventory["total"].as_i64(), Some(3));
+    assert_eq!(missing_file_inventory["ok"], false);
+    assert!(
+        missing_file_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("missing DTS alias source file")
     );
 }
 

@@ -286,6 +286,9 @@ kconfig_entries = [
 define_entries = [
   { source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi", prefix = "POS_TP_", expected = ["POS_TP_LCLK_L=52", "POS_TP_RCLK_L=53", "POS_TP_MCLK_L=54", "POS_TP_LEFT_L=58", "POS_TP_RIGHT_L=59", "POS_TP_UP_L=60", "POS_TP_DOWN_L=61", "POS_TP_PINCH_L=62", "POS_TP_LCLK_R=55", "POS_TP_RCLK_R=56", "POS_TP_MCLK_R=57", "POS_TP_LEFT_R=63", "POS_TP_RIGHT_R=64", "POS_TP_UP_R=65", "POS_TP_DOWN_R=66", "POS_TP_PINCH_R=67"] },
 ]
+dts_aliases = [
+  { source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi", source_block = "aliases", expected = ["led-red=&led0", "led-green=&led1", "led-blue=&led2"] },
+]
 physical_layout_attrs = [
   { source_file = "boards/shields/lalapadgen2/lalapadgen2-layouts.dtsi", source_block = "lalapadgen2_physical_layout", expected = [
     "100,100,0,0,0,0,0",
