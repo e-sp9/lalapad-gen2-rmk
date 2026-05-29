@@ -126,7 +126,12 @@ cargo build --release
 when the upstream ZMK checkout from the manifest is present, also parses
 `config/lalapadgen2.keymap`, shield overlays, ZMK Kconfig values, and selected
 RMK Rust constants to verify that the migration contract still matches the
-source firmware. The Rust checks cover the RMK-side IQS9151 register-address
+source firmware. It reports both migration-contract coverage and an explicit
+IQS9151 symbol implementation status summary, so documented `not_ported`
+items remain visible even when every source item is classified; add
+`--require-porting-complete` when that status summary should fail on any
+remaining non-implemented item. The Rust checks cover the RMK-side
+IQS9151 register-address
 inventory, upstream IQS9151 register and bit-flag porting classifications,
 product/register address values, reset/gesture bits, IQS9151 feature-enable
 flags, dynamic-scale bounds, timing values, and initialization byte-array

@@ -23,6 +23,11 @@ from typing import Any
 TRANSPARENT = "_"
 NO_KEY = "No"
 LAYER_NAMES = ["DEFAULT_LAYER", "SECONDARY_LAYER", "TERTIARY_LAYER", "SYSTEM_LAYER"]
+IMPLEMENTED_PORTING_STATUSES = frozenset(
+    {"ported", "ported_by_behavior", "ported_by_config_image"}
+)
+DOCUMENTED_GAP_PORTING_STATUSES = frozenset({"not_ported"})
+VALID_PORTING_STATUSES = IMPLEMENTED_PORTING_STATUSES | DOCUMENTED_GAP_PORTING_STATUSES
 
 ZMK_KEY_TO_RMK = {
     "A": "A",
@@ -192,6 +197,15 @@ class Result:
     @property
     def ok(self) -> bool:
         return self.passed == self.total
+
+
+@dataclass
+class PortingStatusSummary:
+    total: int
+    implemented: int
+    rate: float | None
+    by_status: dict[str, int]
+    remaining: list[dict[str, str]]
 
 
 def load_toml(path: Path) -> dict[str, Any]:
@@ -2758,13 +2772,13 @@ def check_iqs9151_symbol_porting(
                     messages.append(
                         f"{target_const} expected source value {source_value!r}, got {actual_const!r}"
                     )
-        elif status == "not_ported":
+        elif status in {"ported_by_behavior", "ported_by_config_image", "not_ported"}:
             total += 1
             reason = str(entry.get("reason", "")).strip()
             if reason:
                 passed += 1
             else:
-                messages.append(f"{source_const} is not ported but has no reason")
+                messages.append(f"{source_const} has no reason for status {status!r}")
         else:
             messages.append(f"{source_const} has invalid status {status!r}")
 
@@ -2779,6 +2793,50 @@ def check_iqs9151_symbol_porting(
         )
 
     return results
+
+
+def collect_porting_status_entries(manifest: dict[str, Any]) -> list[dict[str, str]]:
+    entries: list[dict[str, str]] = []
+    for section, values in manifest.items():
+        if not isinstance(values, list):
+            continue
+        for entry in values:
+            if not isinstance(entry, dict) or "status" not in entry:
+                continue
+            source = str(entry.get("source_const", entry.get("id", "")))
+            status = str(entry["status"])
+            entries.append(
+                {
+                    "section": str(section),
+                    "source": source,
+                    "status": status,
+                    "reason": str(entry.get("reason", "")).strip(),
+                }
+            )
+    return entries
+
+
+def porting_status_summary(manifest: dict[str, Any]) -> PortingStatusSummary:
+    entries = collect_porting_status_entries(manifest)
+    by_status = {status: 0 for status in sorted(VALID_PORTING_STATUSES)}
+    remaining: list[dict[str, str]] = []
+    implemented = 0
+    for entry in entries:
+        status = entry["status"]
+        by_status[status] = by_status.get(status, 0) + 1
+        if status in IMPLEMENTED_PORTING_STATUSES:
+            implemented += 1
+        else:
+            remaining.append(entry)
+
+    total = len(entries)
+    return PortingStatusSummary(
+        total=total,
+        implemented=implemented,
+        rate=None if total == 0 else implemented / total,
+        by_status=by_status,
+        remaining=remaining,
+    )
 
 
 def check_code_contains(manifest: dict[str, Any], project_root: Path) -> list[Result]:
@@ -3365,11 +3423,23 @@ def run(
     return results
 
 
-def print_text(results: list[Result]) -> None:
+def print_text(results: list[Result], status_summary: PortingStatusSummary) -> None:
     passed = sum(result.passed for result in results)
     total = sum(result.total for result in results)
     rate = 100.0 if total == 0 else passed * 100.0 / total
     print(f"Porting coverage: {passed}/{total} = {rate:.2f}%")
+    if status_summary.rate is not None:
+        status_rate = status_summary.rate * 100.0
+        status_parts = ", ".join(
+            f"{status}={count}"
+            for status, count in sorted(status_summary.by_status.items())
+            if count
+        )
+        print(
+            "Porting status: "
+            f"{status_summary.implemented}/{status_summary.total} = {status_rate:.2f}% "
+            f"implemented ({status_parts})"
+        )
     for result in results:
         status = "SKIP" if result.total == 0 else "ok" if result.ok else "FAIL"
         print(f"{status:4} {result.kind:12} {result.id}: {result.passed}/{result.total} {result.message}")
@@ -3390,10 +3460,17 @@ def main(argv: list[str]) -> int:
         action="store_true",
         help="Fail if the upstream ZMK keymap cannot be read.",
     )
+    parser.add_argument(
+        "--require-porting-complete",
+        action="store_true",
+        help="Fail if any explicit manifest status is not implemented.",
+    )
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
 
     results = run(args.manifest, args.keyboard_toml, args.zmk_keymap, args.require_zmk_source)
+    manifest = load_toml(args.manifest)
+    status_summary = porting_status_summary(manifest)
     passed = sum(result.passed for result in results)
     total = sum(result.total for result in results)
     if args.json:
@@ -3403,6 +3480,13 @@ def main(argv: list[str]) -> int:
                     "passed": passed,
                     "total": total,
                     "rate": None if total == 0 else passed / total,
+                    "porting_status": {
+                        "total": status_summary.total,
+                        "implemented": status_summary.implemented,
+                        "rate": status_summary.rate,
+                        "by_status": status_summary.by_status,
+                        "remaining": status_summary.remaining,
+                    },
                     "results": [result.__dict__ | {"ok": result.ok} for result in results],
                 },
                 indent=2,
@@ -3410,8 +3494,17 @@ def main(argv: list[str]) -> int:
             )
         )
     else:
-        print_text(results)
-    return 0 if passed == total else 1
+        print_text(results, status_summary)
+
+    ok = passed == total
+    if args.require_porting_complete and status_summary.implemented != status_summary.total:
+        print(
+            "porting status incomplete: "
+            f"{status_summary.implemented}/{status_summary.total} explicit statuses implemented",
+            file=sys.stderr,
+        )
+        ok = False
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":

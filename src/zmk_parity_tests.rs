@@ -1,4 +1,5 @@
 use crate::iqs9151::{TrackpadButton, TrackpadSide, VirtualKeyPosition, trackpad_button_position};
+use std::collections::BTreeMap;
 use std::process::Command;
 
 const KEYBOARD_TOML: &str = include_str!("../keyboard.toml");
@@ -49,6 +50,17 @@ fn default_zmk_config_dir() -> Option<std::path::PathBuf> {
     None
 }
 
+fn manifest_status_counts(manifest: &toml::Value) -> BTreeMap<String, i64> {
+    let mut counts = BTreeMap::new();
+    for section in ["iqs9151_register_porting", "iqs9151_bit_porting"] {
+        for entry in manifest[section].as_array().unwrap() {
+            let status = entry["status"].as_str().unwrap().to_string();
+            *counts.entry(status).or_insert(0) += 1;
+        }
+    }
+    counts
+}
+
 #[test]
 fn porting_coverage_manifest_is_satisfied() {
     let output = run_porting_coverage(&[]);
@@ -59,6 +71,21 @@ fn porting_coverage_manifest_is_satisfied() {
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
+}
+
+#[test]
+fn porting_coverage_complete_gate_reports_remaining_status_gaps() {
+    let output = run_porting_coverage(&["--require-porting-complete"]);
+
+    assert!(
+        !output.status.success(),
+        "complete porting gate should fail while explicit not_ported statuses remain\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("porting status incomplete"));
+    assert!(stderr.contains("63/69"));
 }
 
 #[test]
@@ -75,6 +102,35 @@ fn porting_coverage_includes_exact_rmk_inventory_gates() {
     let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     let results = parsed["results"].as_array().unwrap();
     let manifest = porting_coverage_manifest_toml();
+    let status_counts = manifest_status_counts(&manifest);
+    let expected_status_total: i64 = status_counts.values().sum();
+    let expected_implemented_status_total: i64 =
+        ["ported", "ported_by_behavior", "ported_by_config_image"]
+            .iter()
+            .map(|status| status_counts.get(*status).copied().unwrap_or_default())
+            .sum();
+    let porting_status = &parsed["porting_status"];
+    assert_eq!(
+        porting_status["total"].as_i64(),
+        Some(expected_status_total),
+        "porting status summary total should track explicit manifest statuses"
+    );
+    assert_eq!(
+        porting_status["implemented"].as_i64(),
+        Some(expected_implemented_status_total),
+        "porting status summary should distinguish implemented statuses from remaining gaps"
+    );
+    assert_eq!(
+        porting_status["remaining"].as_array().unwrap().len() as i64,
+        expected_status_total - expected_implemented_status_total
+    );
+    for (status, count) in status_counts {
+        assert_eq!(
+            porting_status["by_status"][status.as_str()].as_i64(),
+            Some(count),
+            "porting status summary is missing manifest status {status}"
+        );
+    }
     assert!(
         manifest.get("source_regex_values").is_none(),
         "ZMK source coverage should use structured inventory gates instead of regex-only checks"

@@ -264,5 +264,10 @@ exact count should be read from the command output. This is a static,
 source-backed, and scenario-level RMK
 configuration coverage metric, not a claim that hardware-only IQS9151, BLE,
 storage, or Vial runtime paths have been exhaustively exercised on real devices.
+The same command also prints an explicit IQS9151 symbol porting status summary:
+`ported`, `ported_by_behavior`, and `ported_by_config_image` count as
+implemented, while `not_ported` entries are the remaining software-porting
+items to burn down toward a true 100% implementation status. Use
+`--require-porting-complete` when that remaining list must become a hard gate.
 It is intended to prevent regressions like a visible `LT(...)` binding whose
 tap-hold behavior is changed by RMK's global flow-tap setting.

@@ -1282,7 +1282,7 @@ reason = "The current RMK startup sequence does not branch on the IQS9151 settin
 [[iqs9151_register_porting]]
 source_const = "IQS9151_ADDR_ATI_MULTIPLIERS"
 source_value = 4474
-status = "not_ported"
+status = "ported_by_config_image"
 reason = "The current RMK port writes the extracted configuration bytes and selected target/count overrides, not standalone ATI multiplier overrides."
 
 [[iqs9151_register_porting]]
@@ -1318,8 +1318,8 @@ target_const = "ADDR_CONFIG_SETTINGS"
 [[iqs9151_register_porting]]
 source_const = "IQS9151_ADDR_OTHER_SETTINGS"
 source_value = 4544
-status = "not_ported"
-reason = "The current RMK port does not expose standalone writes for the upstream driver's other-settings block."
+status = "ported_by_config_image"
+reason = "RMK carries the upstream other-settings data in the extracted configuration image instead of exposing it as a standalone runtime write."
 
 [[iqs9151_register_porting]]
 source_const = "IQS9151_ADDR_TRACKPAD_SETTINGS"
@@ -1462,7 +1462,7 @@ target_const = "SFG_SINGLE_TAP"
 [[iqs9151_bit_porting]]
 source_const = "IQS9151_SFG_PRESS_HOLD"
 source_value = 8
-status = "not_ported"
+status = "ported_by_behavior"
 reason = "RMK recognizes press-hold/tap-drag from coordinate timing instead of the IQS9151 built-in press-hold gesture bit."
 
 [[iqs9151_bit_porting]]
@@ -1474,31 +1474,31 @@ target_const = "TFG_TWO_TAP"
 [[iqs9151_bit_porting]]
 source_const = "IQS9151_TFG_TWO_PRESS_HOLD"
 source_value = 8
-status = "not_ported"
+status = "ported_by_behavior"
 reason = "RMK recognizes two-finger tap-drag from coordinate timing instead of the IQS9151 built-in press-hold gesture bit."
 
 [[iqs9151_bit_porting]]
 source_const = "IQS9151_TFG_ZOOM_IN"
 source_value = 16
-status = "not_ported"
+status = "ported_by_behavior"
 reason = "RMK derives pinch direction and wheel reports from two-finger distance changes rather than the IQS9151 built-in zoom-in bit."
 
 [[iqs9151_bit_porting]]
 source_const = "IQS9151_TFG_ZOOM_OUT"
 source_value = 32
-status = "not_ported"
+status = "ported_by_behavior"
 reason = "RMK derives pinch direction and wheel reports from two-finger distance changes rather than the IQS9151 built-in zoom-out bit."
 
 [[iqs9151_bit_porting]]
 source_const = "IQS9151_TFG_VSCROLL"
 source_value = 64
-status = "not_ported"
+status = "ported_by_behavior"
 reason = "RMK derives vertical scroll from two-finger centroid/relative motion instead of the IQS9151 built-in vertical-scroll bit."
 
 [[iqs9151_bit_porting]]
 source_const = "IQS9151_TFG_HSCROLL"
 source_value = 128
-status = "not_ported"
+status = "ported_by_behavior"
 reason = "RMK derives horizontal pan from two-finger centroid/relative motion instead of the IQS9151 built-in horizontal-scroll bit."
 
 [[iqs9151_bit_porting]]
@@ -1534,13 +1534,13 @@ reason = "RMK runs ALP/trackpad re-ATI during startup but does not issue the opt
 [[iqs9151_bit_porting]]
 source_const = "IQS9151_CFG_SNAP_EVENT_EN"
 source_value = 32768
-status = "not_ported"
+status = "ported_by_config_image"
 reason = "RMK writes the upstream configuration image and only exposes standalone overrides for event mode and selected touch/gesture event bits."
 
 [[iqs9151_bit_porting]]
 source_const = "IQS9151_CFG_SWITCH_EVENT_EN"
 source_value = 16384
-status = "not_ported"
+status = "ported_by_config_image"
 reason = "RMK writes the upstream configuration image and does not expose a standalone switch-event override."
 
 [[iqs9151_bit_porting]]
@@ -1552,13 +1552,13 @@ target_const = "CFG_TP_TOUCH_EVENT_EN"
 [[iqs9151_bit_porting]]
 source_const = "IQS9151_CFG_ALP_EVENT_EN"
 source_value = 4096
-status = "not_ported"
+status = "ported_by_config_image"
 reason = "RMK writes the upstream configuration image and does not expose a standalone ALP-event override."
 
 [[iqs9151_bit_porting]]
 source_const = "IQS9151_CFG_RE_ATI_EVENT_EN"
 source_value = 2048
-status = "not_ported"
+status = "ported_by_config_image"
 reason = "RMK writes the upstream configuration image and does not expose a standalone re-ATI-event override."
 
 [[iqs9151_bit_porting]]
