@@ -255,11 +255,17 @@ def active_layers_from_holds(config: dict[str, Any], holds: list[dict[str, Any]]
 
 def resolve_key(config: dict[str, Any], row: int, col: int, active_layers: list[int]) -> str:
     km = keymap(config)
+    return resolve_key_from_layers(km, row, col, active_layers)
+
+
+def resolve_key_from_layers(
+    layers: list[list[list[str]]], row: int, col: int, active_layers: list[int]
+) -> str:
     for layer in sorted(active_layers, reverse=True):
-        action = km[layer][row][col]
+        action = layers[layer][row][col]
         if action != TRANSPARENT:
             return tap_action(action)
-    return tap_action(km[0][row][col])
+    return tap_action(layers[0][row][col])
 
 
 def check_layout(manifest: dict[str, Any], config: dict[str, Any]) -> list[Result]:
@@ -474,6 +480,53 @@ def check_scenarios(manifest: dict[str, Any], config: dict[str, Any]) -> list[Re
             Result(
                 scenario["id"],
                 "scenario",
+                passed,
+                total,
+                "ok" if not messages else "; ".join(messages),
+            )
+        )
+    return results
+
+
+def check_zmk_source_scenarios(
+    manifest: dict[str, Any],
+    config: dict[str, Any],
+    source_layers: list[list[list[str]]],
+) -> list[Result]:
+    results: list[Result] = []
+    for scenario in manifest.get("scenarios", []):
+        holds = list(scenario.get("holds", []))
+        if "hold" in scenario:
+            holds.append(scenario["hold"])
+
+        passed = 0
+        total = 1 + len(holds)
+        messages: list[str] = []
+        for hold in holds:
+            action = source_layers[0][int(hold["row"])][int(hold["col"])]
+            expected_action = hold["expected_action"]
+            if action == expected_action:
+                passed += 1
+            else:
+                messages.append(
+                    f"source hold action expected {expected_action!r}, got {action!r}"
+                )
+
+        active_layers = active_layers_from_holds(config, holds)
+        tap = scenario["tap"]
+        output = resolve_key_from_layers(
+            source_layers, int(tap["row"]), int(tap["col"]), active_layers
+        )
+        expected_output = scenario["expected_output"]
+        if output == expected_output:
+            passed += 1
+        else:
+            messages.append(f"source output expected {expected_output!r}, got {output!r}")
+
+        results.append(
+            Result(
+                f"zmk_source.scenario.{scenario['id']}",
+                "zmk_source_scenario",
                 passed,
                 total,
                 "ok" if not messages else "; ".join(messages),
@@ -2133,6 +2186,7 @@ def check_zmk_source(
     raw_source_layers = raw_zmk_keymap_rows(zmk_keymap_path)
     results.extend(check_zmk_source_deltas(manifest, raw_source_layers))
     source_layers = apply_documented_rmk_deltas(manifest, raw_source_layers)
+    results.extend(check_zmk_source_scenarios(manifest, keyboard, source_layers))
     expected_layers = manifest_keymap_rows(manifest)
     for layer, (expected_layer, source_layer) in enumerate(zip(expected_layers, source_layers, strict=True)):
         for row, (expected, source) in enumerate(zip(expected_layer, source_layer, strict=True)):

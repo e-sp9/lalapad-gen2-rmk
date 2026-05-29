@@ -217,6 +217,9 @@ routing overrides, checks source GPIO pin flags, checks the ZMK `*.dtsi` /
 `*.overlay` status-node inventory, and checks the RMK custom keycode order used
 for the ZMK Bluetooth and trackpad scale actions. These high-risk ZMK source
 checks are represented as structured inventories rather than regex-only checks.
+The thumb tap/hold layer-resolution scenarios are also cross-checked against
+the ZMK source keymap after documented RMK deltas are applied, so scenario
+expectations must stay source-backed instead of becoming RMK-only assertions.
 
 When the upstream checkout from `metadata.source_repo_hint` is available, the
 gate also parses `config/lalapadgen2.keymap` directly and checks the manifest

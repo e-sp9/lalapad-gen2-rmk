@@ -86,6 +86,7 @@ fn porting_coverage_includes_exact_rmk_inventory_gates() {
         .as_array()
         .unwrap()
         .len() as i64;
+    let expected_scenario_count = manifest["scenarios"].as_array().unwrap().len();
 
     let keymap_shape = results
         .iter()
@@ -117,7 +118,34 @@ fn porting_coverage_includes_exact_rmk_inventory_gates() {
     );
     assert_eq!(combo_inventory["ok"], true);
 
+    for scenario in manifest["scenarios"].as_array().unwrap() {
+        let scenario_id = scenario["id"].as_str().unwrap();
+        let scenario_result = results
+            .iter()
+            .find(|result| result["id"] == scenario_id)
+            .unwrap_or_else(|| panic!("RMK semantic scenario result is missing for {scenario_id}"));
+        assert_eq!(scenario_result["kind"], "scenario");
+        assert_eq!(scenario_result["ok"], true);
+    }
+
     if default_zmk_config_dir().is_some() {
+        let source_scenarios: Vec<_> = results
+            .iter()
+            .filter(|result| result["kind"] == "zmk_source_scenario")
+            .collect();
+        assert_eq!(source_scenarios.len(), expected_scenario_count);
+        for scenario in manifest["scenarios"].as_array().unwrap() {
+            let scenario_id = scenario["id"].as_str().unwrap();
+            let source_scenario = results
+                .iter()
+                .find(|result| result["id"] == format!("zmk_source.scenario.{scenario_id}"))
+                .unwrap_or_else(|| {
+                    panic!("ZMK source semantic scenario result is missing for {scenario_id}")
+                });
+            assert_eq!(source_scenario["kind"], "zmk_source_scenario");
+            assert_eq!(source_scenario["ok"], true);
+        }
+
         let layer_inventory = results
             .iter()
             .find(|result| result["id"] == "zmk_source.keymap_layer_inventory")
@@ -368,6 +396,89 @@ fn porting_coverage_includes_exact_rmk_inventory_gates() {
         assert_eq!(west_inventory["total"].as_i64(), Some(expected_west_items));
         assert_eq!(west_inventory["ok"], true);
     }
+}
+
+#[test]
+fn porting_coverage_rejects_source_scenario_drift() {
+    let output = run_python(
+        r#"
+import importlib.util
+import json
+import sys
+
+spec = importlib.util.spec_from_file_location("porting_coverage", "tools/porting_coverage.py")
+pc = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = pc
+spec.loader.exec_module(pc)
+
+config = {
+    "behavior": {"tri_layer": {"lower": 1, "upper": 2, "adjust": 3}},
+}
+manifest = {
+    "scenarios": [
+        {
+            "id": "space_hold_u",
+            "hold": {"row": 0, "col": 0, "expected_action": "LT(1, Space, FAST_LAYER)", "activates_layer": 1},
+            "tap": {"row": 0, "col": 1},
+            "expected_output": "Kp7",
+        },
+        {
+            "id": "tri_layer_fallback",
+            "holds": [
+                {"row": 0, "col": 0, "expected_action": "LT(1, Space, FAST_LAYER)", "activates_layer": 1},
+                {"row": 0, "col": 2, "expected_action": "LT(2, Enter, FAST_LAYER)", "activates_layer": 2},
+            ],
+            "tap": {"row": 1, "col": 1},
+            "expected_output": "Kp0",
+        },
+    ],
+}
+source_layers = [
+    [["LT(1, Space, FAST_LAYER)", "U", "LT(2, Enter, FAST_LAYER)"], ["H", "J", "K"]],
+    [["_", "Kp7", "_"], ["_", "Kp0", "_"]],
+    [["_", "Home", "_"], ["_", "_", "_"]],
+    [["_", "User0", "_"], ["_", "_", "_"]],
+]
+changed_layers = [[list(row) for row in layer] for layer in source_layers]
+changed_layers[1][0][1] = "Kp8"
+
+def pack(results):
+    return [result.__dict__ | {"ok": result.ok} for result in results]
+
+print(json.dumps({
+    "ok": pack(pc.check_zmk_source_scenarios(manifest, config, source_layers)),
+    "changed": pack(pc.check_zmk_source_scenarios(manifest, config, changed_layers)),
+}))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "source scenario parser check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(parsed["ok"][0]["kind"], "zmk_source_scenario");
+    assert_eq!(parsed["ok"][0]["passed"].as_i64(), Some(2));
+    assert_eq!(parsed["ok"][0]["total"].as_i64(), Some(2));
+    assert_eq!(parsed["ok"][0]["ok"], true);
+    assert_eq!(parsed["ok"][1]["passed"].as_i64(), Some(3));
+    assert_eq!(parsed["ok"][1]["total"].as_i64(), Some(3));
+    assert_eq!(parsed["ok"][1]["ok"], true);
+
+    let changed = &parsed["changed"][0];
+    assert_eq!(changed["kind"], "zmk_source_scenario");
+    assert_eq!(changed["passed"].as_i64(), Some(1));
+    assert_eq!(changed["total"].as_i64(), Some(2));
+    assert_eq!(changed["ok"], false);
+    assert!(
+        changed["message"]
+            .as_str()
+            .unwrap()
+            .contains("source output expected 'Kp7', got 'Kp8'")
+    );
 }
 
 #[test]

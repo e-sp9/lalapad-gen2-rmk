@@ -1176,6 +1176,27 @@ tap = { row = 0, col = 7 }
 expected_output = "NumLock"
 
 [[scenarios]]
+id = "space_hold_u_selects_keypad_7"
+description = "Space thumb hold activates layer 1 for the U position."
+hold = { row = 3, col = 4, expected_action = "LT(1, Space, FAST_LAYER)", activates_layer = 1 }
+tap = { row = 0, col = 8 }
+expected_output = "Kp7"
+
+[[scenarios]]
+id = "space_hold_j_selects_keypad_4"
+description = "Space thumb hold activates layer 1 for the J position."
+hold = { row = 3, col = 4, expected_action = "LT(1, Space, FAST_LAYER)", activates_layer = 1 }
+tap = { row = 1, col = 8 }
+expected_output = "Kp4"
+
+[[scenarios]]
+id = "space_hold_h_falls_back_to_base"
+description = "Space thumb hold keeps transparent layer-1 H as the base H key."
+hold = { row = 3, col = 4, expected_action = "LT(1, Space, FAST_LAYER)", activates_layer = 1 }
+tap = { row = 1, col = 7 }
+expected_output = "H"
+
+[[scenarios]]
 id = "enter_tap_is_enter"
 description = "Enter thumb tap remains Enter."
 tap = { row = 3, col = 7 }
@@ -1189,6 +1210,27 @@ tap = { row = 0, col = 7 }
 expected_output = "PageUp"
 
 [[scenarios]]
+id = "enter_hold_u_selects_home"
+description = "Enter thumb hold activates layer 2 for the U position."
+hold = { row = 3, col = 7, expected_action = "LT(2, Enter, FAST_LAYER)", activates_layer = 2 }
+tap = { row = 0, col = 8 }
+expected_output = "Home"
+
+[[scenarios]]
+id = "enter_hold_h_selects_page_down"
+description = "Enter thumb hold activates layer 2 for the H position."
+hold = { row = 3, col = 7, expected_action = "LT(2, Enter, FAST_LAYER)", activates_layer = 2 }
+tap = { row = 1, col = 7 }
+expected_output = "PageDown"
+
+[[scenarios]]
+id = "enter_hold_n_falls_back_to_base"
+description = "Enter thumb hold keeps transparent layer-2 N as the base N key."
+hold = { row = 3, col = 7, expected_action = "LT(2, Enter, FAST_LAYER)", activates_layer = 2 }
+tap = { row = 2, col = 7 }
+expected_output = "N"
+
+[[scenarios]]
 id = "space_enter_hold_y_selects_system_layer"
 description = "Holding both thumb layer-taps activates the system tri-layer."
 holds = [
@@ -1197,3 +1239,33 @@ holds = [
 ]
 tap = { row = 0, col = 7 }
 expected_output = "User7"
+
+[[scenarios]]
+id = "space_enter_hold_u_selects_bt_profile_0"
+description = "Holding both thumb layer-taps activates the system layer for the U position."
+holds = [
+  { row = 3, col = 4, expected_action = "LT(1, Space, FAST_LAYER)", activates_layer = 1 },
+  { row = 3, col = 7, expected_action = "LT(2, Enter, FAST_LAYER)", activates_layer = 2 },
+]
+tap = { row = 0, col = 8 }
+expected_output = "User0"
+
+[[scenarios]]
+id = "space_enter_hold_h_selects_reboot"
+description = "Holding both thumb layer-taps activates the system layer for the H position."
+holds = [
+  { row = 3, col = 4, expected_action = "LT(1, Space, FAST_LAYER)", activates_layer = 1 },
+  { row = 3, col = 7, expected_action = "LT(2, Enter, FAST_LAYER)", activates_layer = 2 },
+]
+tap = { row = 1, col = 7 }
+expected_output = "Reboot"
+
+[[scenarios]]
+id = "space_enter_hold_keypad_zero_falls_through_system_transparency"
+description = "System-layer transparency falls through to the active secondary layer."
+holds = [
+  { row = 3, col = 4, expected_action = "LT(1, Space, FAST_LAYER)", activates_layer = 1 },
+  { row = 3, col = 7, expected_action = "LT(2, Enter, FAST_LAYER)", activates_layer = 2 },
+]
+tap = { row = 3, col = 9 }
+expected_output = "Kp0"
