@@ -560,6 +560,118 @@ matrix_type = "normal"
 row_pins = ["P1_15", "P1_14", "P1_13", "P1_12", "P1_01"]
 col_pins = ["P0_19", "P0_15", "P0_29", "P0_28", "P0_03", "P0_02"]
 
+[[trackpad_virtual_buttons]]
+side = "left"
+button = "LeftClick"
+row = 5
+col = 0
+action = "MouseBtn1"
+
+[[trackpad_virtual_buttons]]
+side = "left"
+button = "RightClick"
+row = 5
+col = 1
+action = "MouseBtn2"
+
+[[trackpad_virtual_buttons]]
+side = "left"
+button = "MiddleClick"
+row = 5
+col = 2
+action = "MouseBtn3"
+
+[[trackpad_virtual_buttons]]
+side = "left"
+button = "GestureLeft"
+row = 6
+col = 0
+action = "MouseBtn4"
+
+[[trackpad_virtual_buttons]]
+side = "left"
+button = "GestureRight"
+row = 6
+col = 1
+action = "MouseBtn5"
+
+[[trackpad_virtual_buttons]]
+side = "left"
+button = "GestureUp"
+row = 6
+col = 2
+action = "WM(Tab, LGui)"
+
+[[trackpad_virtual_buttons]]
+side = "left"
+button = "GestureDown"
+row = 6
+col = 3
+action = "WM(D, LGui)"
+
+[[trackpad_virtual_buttons]]
+side = "left"
+button = "Pinch"
+row = 6
+col = 4
+action = "LCtrl"
+
+[[trackpad_virtual_buttons]]
+side = "right"
+button = "LeftClick"
+row = 5
+col = 9
+action = "MouseBtn1"
+
+[[trackpad_virtual_buttons]]
+side = "right"
+button = "RightClick"
+row = 5
+col = 10
+action = "MouseBtn2"
+
+[[trackpad_virtual_buttons]]
+side = "right"
+button = "MiddleClick"
+row = 5
+col = 11
+action = "MouseBtn3"
+
+[[trackpad_virtual_buttons]]
+side = "right"
+button = "GestureLeft"
+row = 6
+col = 7
+action = "MouseBtn4"
+
+[[trackpad_virtual_buttons]]
+side = "right"
+button = "GestureRight"
+row = 6
+col = 8
+action = "MouseBtn5"
+
+[[trackpad_virtual_buttons]]
+side = "right"
+button = "GestureUp"
+row = 6
+col = 9
+action = "WM(Tab, LGui)"
+
+[[trackpad_virtual_buttons]]
+side = "right"
+button = "GestureDown"
+row = 6
+col = 10
+action = "WM(D, LGui)"
+
+[[trackpad_virtual_buttons]]
+side = "right"
+button = "Pinch"
+row = 6
+col = 11
+action = "LCtrl"
+
 [[source_deltas]]
 id = "delta_base_mo1_to_left_ctrl"
 layer = 0

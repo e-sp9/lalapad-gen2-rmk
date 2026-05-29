@@ -161,6 +161,7 @@ fn porting_coverage_complete_gate_accepts_explicit_status_completion() {
     assert!(stdout.contains("- rmk_patch: 59/59 = 100.00%"));
     assert!(stdout.contains("- scenario:"));
     assert!(stdout.contains("- split: 100/100 = 100.00%"));
+    assert!(stdout.contains("- trackpad_virtual: 66/66 = 100.00%"));
     assert!(stdout.contains("- vial_user_key_semantics: 57/57 = 100.00%"));
     assert!(stdout.contains("- zmk_source_cell:"));
     assert!(stdout.contains("Porting status: 69/69 = 100.00% implemented"));
@@ -248,8 +249,8 @@ ported = 1
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("porting coverage baseline drift:"));
-    assert!(stderr.contains("coverage.total: expected baseline 1, got 2875"));
-    assert!(stderr.contains("coverage.result_count: expected baseline 1, got 463"));
+    assert!(stderr.contains("coverage.total: expected baseline 1, got 2941"));
+    assert!(stderr.contains("coverage.result_count: expected baseline 1, got 482"));
     assert!(stderr.contains("coverage.result_inventory_sha256: expected baseline bad"));
     assert!(
         stderr.contains("coverage.by_kind.behavior: actual report kind is missing from baseline")
@@ -528,7 +529,7 @@ fn migration_status_combines_software_and_hardware_progress() {
     );
     let stdout = String::from_utf8_lossy(&markdown.stdout);
     assert!(stdout.contains("## RMK Migration Status"));
-    assert!(stdout.contains("| Software coverage | 2875 | 2875 | 100.00% |"));
+    assert!(stdout.contains("| Software coverage | 2941 | 2941 | 100.00% |"));
     assert!(stdout.contains("### Hardware Progress By Area"));
     assert!(stdout.contains("| trackpad | 0 | 7 | 0.00% |"));
     assert!(stdout.contains("### Hardware Progress By Side"));
@@ -541,7 +542,7 @@ fn migration_status_combines_software_and_hardware_progress() {
 fn migration_status_rejects_coverage_baseline_drift() {
     let bad_baseline = r#"
 [coverage]
-passed = 2875
+passed = 2941
 total = 1
 result_count = 1
 result_inventory_sha256 = "bad"
@@ -578,8 +579,8 @@ ported_by_config_image = 6
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("Software failures:"));
-    assert!(stdout.contains("coverage.total: expected baseline 1, got 2875"));
-    assert!(stdout.contains("coverage.result_count: expected baseline 1, got 463"));
+    assert!(stdout.contains("coverage.total: expected baseline 1, got 2941"));
+    assert!(stdout.contains("coverage.result_count: expected baseline 1, got 482"));
     assert!(stdout.contains("coverage.result_inventory_sha256: expected baseline bad"));
 }
 
@@ -3001,6 +3002,208 @@ print(json.dumps({
     assert!(message.contains("forbidden 'TrackpadSide::Left' is present"));
     assert!(message.contains("missing 'Iqs9151MotionOutput::HidReport'"));
     assert!(message.contains("forbidden 'Iqs9151MotionOutput::SplitEvent' is present"));
+}
+
+#[test]
+fn porting_coverage_rejects_trackpad_virtual_button_drift() {
+    let output = run_python(
+        r#"
+import copy
+import importlib.util
+import json
+import shutil
+import sys
+import tempfile
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("porting_coverage", "tools/porting_coverage.py")
+pc = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = pc
+spec.loader.exec_module(pc)
+
+manifest = pc.load_toml(Path("tools/porting_coverage_manifest.toml"))
+keyboard = pc.load_toml(Path("keyboard.toml"))
+vial = pc.load_json(Path("vial.json"))
+ok = pc.check_trackpad_virtual_buttons(manifest, keyboard, Path("."))
+
+def write_project(root, iqs_text=None, vial_json=None):
+    (root / "src").mkdir()
+    (root / "src/iqs9151.rs").write_text(
+        iqs_text if iqs_text is not None else Path("src/iqs9151.rs").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    (root / "vial.json").write_text(json.dumps(vial_json if vial_json is not None else vial), encoding="utf-8")
+
+iqs_text = Path("src/iqs9151.rs").read_text(encoding="utf-8")
+bad_iqs = iqs_text.replace(
+    "VirtualKeyPosition { row: 6, col: 11 },",
+    "VirtualKeyPosition { row: 6, col: 10 },",
+    1,
+)
+with tempfile.TemporaryDirectory() as root_dir:
+    root = Path(root_dir)
+    write_project(root, iqs_text=bad_iqs)
+    bad_position = pc.check_trackpad_virtual_buttons(manifest, keyboard, root)
+
+bad_code = iqs_text.replace("Self::Pinch => 7,", "Self::Pinch => 6,", 1)
+with tempfile.TemporaryDirectory() as root_dir:
+    root = Path(root_dir)
+    write_project(root, iqs_text=bad_code)
+    bad_code_result = pc.check_trackpad_virtual_buttons(manifest, keyboard, root)
+
+bad_arms = iqs_text.replace(
+    "TrackpadSide::Left => LEFT_TRACKPAD_BUTTON_POSITIONS[index],\n        TrackpadSide::Right => RIGHT_TRACKPAD_BUTTON_POSITIONS[index],",
+    "TrackpadSide::Left => RIGHT_TRACKPAD_BUTTON_POSITIONS[index],\n        TrackpadSide::Right => LEFT_TRACKPAD_BUTTON_POSITIONS[index],",
+)
+with tempfile.TemporaryDirectory() as root_dir:
+    root = Path(root_dir)
+    write_project(root, iqs_text=bad_arms)
+    bad_arms_result = pc.check_trackpad_virtual_buttons(manifest, keyboard, root)
+
+bad_keyboard = copy.deepcopy(keyboard)
+bad_keyboard["layout"]["keymap"][0][6][11] = "No"
+with tempfile.TemporaryDirectory() as root_dir:
+    root = Path(root_dir)
+    write_project(root)
+    bad_action = pc.check_trackpad_virtual_buttons(manifest, bad_keyboard, root)
+
+def replace_position(value):
+    if value == "6,11":
+        return "6,6"
+    if isinstance(value, list):
+        return [replace_position(item) for item in value]
+    if isinstance(value, dict):
+        return {key: replace_position(item) for key, item in value.items()}
+    return value
+
+bad_vial = copy.deepcopy(vial)
+bad_vial["layouts"]["keymap"] = replace_position(bad_vial["layouts"]["keymap"])
+with tempfile.TemporaryDirectory() as root_dir:
+    root = Path(root_dir)
+    write_project(root, vial_json=bad_vial)
+    bad_vial_result = pc.check_trackpad_virtual_buttons(manifest, keyboard, root)
+
+def pack(results):
+    return [result.__dict__ | {"ok": result.ok} for result in results]
+
+print(json.dumps({
+    "ok": pack(ok),
+    "bad_position": pack(bad_position),
+    "bad_code": pack(bad_code_result),
+    "bad_arms": pack(bad_arms_result),
+    "bad_action": pack(bad_action),
+    "bad_vial": pack(bad_vial_result),
+}))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "trackpad virtual button check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let ok_pinch = parsed["ok"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "trackpad_virtual_button.right.Pinch")
+        .expect("right pinch virtual-button result is missing");
+    assert_eq!(ok_pinch["kind"], "trackpad_virtual");
+    assert_eq!(ok_pinch["passed"].as_i64(), Some(3));
+    assert_eq!(ok_pinch["total"].as_i64(), Some(3));
+    assert_eq!(ok_pinch["ok"], true);
+
+    let bad_position = parsed["bad_position"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "trackpad_virtual_button.right.Pinch")
+        .expect("changed right pinch virtual-button position result is missing");
+    assert_eq!(bad_position["kind"], "trackpad_virtual");
+    assert_eq!(bad_position["passed"].as_i64(), Some(1));
+    assert_eq!(bad_position["total"].as_i64(), Some(3));
+    assert_eq!(bad_position["ok"], false);
+    let bad_position_message = bad_position["message"].as_str().unwrap();
+    assert!(bad_position_message.contains("runtime position expected (6, 11), got (6, 10)"));
+    assert!(bad_position_message.contains("layer0 action expected 'LCtrl', got 'WM(D, LGui)'"));
+
+    let bad_code = parsed["bad_code"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "trackpad_virtual_button_input_btn_codes")
+        .expect("changed input_btn_code result is missing");
+    assert_eq!(bad_code["kind"], "trackpad_virtual");
+    assert_eq!(bad_code["passed"].as_i64(), Some(7));
+    assert_eq!(bad_code["total"].as_i64(), Some(8));
+    assert_eq!(bad_code["ok"], false);
+    assert!(
+        bad_code["message"]
+            .as_str()
+            .unwrap()
+            .contains("Pinch: expected input_btn_code 7, got 6")
+    );
+
+    let bad_code_pinch = parsed["bad_code"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "trackpad_virtual_button.right.Pinch")
+        .expect("changed input_btn_code right pinch result is missing");
+    assert_eq!(bad_code_pinch["passed"].as_i64(), Some(1));
+    assert_eq!(bad_code_pinch["total"].as_i64(), Some(3));
+    assert_eq!(bad_code_pinch["ok"], false);
+
+    let bad_arms = parsed["bad_arms"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "trackpad_virtual_button_side_position_match_arms")
+        .expect("changed trackpad position match-arm result is missing");
+    assert_eq!(bad_arms["kind"], "trackpad_virtual");
+    assert_eq!(bad_arms["passed"].as_i64(), Some(0));
+    assert_eq!(bad_arms["total"].as_i64(), Some(2));
+    assert_eq!(bad_arms["ok"], false);
+    let bad_arms_message = bad_arms["message"].as_str().unwrap();
+    assert!(bad_arms_message.contains("Left: expected 'LEFT_TRACKPAD_BUTTON_POSITIONS'"));
+    assert!(bad_arms_message.contains("Right: expected 'RIGHT_TRACKPAD_BUTTON_POSITIONS'"));
+
+    let bad_action = parsed["bad_action"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "trackpad_virtual_button.right.Pinch")
+        .expect("changed right pinch virtual-button action result is missing");
+    assert_eq!(bad_action["kind"], "trackpad_virtual");
+    assert_eq!(bad_action["passed"].as_i64(), Some(2));
+    assert_eq!(bad_action["total"].as_i64(), Some(3));
+    assert_eq!(bad_action["ok"], false);
+    assert!(
+        bad_action["message"]
+            .as_str()
+            .unwrap()
+            .contains("layer0 action expected 'LCtrl', got 'No'")
+    );
+
+    let bad_vial = parsed["bad_vial"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "trackpad_virtual_button.right.Pinch")
+        .expect("changed right pinch Vial virtual-button result is missing");
+    assert_eq!(bad_vial["kind"], "trackpad_virtual");
+    assert_eq!(bad_vial["passed"].as_i64(), Some(2));
+    assert_eq!(bad_vial["total"].as_i64(), Some(3));
+    assert_eq!(bad_vial["ok"], false);
+    assert!(
+        bad_vial["message"]
+            .as_str()
+            .unwrap()
+            .contains("Vial layout missing (6, 11)")
+    );
 }
 
 #[test]

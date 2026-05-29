@@ -3435,6 +3435,192 @@ def check_code_topology(manifest: dict[str, Any], project_root: Path) -> list[Re
     return results
 
 
+def rust_trackpad_button_order(text: str) -> list[str]:
+    match = re.search(
+        r"const\s+TRACKPAD_BUTTONS_BY_INPUT_CODE\s*:\s*\[TrackpadButton;\s*\d+\]\s*=\s*\[(.*?)\];",
+        text,
+        re.S,
+    )
+    if not match:
+        return []
+    return re.findall(r"TrackpadButton::([A-Za-z0-9_]+)", match.group(1))
+
+
+def rust_trackpad_input_btn_codes(text: str) -> dict[str, int]:
+    match = re.search(
+        r"pub\s+const\s+fn\s+input_btn_code\s*\(\s*self\s*\)\s*->\s*u8\s*\{(.*?)\n\s*\}",
+        text,
+        re.S,
+    )
+    if not match:
+        return {}
+    return {
+        item.group(1): int(item.group(2))
+        for item in re.finditer(r"Self::([A-Za-z0-9_]+)\s*=>\s*(\d+)", match.group(1))
+    }
+
+
+def rust_trackpad_positions(text: str, const_name: str) -> list[tuple[int, int]]:
+    match = re.search(
+        rf"const\s+{re.escape(const_name)}\s*:\s*\[VirtualKeyPosition;\s*\d+\]\s*=\s*\[(.*?)\];",
+        text,
+        re.S,
+    )
+    if not match:
+        return []
+    return [
+        (int(item.group(1)), int(item.group(2)))
+        for item in re.finditer(
+            r"VirtualKeyPosition\s*\{\s*row:\s*(\d+),\s*col:\s*(\d+)\s*\}",
+            match.group(1),
+        )
+    ]
+
+
+def rust_trackpad_position_match_arms(text: str) -> dict[str, str]:
+    match = re.search(
+        r"pub\s+const\s+fn\s+trackpad_button_position\s*\([^)]*\)\s*->\s*VirtualKeyPosition\s*\{(.*?)\n\}",
+        text,
+        re.S,
+    )
+    if not match:
+        return {}
+    return {
+        item.group(1): item.group(2)
+        for item in re.finditer(
+            r"TrackpadSide::([A-Za-z0-9_]+)\s*=>\s*([A-Z_]+_TRACKPAD_BUTTON_POSITIONS)\s*\[\s*index\s*\]",
+            match.group(1),
+        )
+    }
+
+
+def check_trackpad_virtual_buttons(
+    manifest: dict[str, Any], config: dict[str, Any], project_root: Path
+) -> list[Result]:
+    expected = list(manifest.get("trackpad_virtual_buttons", []))
+    if not expected:
+        return []
+
+    iqs_text = (project_root / "src/iqs9151.rs").read_text()
+    button_order = rust_trackpad_button_order(iqs_text)
+    input_btn_codes = rust_trackpad_input_btn_codes(iqs_text)
+    positions_by_side = {
+        "left": rust_trackpad_positions(iqs_text, "LEFT_TRACKPAD_BUTTON_POSITIONS"),
+        "right": rust_trackpad_positions(iqs_text, "RIGHT_TRACKPAD_BUTTON_POSITIONS"),
+    }
+    position_match_arms = rust_trackpad_position_match_arms(iqs_text)
+    runtime_positions: dict[tuple[str, str], tuple[int, int]] = {}
+    for side, positions in positions_by_side.items():
+        for button in button_order:
+            index = input_btn_codes.get(button)
+            if index is not None and index < len(positions):
+                runtime_positions[(side, button)] = positions[index]
+
+    km = keymap(config)
+    vial_positions = set(collect_vial_positions(load_json(project_root / "vial.json")["layouts"]["keymap"]))
+    results: list[Result] = []
+    expected_button_order = [str(entry["button"]) for entry in expected[: len(button_order)]]
+    button_order_total = max(len(expected_button_order), len(button_order))
+    button_order_passed = sum(
+        1
+        for index in range(button_order_total)
+        if (expected_button_order[index] if index < len(expected_button_order) else None)
+        == (button_order[index] if index < len(button_order) else None)
+    )
+    button_order_messages = [
+        f"i{index}: expected {expected_button_order[index] if index < len(expected_button_order) else None!r}, "
+        f"got {button_order[index] if index < len(button_order) else None!r}"
+        for index in range(button_order_total)
+        if (expected_button_order[index] if index < len(expected_button_order) else None)
+        != (button_order[index] if index < len(button_order) else None)
+    ]
+    results.append(
+        Result(
+            "trackpad_virtual_button_input_order",
+            "trackpad_virtual",
+            button_order_passed,
+            button_order_total,
+            "ok" if not button_order_messages else "; ".join(button_order_messages[:8]),
+        )
+    )
+
+    expected_codes = {str(entry["button"]): index for index, entry in enumerate(expected[: len(button_order)])}
+    code_total = len(expected_codes)
+    code_passed = sum(1 for button, code in expected_codes.items() if input_btn_codes.get(button) == code)
+    code_messages = [
+        f"{button}: expected input_btn_code {code}, got {input_btn_codes.get(button)!r}"
+        for button, code in expected_codes.items()
+        if input_btn_codes.get(button) != code
+    ]
+    results.append(
+        Result(
+            "trackpad_virtual_button_input_btn_codes",
+            "trackpad_virtual",
+            code_passed,
+            code_total,
+            "ok" if not code_messages else "; ".join(code_messages[:8]),
+        )
+    )
+
+    match_arm_checks = [
+        ("Left", position_match_arms.get("Left"), "LEFT_TRACKPAD_BUTTON_POSITIONS"),
+        ("Right", position_match_arms.get("Right"), "RIGHT_TRACKPAD_BUTTON_POSITIONS"),
+    ]
+    match_arm_passed = sum(1 for _, actual, want in match_arm_checks if actual == want)
+    match_arm_messages = [
+        f"{side}: expected {want!r}, got {actual!r}"
+        for side, actual, want in match_arm_checks
+        if actual != want
+    ]
+    results.append(
+        Result(
+            "trackpad_virtual_button_side_position_match_arms",
+            "trackpad_virtual",
+            match_arm_passed,
+            len(match_arm_checks),
+            "ok" if not match_arm_messages else "; ".join(match_arm_messages),
+        )
+    )
+
+    for entry in expected:
+        side = str(entry["side"])
+        button = str(entry["button"])
+        expected_position = (int(entry["row"]), int(entry["col"]))
+        expected_action = str(entry["action"])
+        actual_position = runtime_positions.get((side, button))
+        actual_action = None
+        if actual_position is not None:
+            row, col = actual_position
+            if row < len(km[0]) and col < len(km[0][row]):
+                actual_action = km[0][row][col]
+
+        passed = 0
+        messages: list[str] = []
+        if actual_position == expected_position:
+            passed += 1
+        else:
+            messages.append(f"runtime position expected {expected_position!r}, got {actual_position!r}")
+        if actual_action == expected_action:
+            passed += 1
+        else:
+            messages.append(f"layer0 action expected {expected_action!r}, got {actual_action!r}")
+        if expected_position in vial_positions:
+            passed += 1
+        else:
+            messages.append(f"Vial layout missing {expected_position!r}")
+
+        results.append(
+            Result(
+                f"trackpad_virtual_button.{side}.{button}",
+                "trackpad_virtual",
+                passed,
+                3,
+                "ok" if not messages else "; ".join(messages),
+            )
+        )
+    return results
+
+
 def collect_vial_positions(value: Any) -> list[tuple[int, int]]:
     positions: list[tuple[int, int]] = []
     if isinstance(value, str):
@@ -4249,6 +4435,7 @@ def run(
     results.extend(check_scenarios(manifest, keyboard))
     results.extend(check_code_contains(manifest, project_root))
     results.extend(check_code_topology(manifest, project_root))
+    results.extend(check_trackpad_virtual_buttons(manifest, keyboard, project_root))
     results.extend(check_vial_keyboard_toml_layout(manifest, keyboard, project_root))
     results.extend(
         check_zmk_source(

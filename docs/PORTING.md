@@ -282,6 +282,10 @@ ZMK source inventories, Kconfig/DTS mirrors, Cargo dependency resolution, Rust
 constants, IQS9151 byte arrays, local RMK composite mouse and dynamic-scale
 storage patch invariants, Vial identity and custom-key semantics, or firmware
 code-needle checks instead of treating the total percentage as a black box.
+Trackpad virtual-button checks compare the IQS9151 runtime input button code
+mapping, left/right button-position arrays, layer-0 key actions, and
+Vial-exposed positions together so a gesture cannot silently move to a different
+RMK key.
 The split checks also verify the RMK central/peripheral matrix footprint,
 row/column pin order, absence of incompatible top-level matrix or serial
 configuration, and central/peripheral controller topology.
