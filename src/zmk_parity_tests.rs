@@ -265,6 +265,33 @@ fn porting_coverage_includes_exact_rmk_inventory_gates() {
             assert_eq!(binding_inventory["ok"], true);
         }
 
+        for listener in porting_coverage_manifest_toml()["source_inventory"]["input_listeners"]
+            .as_array()
+            .unwrap()
+        {
+            let source_file = listener["source_file"].as_str().unwrap();
+            let source_block = listener["source_block"].as_str().unwrap();
+            let expected_entries = listener["expected"].as_array().unwrap().len() as i64;
+            let listener_inventory = results
+                .iter()
+                .find(|result| {
+                    result["id"]
+                        == format!("zmk_source.input_listeners.{source_file}.{source_block}")
+                })
+                .unwrap_or_else(|| {
+                    panic!(
+                        "ZMK input listener inventory coverage result is missing for {source_file} {source_block}"
+                    )
+                });
+            assert_eq!(listener_inventory["kind"], "zmk_inventory");
+            assert_eq!(
+                listener_inventory["passed"].as_i64(),
+                Some(expected_entries)
+            );
+            assert_eq!(listener_inventory["total"].as_i64(), Some(expected_entries));
+            assert_eq!(listener_inventory["ok"], true);
+        }
+
         for dts_property_block in
             porting_coverage_manifest_toml()["source_inventory"]["dts_properties"]
                 .as_array()
@@ -1288,6 +1315,151 @@ print(json.dumps({
             .as_str()
             .unwrap()
             .contains("missing input behavior source file")
+    );
+}
+
+#[test]
+fn porting_coverage_rejects_unclassified_zmk_input_listeners() {
+    let output = run_python(
+        r#"
+import importlib.util
+import json
+import sys
+import tempfile
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("porting_coverage", "tools/porting_coverage.py")
+pc = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = pc
+spec.loader.exec_module(pc)
+
+manifest = {
+    "source_inventory": {
+        "input_listeners": [{
+            "source_file": "lalapadgen2.dtsi",
+            "source_block": "trackpad_listener_R",
+            "expected": [
+                "device=&trackpad_split_R",
+                "input-processors:&trackpad_key_behaviors_R",
+                "input-processors:&zip_xy_scaler 1 5",
+                "lowspeed.layers=1,2",
+                "lowspeed.input-processors:&trackpad_key_behaviors_R",
+                "lowspeed.input-processors:&zip_xy_scaler 1 15",
+            ],
+        }],
+    },
+}
+
+def pack(results):
+    return [result.__dict__ | {"ok": result.ok} for result in results]
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    fixture = root / "lalapadgen2.dtsi"
+    fixture.write_text('''
+    trackpad_listener_R: trackpad_listener_R {
+        device = <&trackpad_split_R>;
+        input-processors = <&trackpad_key_behaviors_R>,
+                           <&zip_xy_scaler 1 5>;
+        lowspeedmode {
+            layers = <1>,<2>;
+            input-processors = <&trackpad_key_behaviors_R>,
+                               <&zip_xy_scaler 1 15>;
+        };
+    };
+    ''')
+    ok = pack(pc.check_zmk_input_listener_inventory(manifest, root))
+
+    fixture.write_text('''
+    trackpad_listener_R: trackpad_listener_R {
+        device = <&iqs9151>;
+        input-processors = <&trackpad_key_behaviors_R>,
+                           <&zip_xy_scaler 1 6>,
+                           <&zip_dynamic_xy_scaler>;
+        lowspeedmode {
+            layers = <1>,<3>;
+            input-processors = <&trackpad_key_behaviors_R>,
+                               <&zip_xy_scaler 1 15>;
+        };
+    };
+    ''')
+    changed = pack(pc.check_zmk_input_listener_inventory(manifest, root))
+
+    fixture.write_text('''
+    trackpad_listener_R: trackpad_listener_R {
+        device = <&trackpad_split_R>;
+        lowspeedmode {
+            layers = <1>,<2>;
+        };
+    };
+    ''')
+    missing_processors = pack(pc.check_zmk_input_listener_inventory(manifest, root))
+    fixture.unlink()
+    missing_file = pack(pc.check_zmk_input_listener_inventory(manifest, root))
+
+print(json.dumps({
+    "ok": ok,
+    "changed": changed,
+    "missing_processors": missing_processors,
+    "missing_file": missing_file,
+}))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "input listener inventory parser check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let ok_inventory = &parsed["ok"][0];
+    assert_eq!(ok_inventory["kind"], "zmk_inventory");
+    assert_eq!(ok_inventory["passed"].as_i64(), Some(6));
+    assert_eq!(ok_inventory["total"].as_i64(), Some(6));
+    assert_eq!(ok_inventory["ok"], true);
+
+    let changed_inventory = &parsed["changed"][0];
+    assert_eq!(changed_inventory["kind"], "zmk_inventory");
+    assert_eq!(changed_inventory["passed"].as_i64(), Some(1));
+    assert_eq!(changed_inventory["total"].as_i64(), Some(7));
+    assert_eq!(changed_inventory["ok"], false);
+    assert!(
+        changed_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("&zip_xy_scaler 1 6")
+    );
+    assert!(
+        changed_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("lowspeed.layers=1,3")
+    );
+
+    let missing_processors_inventory = &parsed["missing_processors"][0];
+    assert_eq!(missing_processors_inventory["kind"], "zmk_inventory");
+    assert_eq!(missing_processors_inventory["passed"].as_i64(), Some(0));
+    assert_eq!(missing_processors_inventory["total"].as_i64(), Some(6));
+    assert_eq!(missing_processors_inventory["ok"], false);
+    assert!(
+        missing_processors_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("invalid input listener source")
+    );
+
+    let missing_file_inventory = &parsed["missing_file"][0];
+    assert_eq!(missing_file_inventory["kind"], "zmk_inventory");
+    assert_eq!(missing_file_inventory["passed"].as_i64(), Some(0));
+    assert_eq!(missing_file_inventory["total"].as_i64(), Some(6));
+    assert_eq!(missing_file_inventory["ok"], false);
+    assert!(
+        missing_file_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("missing input listener source file")
     );
 }
 

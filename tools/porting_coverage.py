@@ -555,6 +555,22 @@ def extract_ref_property(block: str, name: str) -> str:
     return (match.group("angle") or match.group("plain")).strip()
 
 
+def extract_top_level_property_body(block: str, name: str) -> str:
+    match = re.search(
+        rf"(?<![A-Za-z0-9_,#-]){re.escape(name)}(?![A-Za-z0-9_,#-])\s*=\s*(?P<body>.*?);",
+        top_level_text(block),
+        re.S,
+    )
+    if not match:
+        raise ValueError(f"property {name!r} not found")
+    return match.group("body")
+
+
+def parse_angle_array_property(block: str, name: str) -> list[str]:
+    body = extract_top_level_property_body(block, name)
+    return [" ".join(match.group(1).split()) for match in re.finditer(r"<\s*(.*?)\s*>", body)]
+
+
 def zmk_kp_to_rmk(key: str) -> str:
     if key == "LG(TAB)":
         return "WM(Tab, LGui)"
@@ -1428,6 +1444,73 @@ def check_zmk_input_behavior_binding_inventory(
     return results
 
 
+def input_listener_inventory(text: str, block_name: str) -> list[str]:
+    block = extract_block(strip_c_style_comments(text), block_name)
+    entries = [
+        f"device={extract_ref_property(block, 'device')}",
+    ]
+    entries.extend(
+        f"input-processors:{processor}"
+        for processor in parse_angle_array_property(block, "input-processors")
+    )
+
+    try:
+        lowspeed = extract_block(block, "lowspeedmode")
+    except ValueError:
+        return entries
+
+    entries.append(f"lowspeed.layers={','.join(parse_angle_array_property(lowspeed, 'layers'))}")
+    entries.extend(
+        f"lowspeed.input-processors:{processor}"
+        for processor in parse_angle_array_property(lowspeed, "input-processors")
+    )
+    return entries
+
+
+def check_zmk_input_listener_inventory(
+    manifest: dict[str, Any], zmk_config_dir: Path
+) -> list[Result]:
+    results: list[Result] = []
+    for check in manifest.get("source_inventory", {}).get("input_listeners", []):
+        source_file = check["source_file"]
+        expected = list(check["expected"])
+        source_path = zmk_config_dir / source_file
+        result_id = f"zmk_source.input_listeners.{source_file}.{check['source_block']}"
+        if not source_path.exists():
+            results.append(
+                Result(
+                    result_id,
+                    "zmk_inventory",
+                    0,
+                    max(1, len(expected)),
+                    f"missing input listener source file {source_file!r}",
+                )
+            )
+            continue
+        try:
+            actual = input_listener_inventory(source_path.read_text(), check["source_block"])
+        except ValueError as e:
+            results.append(
+                Result(
+                    result_id,
+                    "zmk_inventory",
+                    0,
+                    max(1, len(expected)),
+                    f"invalid input listener source {source_file!r}: {e}",
+                )
+            )
+            continue
+        results.append(
+            ordered_inventory_result(
+                result_id,
+                "zmk_inventory",
+                expected,
+                actual,
+            )
+        )
+    return results
+
+
 def normalize_dts_property_value(value: str) -> str:
     value = value.strip()
     if value.startswith("<") and value.endswith(">"):
@@ -2147,6 +2230,7 @@ def check_zmk_source(
     results.extend(check_zmk_define_entry_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_physical_layout_attr_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_input_behavior_binding_inventory(manifest, zmk_config_dir))
+    results.extend(check_zmk_input_listener_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_dts_property_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_gpio_property_inventory(manifest, zmk_config_dir))
     results.extend(check_west_manifest_inventory(manifest, zmk_config_dir))
