@@ -218,11 +218,15 @@ shown in `tools/hardware_validation_evidence.example.toml` and passed with
 `--evidence path/to/evidence.toml`; this lets the manifest remain the stable
 requirement list while measured evidence drives the validation rate.
 Validated evidence must include `validated_at`, `tester`, `firmware_ref`, and
-`artifact_or_notes`. `firmware_ref` is compared as an exact string, usually a
+`artifact_or_notes`. `validated_at` must be a real `YYYY-MM-DD` date that is
+not in the future. `firmware_ref` is compared as an exact string, usually a
 release tag or commit hash for the central/peripheral firmware pair flashed
-during the test. Use `--require-firmware-ref <tag-or-commit>` to reject stale
-validated evidence; combine it with `--require-validated` when a release needs
-all hardware checks proven for that exact firmware. The `--evidence-template`
+during the test; placeholders or moving refs such as `main`, `latest`, or
+`HEAD` are rejected. `artifact_or_notes` must contain a concrete photo, log,
+probe, Vial observation, or similar measured evidence note. Use
+`--require-firmware-ref <tag-or-commit>` to reject stale validated evidence;
+combine it with `--require-validated` when a release needs all hardware checks
+proven for that exact firmware. The `--evidence-template`
 command generates a complete local overlay file containing every current
 hardware check; pass `--firmware-ref-template <tag-or-commit>` with it to
 pre-fill the flashed firmware reference in every entry. Generated

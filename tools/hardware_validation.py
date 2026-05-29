@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import datetime
 import json
 import re
 import sys
@@ -25,6 +26,48 @@ VALID_STATUSES = frozenset(
 VALIDATED_STATUSES = frozenset({"validated"})
 REQUIRED_FIELDS = ("id", "area", "side", "requirement", "evidence", "source", "status")
 VALIDATED_EVIDENCE_FIELDS = ("validated_at", "tester", "firmware_ref", "artifact_or_notes")
+PLACEHOLDER_VALUES = frozenset(
+    {
+        "<tag-or-commit>",
+        "tag-or-commit",
+        "<commit>",
+        "commit",
+        "<firmware-ref>",
+        "firmware-ref",
+        "latest",
+        "head",
+        "main",
+        "master",
+        "current",
+        "local build",
+        "unknown",
+        "n/a",
+        "na",
+        "placeholder",
+        "tester",
+        "name",
+        "todo",
+        "tbd",
+    }
+)
+GENERIC_ARTIFACT_VALUES = frozenset(
+    {
+        "ok",
+        "passed",
+        "tested ok",
+        "tested ok on hardware",
+        "works",
+        "works as expected",
+        "see attached evidence",
+        "synthetic complete evidence overlay for gate testing",
+    }
+)
+ARTIFACT_SIGNAL_RE = re.compile(
+    r"(0x[0-9a-f]+|/|\\|\.log\b|\.txt\b|\.png\b|\.jpg\b|\.jpeg\b|\.mp4\b|"
+    r"photo|video|screenshot|log|probe|scope|serial|i2c|register|rdy|vial|"
+    r"ble|pair|uf2|cursor|scroll|tap|rgb|charge)",
+    re.IGNORECASE,
+)
 EVIDENCE_UPDATE_FIELDS = (
     "status",
     "validated_at",
@@ -33,6 +76,7 @@ EVIDENCE_UPDATE_FIELDS = (
     "artifact_or_notes",
 )
 MARKDOWN_HEADING_RE = re.compile(r"^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$")
+ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 @dataclass
@@ -110,6 +154,54 @@ def validate_source_ref(check_id: str, source: str, source_root: Path) -> list[s
             errors.append(
                 f"{check_id}: source anchor #{anchor} was not found in {source_path_text!r}"
             )
+    return errors
+
+
+def is_placeholder_value(value: Any) -> bool:
+    text = str(value).strip()
+    return (
+        text.lower() in PLACEHOLDER_VALUES
+        or (text.startswith("<") and text.endswith(">") and len(text) > 2)
+    )
+
+
+def validate_validated_evidence(check_id: str, check: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    validated_at = str(check.get("validated_at", "")).strip()
+    tester = str(check.get("tester", "")).strip()
+    firmware_ref = str(check.get("firmware_ref", "")).strip()
+    artifact_or_notes = str(check.get("artifact_or_notes", "")).strip()
+
+    if validated_at and not ISO_DATE_RE.fullmatch(validated_at):
+        errors.append(f"{check_id}: validated_at must use YYYY-MM-DD format")
+    elif validated_at:
+        try:
+            validation_date = datetime.date.fromisoformat(validated_at)
+        except ValueError:
+            errors.append(f"{check_id}: validated_at must be a real calendar date")
+        else:
+            if validation_date > datetime.date.today():
+                errors.append(f"{check_id}: validated_at must not be in the future")
+
+    if tester and is_placeholder_value(tester):
+        errors.append(f"{check_id}: tester must identify the person or bench that ran the check")
+
+    if firmware_ref and is_placeholder_value(firmware_ref):
+        errors.append(f"{check_id}: firmware_ref must be the actual flashed tag or commit")
+
+    if artifact_or_notes and is_placeholder_value(artifact_or_notes):
+        errors.append(f"{check_id}: artifact_or_notes must describe the observed evidence")
+    elif artifact_or_notes and artifact_or_notes.strip().lower() in GENERIC_ARTIFACT_VALUES:
+        errors.append(f"{check_id}: artifact_or_notes must describe the observed evidence")
+    elif artifact_or_notes and len(artifact_or_notes) < 12:
+        errors.append(
+            f"{check_id}: artifact_or_notes must include a specific photo/log/probe/Vial observation note"
+        )
+    elif artifact_or_notes and not ARTIFACT_SIGNAL_RE.search(artifact_or_notes):
+        errors.append(
+            f"{check_id}: artifact_or_notes must include a concrete photo/log/probe/Vial observation note"
+        )
+
     return errors
 
 
@@ -235,18 +327,22 @@ def summarize(
                         f"{check_id}: validated checks require evidence field(s): "
                         f"{', '.join(missing_evidence)}"
                     )
-                elif (
-                    required_firmware_ref is not None
-                    and str(check.get("firmware_ref", "")) != required_firmware_ref
-                ):
-                    errors.append(
-                        f"{check_id}: validated firmware_ref "
-                        f"{str(check.get('firmware_ref', ''))!r} does not match "
-                        f"required {required_firmware_ref!r}"
-                    )
                 else:
-                    validated += 1
-                    counts_as_validated = True
+                    evidence_errors = validate_validated_evidence(check_id, check)
+                    if evidence_errors:
+                        errors.extend(evidence_errors)
+                    elif (
+                        required_firmware_ref is not None
+                        and str(check.get("firmware_ref", "")) != required_firmware_ref
+                    ):
+                        errors.append(
+                            f"{check_id}: validated firmware_ref "
+                            f"{str(check.get('firmware_ref', ''))!r} does not match "
+                            f"required {required_firmware_ref!r}"
+                        )
+                    else:
+                        validated += 1
+                        counts_as_validated = True
             else:
                 remaining.append(
                     {

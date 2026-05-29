@@ -11,7 +11,9 @@
 # tools/hardware_validation_manifest.toml. Keep artifact_or_notes specific:
 # include a photo/log path, probe reading, or Vial observation note. Set
 # firmware_ref to the release tag, commit hash, or other immutable firmware
-# identifier that was flashed during the hardware test.
+# identifier that was flashed during the hardware test. Do not use placeholders
+# or moving refs such as main/latest/HEAD. validated_at must be a real
+# YYYY-MM-DD date that is not in the future.
 
 # [[evidence]]
 # id = "iqs9151_right_i2c_identity"

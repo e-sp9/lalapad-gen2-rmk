@@ -346,11 +346,15 @@ overlay file using the format in
 `tools/hardware_validation_evidence.example.toml`; each evidence entry updates
 one manifest check by id and must provide `validated_at`, `tester`,
 `firmware_ref`, and `artifact_or_notes` before it can count as `validated`.
+`validated_at` must be a real `YYYY-MM-DD` date that is not in the future.
 `firmware_ref` is an exact string match against the release tag, commit hash, or
 other immutable identifier for the central/peripheral firmware pair that was
-flashed. `--require-firmware-ref` only rejects stale validated evidence; combine
-it with `--require-validated` when all checks must be proven for that exact
-firmware. Use `--evidence-template > hardware-validation-evidence.local.toml`
-to generate a complete local overlay for all current hardware checks, or add
+flashed; placeholders and moving refs such as `main`, `latest`, and `HEAD` are
+rejected. `artifact_or_notes` must describe concrete observed evidence such as
+a photo, log, probe reading, Vial observation, or similar check-specific note.
+`--require-firmware-ref` only rejects stale validated evidence; combine it with
+`--require-validated` when all checks must be proven for that exact firmware.
+Use `--evidence-template > hardware-validation-evidence.local.toml` to generate
+a complete local overlay for all current hardware checks, or add
 `--firmware-ref-template <tag-or-commit>` to pre-fill the flashed firmware
 reference before testing.

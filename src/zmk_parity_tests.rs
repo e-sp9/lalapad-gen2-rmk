@@ -82,9 +82,9 @@ fn complete_hardware_evidence_overlay(firmware_ref: &str) -> String {
         evidence.push_str("validated_at = \"2026-05-29\"\n");
         evidence.push_str("tester = \"host parity test\"\n");
         evidence.push_str(&format!("firmware_ref = \"{firmware_ref}\"\n"));
-        evidence.push_str(
-            "artifact_or_notes = \"synthetic complete evidence overlay for gate testing\"\n",
-        );
+        evidence.push_str(&format!(
+            "artifact_or_notes = \"log: /tmp/lalapad-host-parity-{check_id}.txt; simulated host gate evidence for {check_id}\"\n",
+        ));
     }
     evidence
 }
@@ -1008,6 +1008,96 @@ artifact_or_notes = "missing tester should not count"
     assert!(
         !require_output.status.success(),
         "incomplete hardware evidence unexpectedly passed --require-classified"
+    );
+}
+
+#[test]
+fn hardware_validation_rejects_placeholder_or_vague_validated_evidence() {
+    let evidence = r#"
+[[evidence]]
+id = "iqs9151_right_i2c_identity"
+status = "validated"
+validated_at = "2026-13-40"
+tester = "tester"
+firmware_ref = "<tag-or-commit>"
+artifact_or_notes = "TODO"
+
+[[evidence]]
+id = "iqs9151_left_i2c_identity"
+status = "validated"
+validated_at = "2999-01-01"
+tester = "name"
+firmware_ref = "main"
+artifact_or_notes = "tested ok on hardware"
+
+[[evidence]]
+id = "vial_thumb_layer_taps"
+status = "validated"
+validated_at = "2026-05-29"
+tester = "bench operator"
+firmware_ref = "35b3f1f"
+artifact_or_notes = "manual observation completed"
+"#;
+    let path = write_temp_file("hardware-validation-placeholder-evidence", evidence);
+    let output = run_hardware_validation(&["--evidence", path.to_str().unwrap(), "--json"]);
+    let require_output =
+        run_hardware_validation(&["--evidence", path.to_str().unwrap(), "--require-classified"]);
+    let _ = std::fs::remove_file(&path);
+
+    assert!(
+        output.status.success(),
+        "placeholder hardware evidence json report failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(parsed["validated"].as_i64(), Some(0));
+    assert_eq!(parsed["classified"].as_bool(), Some(false));
+    let errors: Vec<_> = parsed["errors"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|error| error.as_str().unwrap())
+        .collect();
+    assert!(
+        errors
+            .iter()
+            .any(|error| error.contains("validated_at must be a real calendar date")),
+        "invalid calendar date should be rejected: {errors:?}"
+    );
+    assert!(
+        errors
+            .iter()
+            .any(|error| error.contains("validated_at must not be in the future")),
+        "future validation date should be rejected: {errors:?}"
+    );
+    assert!(
+        errors
+            .iter()
+            .any(|error| error.contains("tester must identify the person or bench")),
+        "placeholder tester should be rejected: {errors:?}"
+    );
+    assert!(
+        errors
+            .iter()
+            .any(|error| error.contains("firmware_ref must be the actual flashed tag or commit")),
+        "placeholder firmware_ref should be rejected: {errors:?}"
+    );
+    assert!(
+        errors
+            .iter()
+            .any(|error| error.contains("artifact_or_notes must describe the observed evidence")),
+        "placeholder artifact_or_notes should be rejected: {errors:?}"
+    );
+    assert!(
+        errors.iter().any(|error| error.contains(
+            "artifact_or_notes must include a concrete photo/log/probe/Vial observation note"
+        )),
+        "generic artifact_or_notes without a concrete signal should be rejected: {errors:?}"
+    );
+    assert!(
+        !require_output.status.success(),
+        "placeholder hardware evidence unexpectedly passed --require-classified"
     );
 }
 
