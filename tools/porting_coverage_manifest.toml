@@ -422,6 +422,45 @@ west_manifest = [
   "project:zmk-rgbled-widget:remote=caksoylar:revision=v0.3",
   "self:path=config",
 ]
+iqs9151_register_addresses = [
+  "IQS9151_ADDR_PRODUCT_NUMBER=4096",
+  "IQS9151_ADDR_RELATIVE_X=4116",
+  "IQS9151_ADDR_RELATIVE_Y=4118",
+  "IQS9151_ADDR_SINGLE_GESTURES=4124",
+  "IQS9151_ADDR_TWO_FINGER_GESTURES=4126",
+  "IQS9151_ADDR_INFO_FLAGS=4128",
+  "IQS9151_ADDR_TRACKPAD_FLAGS=4130",
+  "IQS9151_ADDR_FINGER_DATA=4132",
+  "IQS9151_ADDR_FINGER1_X=4132",
+  "IQS9151_ADDR_FINGER1_Y=4134",
+  "IQS9151_ADDR_FINGER2_X=4140",
+  "IQS9151_ADDR_FINGER2_Y=4142",
+  "IQS9151_ADDR_TOUCH_STATUS=4188",
+  "IQS9151_ADDR_ALP_COMPENSATION=4444",
+  "IQS9151_ADDR_I2C_UPDATE_KEY=4470",
+  "IQS9151_ADDR_I2C_ADDR=4471",
+  "IQS9151_ADDR_SETTINGS_MINOR=4472",
+  "IQS9151_ADDR_SETTINGS_MAJOR=4473",
+  "IQS9151_ADDR_ATI_MULTIPLIERS=4474",
+  "IQS9151_ADDR_ATI_SETTINGS=4502",
+  "IQS9151_ADDR_TRACKPAD_ATI_TARGET=4502",
+  "IQS9151_ADDR_DEVICE_CONFIG=4514",
+  "IQS9151_ADDR_SYSTEM_CONTROL=4540",
+  "IQS9151_ADDR_CONFIG_SETTINGS=4542",
+  "IQS9151_ADDR_OTHER_SETTINGS=4544",
+  "IQS9151_ADDR_TRACKPAD_SETTINGS=4578",
+  "IQS9151_ADDR_X_RESOLUTION=4582",
+  "IQS9151_ADDR_Y_RESOLUTION=4584",
+  "IQS9151_ADDR_XY_DYNAMIC_FILTER_BOTTOM_SPEED=4586",
+  "IQS9151_ADDR_XY_DYNAMIC_FILTER_TOP_SPEED=4588",
+  "IQS9151_ADDR_XY_DYNAMIC_FILTER_BOTTOM_BETA=4590",
+  "IQS9151_ADDR_GESTURE_ENABLE=4598",
+  "IQS9151_ADDR_TWO_FINGER_GESTURE_ENABLE=4600",
+  "IQS9151_ADDR_RX_TX_MAPPING=4632",
+  "IQS9151_ADDR_CHANNEL_DISABLE=4678",
+  "IQS9151_ADDR_SNAP_ENABLE=4766",
+  "IQS9151_ADDR_TOUCH_THRESHOLD_ADJUST=4854",
+]
 
 [layout]
 rows = 7
@@ -1098,6 +1137,228 @@ source_block = "led2"
 source_property = "gpios"
 expected = ["P1_07"]
 
+[[iqs9151_register_porting]]
+source_const = "IQS9151_ADDR_PRODUCT_NUMBER"
+source_value = 4096
+status = "ported"
+target_const = "ADDR_PRODUCT_NUMBER"
+
+[[iqs9151_register_porting]]
+source_const = "IQS9151_ADDR_RELATIVE_X"
+source_value = 4116
+status = "ported"
+target_const = "ADDR_RELATIVE_X"
+
+[[iqs9151_register_porting]]
+source_const = "IQS9151_ADDR_RELATIVE_Y"
+source_value = 4118
+status = "ported"
+target_const = "ADDR_RELATIVE_Y"
+
+[[iqs9151_register_porting]]
+source_const = "IQS9151_ADDR_SINGLE_GESTURES"
+source_value = 4124
+status = "ported"
+target_const = "ADDR_SINGLE_GESTURES"
+
+[[iqs9151_register_porting]]
+source_const = "IQS9151_ADDR_TWO_FINGER_GESTURES"
+source_value = 4126
+status = "ported"
+target_const = "ADDR_TWO_FINGER_GESTURES"
+
+[[iqs9151_register_porting]]
+source_const = "IQS9151_ADDR_INFO_FLAGS"
+source_value = 4128
+status = "ported"
+target_const = "ADDR_INFO_FLAGS"
+
+[[iqs9151_register_porting]]
+source_const = "IQS9151_ADDR_TRACKPAD_FLAGS"
+source_value = 4130
+status = "ported"
+target_const = "ADDR_TRACKPAD_FLAGS"
+
+[[iqs9151_register_porting]]
+source_const = "IQS9151_ADDR_FINGER_DATA"
+source_value = 4132
+status = "ported"
+target_const = "ADDR_FINGER1_X"
+
+[[iqs9151_register_porting]]
+source_const = "IQS9151_ADDR_FINGER1_X"
+source_value = 4132
+status = "ported"
+target_const = "ADDR_FINGER1_X"
+
+[[iqs9151_register_porting]]
+source_const = "IQS9151_ADDR_FINGER1_Y"
+source_value = 4134
+status = "ported"
+target_const = "ADDR_FINGER1_Y"
+
+[[iqs9151_register_porting]]
+source_const = "IQS9151_ADDR_FINGER2_X"
+source_value = 4140
+status = "ported"
+target_const = "ADDR_FINGER2_X"
+
+[[iqs9151_register_porting]]
+source_const = "IQS9151_ADDR_FINGER2_Y"
+source_value = 4142
+status = "ported"
+target_const = "ADDR_FINGER2_Y"
+
+[[iqs9151_register_porting]]
+source_const = "IQS9151_ADDR_TOUCH_STATUS"
+source_value = 4188
+status = "ported"
+target_const = "ADDR_TOUCH_STATUS"
+
+[[iqs9151_register_porting]]
+source_const = "IQS9151_ADDR_ALP_COMPENSATION"
+source_value = 4444
+status = "ported"
+target_const = "ADDR_ALP_COMPENSATION"
+
+[[iqs9151_register_porting]]
+source_const = "IQS9151_ADDR_I2C_UPDATE_KEY"
+source_value = 4470
+status = "not_ported"
+reason = "RMK does not change the IQS9151 I2C address at runtime."
+
+[[iqs9151_register_porting]]
+source_const = "IQS9151_ADDR_I2C_ADDR"
+source_value = 4471
+status = "not_ported"
+reason = "RMK uses the fixed upstream I2C address and does not persist a rewritten slave address."
+
+[[iqs9151_register_porting]]
+source_const = "IQS9151_ADDR_SETTINGS_MINOR"
+source_value = 4472
+status = "ported"
+target_const = "ADDR_SETTINGS_MINOR"
+
+[[iqs9151_register_porting]]
+source_const = "IQS9151_ADDR_SETTINGS_MAJOR"
+source_value = 4473
+status = "not_ported"
+reason = "The current RMK startup sequence does not branch on the IQS9151 settings major version."
+
+[[iqs9151_register_porting]]
+source_const = "IQS9151_ADDR_ATI_MULTIPLIERS"
+source_value = 4474
+status = "not_ported"
+reason = "The current RMK port writes the extracted configuration bytes and selected target/count overrides, not standalone ATI multiplier overrides."
+
+[[iqs9151_register_porting]]
+source_const = "IQS9151_ADDR_ATI_SETTINGS"
+source_value = 4502
+status = "ported"
+target_const = "ADDR_TRACKPAD_ATI_TARGET"
+
+[[iqs9151_register_porting]]
+source_const = "IQS9151_ADDR_TRACKPAD_ATI_TARGET"
+source_value = 4502
+status = "ported"
+target_const = "ADDR_TRACKPAD_ATI_TARGET"
+
+[[iqs9151_register_porting]]
+source_const = "IQS9151_ADDR_DEVICE_CONFIG"
+source_value = 4514
+status = "ported"
+target_const = "ADDR_TIMING_SETTINGS"
+
+[[iqs9151_register_porting]]
+source_const = "IQS9151_ADDR_SYSTEM_CONTROL"
+source_value = 4540
+status = "ported"
+target_const = "ADDR_SYSTEM_CONTROL"
+
+[[iqs9151_register_porting]]
+source_const = "IQS9151_ADDR_CONFIG_SETTINGS"
+source_value = 4542
+status = "ported"
+target_const = "ADDR_CONFIG_SETTINGS"
+
+[[iqs9151_register_porting]]
+source_const = "IQS9151_ADDR_OTHER_SETTINGS"
+source_value = 4544
+status = "not_ported"
+reason = "The current RMK port does not expose standalone writes for the upstream driver's other-settings block."
+
+[[iqs9151_register_porting]]
+source_const = "IQS9151_ADDR_TRACKPAD_SETTINGS"
+source_value = 4578
+status = "ported"
+target_const = "ADDR_TRACKPAD_SETTINGS"
+
+[[iqs9151_register_porting]]
+source_const = "IQS9151_ADDR_X_RESOLUTION"
+source_value = 4582
+status = "ported"
+target_const = "ADDR_X_RESOLUTION"
+
+[[iqs9151_register_porting]]
+source_const = "IQS9151_ADDR_Y_RESOLUTION"
+source_value = 4584
+status = "ported"
+target_const = "ADDR_Y_RESOLUTION"
+
+[[iqs9151_register_porting]]
+source_const = "IQS9151_ADDR_XY_DYNAMIC_FILTER_BOTTOM_SPEED"
+source_value = 4586
+status = "ported"
+target_const = "ADDR_XY_DYNAMIC_FILTER_BOTTOM_SPEED"
+
+[[iqs9151_register_porting]]
+source_const = "IQS9151_ADDR_XY_DYNAMIC_FILTER_TOP_SPEED"
+source_value = 4588
+status = "ported"
+target_const = "ADDR_XY_DYNAMIC_FILTER_TOP_SPEED"
+
+[[iqs9151_register_porting]]
+source_const = "IQS9151_ADDR_XY_DYNAMIC_FILTER_BOTTOM_BETA"
+source_value = 4590
+status = "ported"
+target_const = "ADDR_XY_DYNAMIC_FILTER_BOTTOM_BETA"
+
+[[iqs9151_register_porting]]
+source_const = "IQS9151_ADDR_GESTURE_ENABLE"
+source_value = 4598
+status = "ported"
+target_const = "ADDR_GESTURE_ENABLE"
+
+[[iqs9151_register_porting]]
+source_const = "IQS9151_ADDR_TWO_FINGER_GESTURE_ENABLE"
+source_value = 4600
+status = "ported"
+target_const = "ADDR_TWO_FINGER_GESTURE_ENABLE"
+
+[[iqs9151_register_porting]]
+source_const = "IQS9151_ADDR_RX_TX_MAPPING"
+source_value = 4632
+status = "ported"
+target_const = "ADDR_RX_TX_MAPPING"
+
+[[iqs9151_register_porting]]
+source_const = "IQS9151_ADDR_CHANNEL_DISABLE"
+source_value = 4678
+status = "ported"
+target_const = "ADDR_CHANNEL_DISABLE"
+
+[[iqs9151_register_porting]]
+source_const = "IQS9151_ADDR_SNAP_ENABLE"
+source_value = 4766
+status = "ported"
+target_const = "ADDR_SNAP_ENABLE"
+
+[[iqs9151_register_porting]]
+source_const = "IQS9151_ADDR_TOUCH_THRESHOLD_ADJUST"
+source_value = 4854
+status = "not_ported"
+reason = "The current RMK port does not expose the upstream driver's touch-threshold adjustment register as a standalone runtime setting."
+
 [[rust_const_values]]
 id = "iqs9151_i2c_address"
 target_file = "src/iqs9151.rs"
@@ -1183,16 +1444,76 @@ target_const = "ADDR_TOUCH_STATUS"
 expected = 4188
 
 [[rust_const_values]]
+id = "iqs9151_register_alp_compensation"
+target_file = "src/iqs9151.rs"
+target_const = "ADDR_ALP_COMPENSATION"
+expected = 4444
+
+[[rust_const_values]]
+id = "iqs9151_register_settings_minor"
+target_file = "src/iqs9151.rs"
+target_const = "ADDR_SETTINGS_MINOR"
+expected = 4472
+
+[[rust_const_values]]
+id = "iqs9151_register_timing_settings"
+target_file = "src/iqs9151.rs"
+target_const = "ADDR_TIMING_SETTINGS"
+expected = 4514
+
+[[rust_const_values]]
+id = "iqs9151_register_trackpad_ati_target"
+target_file = "src/iqs9151.rs"
+target_const = "ADDR_TRACKPAD_ATI_TARGET"
+expected = 4502
+
+[[rust_const_values]]
 id = "iqs9151_register_system_control"
 target_file = "src/iqs9151.rs"
 target_const = "ADDR_SYSTEM_CONTROL"
 expected = 4540
 
 [[rust_const_values]]
+id = "iqs9151_register_config_settings"
+target_file = "src/iqs9151.rs"
+target_const = "ADDR_CONFIG_SETTINGS"
+expected = 4542
+
+[[rust_const_values]]
 id = "iqs9151_register_trackpad_settings"
 target_file = "src/iqs9151.rs"
 target_const = "ADDR_TRACKPAD_SETTINGS"
 expected = 4578
+
+[[rust_const_values]]
+id = "iqs9151_register_x_resolution"
+target_file = "src/iqs9151.rs"
+target_const = "ADDR_X_RESOLUTION"
+expected = 4582
+
+[[rust_const_values]]
+id = "iqs9151_register_y_resolution"
+target_file = "src/iqs9151.rs"
+target_const = "ADDR_Y_RESOLUTION"
+expected = 4584
+
+[[rust_const_values]]
+id = "iqs9151_register_xy_dynamic_filter_bottom_speed"
+target_file = "src/iqs9151.rs"
+target_const = "ADDR_XY_DYNAMIC_FILTER_BOTTOM_SPEED"
+expected = 4586
+
+[[rust_const_values]]
+id = "iqs9151_register_xy_dynamic_filter_top_speed"
+target_file = "src/iqs9151.rs"
+target_const = "ADDR_XY_DYNAMIC_FILTER_TOP_SPEED"
+expected = 4588
+
+[[rust_const_values]]
+id = "iqs9151_register_xy_dynamic_filter_bottom_beta"
+target_file = "src/iqs9151.rs"
+target_const = "ADDR_XY_DYNAMIC_FILTER_BOTTOM_BETA"
+expected = 4590
 
 [[rust_const_values]]
 id = "iqs9151_register_gesture_enable"
@@ -1205,6 +1526,24 @@ id = "iqs9151_register_two_finger_gesture_enable"
 target_file = "src/iqs9151.rs"
 target_const = "ADDR_TWO_FINGER_GESTURE_ENABLE"
 expected = 4600
+
+[[rust_const_values]]
+id = "iqs9151_register_rx_tx_mapping"
+target_file = "src/iqs9151.rs"
+target_const = "ADDR_RX_TX_MAPPING"
+expected = 4632
+
+[[rust_const_values]]
+id = "iqs9151_register_channel_disable"
+target_file = "src/iqs9151.rs"
+target_const = "ADDR_CHANNEL_DISABLE"
+expected = 4678
+
+[[rust_const_values]]
+id = "iqs9151_register_snap_enable"
+target_file = "src/iqs9151.rs"
+target_const = "ADDR_SNAP_ENABLE"
+expected = 4766
 
 [[rust_const_values]]
 id = "iqs9151_info_show_reset_bit"
@@ -1557,6 +1896,42 @@ source_key = "CONFIG_RGBLED_WIDGET_BATTERY_LEVEL_CRITICAL"
 target_file = "src/rgb_widget.rs"
 target_const = "BATTERY_LEVEL_CRITICAL"
 expected = 10
+
+[[rust_const_inventories]]
+id = "iqs9151_register_address_inventory"
+target_file = "src/iqs9151.rs"
+name_regex = "ADDR_.*"
+expected = [
+  "ADDR_PRODUCT_NUMBER",
+  "ADDR_RELATIVE_X",
+  "ADDR_RELATIVE_Y",
+  "ADDR_SINGLE_GESTURES",
+  "ADDR_TWO_FINGER_GESTURES",
+  "ADDR_INFO_FLAGS",
+  "ADDR_TRACKPAD_FLAGS",
+  "ADDR_FINGER1_X",
+  "ADDR_FINGER1_Y",
+  "ADDR_FINGER2_X",
+  "ADDR_FINGER2_Y",
+  "ADDR_TOUCH_STATUS",
+  "ADDR_ALP_COMPENSATION",
+  "ADDR_SETTINGS_MINOR",
+  "ADDR_TIMING_SETTINGS",
+  "ADDR_TRACKPAD_ATI_TARGET",
+  "ADDR_SYSTEM_CONTROL",
+  "ADDR_CONFIG_SETTINGS",
+  "ADDR_TRACKPAD_SETTINGS",
+  "ADDR_X_RESOLUTION",
+  "ADDR_Y_RESOLUTION",
+  "ADDR_XY_DYNAMIC_FILTER_BOTTOM_SPEED",
+  "ADDR_XY_DYNAMIC_FILTER_TOP_SPEED",
+  "ADDR_XY_DYNAMIC_FILTER_BOTTOM_BETA",
+  "ADDR_GESTURE_ENABLE",
+  "ADDR_TWO_FINGER_GESTURE_ENABLE",
+  "ADDR_RX_TX_MAPPING",
+  "ADDR_CHANNEL_DISABLE",
+  "ADDR_SNAP_ENABLE",
+]
 
 [[rust_byte_arrays]]
 id = "iqs9151_alp_compensation_bytes"

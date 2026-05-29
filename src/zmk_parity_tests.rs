@@ -707,6 +707,64 @@ fn porting_coverage_includes_exact_rmk_inventory_gates() {
         assert_eq!(inventory["total"].as_i64(), Some(2));
         assert_eq!(inventory["ok"], true);
     }
+
+    for const_inventory in porting_coverage_manifest_toml()["rust_const_inventories"]
+        .as_array()
+        .unwrap()
+    {
+        let inventory_id = const_inventory["id"].as_str().unwrap();
+        let expected_len = const_inventory["expected"].as_array().unwrap().len() as i64;
+        let inventory = results
+            .iter()
+            .find(|result| result["id"] == inventory_id)
+            .unwrap_or_else(|| {
+                panic!("Rust const inventory coverage result is missing for {inventory_id}")
+            });
+        assert_eq!(inventory["kind"], "rust_const_inventory");
+        assert_eq!(inventory["passed"].as_i64(), Some(expected_len));
+        assert_eq!(inventory["total"].as_i64(), Some(expected_len));
+        assert_eq!(inventory["ok"], true);
+    }
+
+    let register_porting_inventory = results
+        .iter()
+        .find(|result| result["id"] == "iqs9151_upstream_register_address_classification")
+        .expect("IQS9151 upstream register classification coverage result is missing");
+    let expected_register_count =
+        porting_coverage_manifest_toml()["source_inventory"]["iqs9151_register_addresses"]
+            .as_array()
+            .unwrap()
+            .len() as i64;
+    assert_eq!(
+        register_porting_inventory["kind"],
+        "iqs9151_register_porting"
+    );
+    assert_eq!(
+        register_porting_inventory["passed"].as_i64(),
+        Some(expected_register_count)
+    );
+    assert_eq!(
+        register_porting_inventory["total"].as_i64(),
+        Some(expected_register_count)
+    );
+    assert_eq!(register_porting_inventory["ok"], true);
+
+    for register in porting_coverage_manifest_toml()["iqs9151_register_porting"]
+        .as_array()
+        .unwrap()
+    {
+        let source_const = register["source_const"].as_str().unwrap();
+        let register_result = results
+            .iter()
+            .find(|result| result["id"] == format!("iqs9151_register_porting.{source_const}"))
+            .unwrap_or_else(|| {
+                panic!("IQS9151 register porting result is missing for {source_const}")
+            });
+        assert_eq!(register_result["kind"], "iqs9151_register_porting");
+        assert_eq!(register_result["passed"].as_i64(), Some(2));
+        assert_eq!(register_result["total"].as_i64(), Some(2));
+        assert_eq!(register_result["ok"], true);
+    }
 }
 
 #[test]
@@ -3344,6 +3402,297 @@ print(json.dumps({"ok": ok, "changed": changed}))
             .as_str()
             .unwrap()
             .contains("source expected")
+    );
+}
+
+#[test]
+fn porting_coverage_rejects_rust_const_inventory_drift() {
+    let output = run_python(
+        r#"
+import importlib.util
+import json
+import sys
+import tempfile
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("porting_coverage", "tools/porting_coverage.py")
+pc = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = pc
+spec.loader.exec_module(pc)
+
+manifest = {
+    "rust_const_inventories": [
+        {
+            "id": "register_addresses",
+            "target_file": "firmware.rs",
+            "name_regex": "ADDR_.*",
+            "expected": [
+                "ADDR_PRODUCT_NUMBER",
+                "ADDR_RELATIVE_X",
+                "ADDR_RELATIVE_Y",
+            ],
+        },
+        {
+            "id": "missing_file",
+            "target_file": "missing.rs",
+            "name_regex": "ADDR_.*",
+            "expected": ["ADDR_PRODUCT_NUMBER"],
+        },
+        {
+            "id": "bad_regex",
+            "target_file": "firmware.rs",
+            "name_regex": "[",
+            "expected": ["ADDR_PRODUCT_NUMBER"],
+        },
+    ],
+}
+
+def pack(results):
+    return [result.__dict__ | {"ok": result.ok} for result in results]
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    firmware = root / "firmware.rs"
+    firmware.write_text('''
+    pub const ADDR_PRODUCT_NUMBER: u16 = 0x1000;
+    pub const ADDR_RELATIVE_X: u16 = 0x1014;
+    pub const ADDR_RELATIVE_Y: u16 = 0x1016;
+    pub const DEFAULT_X_RESOLUTION: u16 = 2457;
+    ''')
+    ok = pack(pc.check_rust_const_inventories(manifest, root))
+
+    firmware.write_text('''
+    pub const ADDR_PRODUCT_NUMBER: u16 = 0x1000;
+    pub const ADDR_RELATIVE_Y: u16 = 0x1016;
+    pub const ADDR_EXTRA: u16 = 0x9999;
+    ''')
+    changed = pack(pc.check_rust_const_inventories(manifest, root))
+
+    firmware.write_text('''
+    pub const ADDR_PRODUCT_NUMBER: u16 = 0x1000;
+    pub const ADDR_RELATIVE_X: u16 = 0x1014;
+    pub const ADDR_RELATIVE_Y: u16 = 0x1016;
+    pub const ADDR_EXTRA: u16 = 0x9999;
+    ''')
+    appended = pack(pc.check_rust_const_inventories(manifest, root))
+
+print(json.dumps({"ok": ok, "changed": changed, "appended": appended}))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "Rust const inventory parser check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let ok_inventory = parsed["ok"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "register_addresses")
+        .expect("missing ok const inventory result");
+    assert_eq!(ok_inventory["kind"], "rust_const_inventory");
+    assert_eq!(ok_inventory["passed"].as_i64(), Some(3));
+    assert_eq!(ok_inventory["total"].as_i64(), Some(3));
+    assert_eq!(ok_inventory["ok"], true);
+
+    let missing_file = parsed["ok"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "missing_file")
+        .expect("missing missing-file inventory result");
+    assert_eq!(missing_file["kind"], "rust_const_inventory");
+    assert_eq!(missing_file["passed"].as_i64(), Some(0));
+    assert_eq!(missing_file["total"].as_i64(), Some(1));
+    assert_eq!(missing_file["ok"], false);
+    assert!(
+        missing_file["message"]
+            .as_str()
+            .unwrap()
+            .contains("missing.rs")
+    );
+
+    let bad_regex = parsed["ok"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "bad_regex")
+        .expect("missing bad-regex inventory result");
+    assert_eq!(bad_regex["kind"], "rust_const_inventory");
+    assert_eq!(bad_regex["passed"].as_i64(), Some(0));
+    assert_eq!(bad_regex["total"].as_i64(), Some(1));
+    assert_eq!(bad_regex["ok"], false);
+
+    let changed = parsed["changed"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "register_addresses")
+        .expect("missing changed const inventory result");
+    assert_eq!(changed["kind"], "rust_const_inventory");
+    assert_eq!(changed["passed"].as_i64(), Some(1));
+    assert_eq!(changed["total"].as_i64(), Some(3));
+    assert_eq!(changed["ok"], false);
+    assert!(
+        changed["message"]
+            .as_str()
+            .unwrap()
+            .contains("expected 'ADDR_RELATIVE_X', got 'ADDR_RELATIVE_Y'")
+    );
+
+    let appended = parsed["appended"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "register_addresses")
+        .expect("missing appended const inventory result");
+    assert_eq!(appended["kind"], "rust_const_inventory");
+    assert_eq!(appended["passed"].as_i64(), Some(3));
+    assert_eq!(appended["total"].as_i64(), Some(4));
+    assert_eq!(appended["ok"], false);
+    assert!(
+        appended["message"]
+            .as_str()
+            .unwrap()
+            .contains("expected None, got 'ADDR_EXTRA'")
+    );
+}
+
+#[test]
+fn porting_coverage_rejects_iqs9151_register_porting_drift() {
+    let output = run_python(
+        r#"
+import importlib.util
+import json
+import sys
+import tempfile
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("porting_coverage", "tools/porting_coverage.py")
+pc = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = pc
+spec.loader.exec_module(pc)
+
+ok_manifest = {
+    "source_inventory": {
+        "iqs9151_register_addresses": [
+            "IQS9151_ADDR_A=1",
+            "IQS9151_ADDR_B=2",
+            "IQS9151_ADDR_C=3",
+        ],
+    },
+    "iqs9151_register_porting": [
+        {"source_const": "IQS9151_ADDR_A", "source_value": 1, "status": "ported", "target_const": "ADDR_A"},
+        {"source_const": "IQS9151_ADDR_B", "source_value": 2, "status": "not_ported", "reason": "not needed"},
+        {"source_const": "IQS9151_ADDR_C", "source_value": 3, "status": "ported", "target_const": "ADDR_C"},
+    ],
+}
+bad_manifest = {
+    "source_inventory": ok_manifest["source_inventory"],
+    "iqs9151_register_porting": [
+        {"source_const": "IQS9151_ADDR_A", "source_value": 1, "status": "ported", "target_const": "ADDR_A"},
+        {"source_const": "IQS9151_ADDR_B", "source_value": 2, "status": "not_ported", "reason": ""},
+        {"source_const": "IQS9151_ADDR_D", "source_value": 4, "status": "ported", "target_const": "ADDR_D"},
+    ],
+}
+
+def pack(results):
+    return [result.__dict__ | {"ok": result.ok} for result in results]
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    (root / "src").mkdir()
+    (root / "src" / "iqs9151.rs").write_text('''
+    pub const ADDR_A: u16 = 1;
+    pub const ADDR_C: u16 = 3;
+    pub const ADDR_D: u16 = 5;
+    ''')
+    ok = pack(pc.check_iqs9151_register_porting(ok_manifest, root))
+    bad = pack(pc.check_iqs9151_register_porting(bad_manifest, root))
+
+print(json.dumps({"ok": ok, "bad": bad}))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "IQS9151 register porting parser check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let ok_inventory = parsed["ok"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "iqs9151_upstream_register_address_classification")
+        .expect("missing ok register classification result");
+    assert_eq!(ok_inventory["kind"], "iqs9151_register_porting");
+    assert_eq!(ok_inventory["passed"].as_i64(), Some(3));
+    assert_eq!(ok_inventory["total"].as_i64(), Some(3));
+    assert_eq!(ok_inventory["ok"], true);
+    for result in parsed["ok"].as_array().unwrap() {
+        assert_eq!(result["kind"], "iqs9151_register_porting");
+        assert_eq!(result["ok"], true);
+    }
+
+    let bad_inventory = parsed["bad"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "iqs9151_upstream_register_address_classification")
+        .expect("missing bad register classification result");
+    assert_eq!(bad_inventory["passed"].as_i64(), Some(2));
+    assert_eq!(bad_inventory["total"].as_i64(), Some(3));
+    assert_eq!(bad_inventory["ok"], false);
+    assert!(
+        bad_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("expected 'IQS9151_ADDR_C=3', got 'IQS9151_ADDR_D=4'")
+    );
+
+    let missing_reason = parsed["bad"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "iqs9151_register_porting.IQS9151_ADDR_B")
+        .expect("missing no-reason result");
+    assert_eq!(missing_reason["passed"].as_i64(), Some(1));
+    assert_eq!(missing_reason["total"].as_i64(), Some(2));
+    assert_eq!(missing_reason["ok"], false);
+    assert!(
+        missing_reason["message"]
+            .as_str()
+            .unwrap()
+            .contains("has no reason")
+    );
+
+    let extra_source = parsed["bad"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "iqs9151_register_porting.IQS9151_ADDR_D")
+        .expect("missing extra-source result");
+    assert_eq!(extra_source["passed"].as_i64(), Some(0));
+    assert_eq!(extra_source["total"].as_i64(), Some(2));
+    assert_eq!(extra_source["ok"], false);
+    assert!(
+        extra_source["message"]
+            .as_str()
+            .unwrap()
+            .contains("is not in inventory")
+    );
+    assert!(
+        extra_source["message"]
+            .as_str()
+            .unwrap()
+            .contains("ADDR_D expected source value 4, got 5")
     );
 }
 

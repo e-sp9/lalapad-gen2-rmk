@@ -126,9 +126,10 @@ cargo build --release
 when the upstream ZMK checkout from the manifest is present, also parses
 `config/lalapadgen2.keymap`, shield overlays, ZMK Kconfig values, and selected
 RMK Rust constants to verify that the migration contract still matches the
-source firmware. The Rust checks cover IQS9151 product/register addresses,
-reset/gesture bits, dynamic-scale bounds, timing values, and initialization
-byte-array checksums. It also checks left/right IQS9151 Kconfig parity and the
+source firmware. The Rust checks cover the RMK-side IQS9151 register-address
+inventory, upstream IQS9151 register porting classifications, product/register
+address values, reset/gesture bits, dynamic-scale bounds, timing values, and
+initialization byte-array checksums. It also checks left/right IQS9151 Kconfig parity and the
 ZMK trackpad listener routing shape, verifies that every active ZMK Kconfig key
 in the source files is classified by the migration contract, and checks Vial's
 matrix positions, ZMK `default_transform` order, the active ZMK physical-layout

@@ -197,9 +197,11 @@ cells, the exact RMK combo inventory, tri-layer and tap-hold behavior settings,
 and golden thumb-layer scenarios for Space, Enter, and the system tri-layer. It
 also covers source-backed split matrix pins,
 right-central/left-peripheral orientation, BLE TX power, charge pins, RGB pins,
-IQS9151 I2C/IRQ pins, trackpad scaling constants, IQS9151 product/register
-addresses, reset/gesture bits, dynamic-scale bounds, initialization byte-array
-checksums, and selected ZMK driver thresholds. Source-backed checks also verify the ZMK global Kconfig flags,
+IQS9151 I2C/IRQ pins, trackpad scaling constants, the RMK-side IQS9151
+register-address inventory, upstream IQS9151 register porting classifications,
+product/register address values, reset/gesture bits, dynamic-scale bounds,
+initialization byte-array checksums, and selected ZMK driver thresholds.
+Source-backed checks also verify the ZMK global Kconfig flags,
 left/right IQS9151 Kconfig parity, trackpad listener split routing, and
 tap/gesture timing constants that are mirrored into RMK. The gate also verifies
 that every active ZMK Kconfig key in the configured source files is classified

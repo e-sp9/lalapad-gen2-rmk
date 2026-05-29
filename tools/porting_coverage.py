@@ -1231,6 +1231,17 @@ def parse_rust_byte_array(path: Path, name: str) -> list[int]:
     return values
 
 
+def rust_const_inventory(path: Path, name_regex: str) -> list[str]:
+    text = re.sub(r"/\*.*?\*/", "", path.read_text(), flags=re.S)
+    text = re.sub(r"//.*", "", text)
+    pattern = re.compile(name_regex)
+    return [
+        name
+        for name in re.findall(r"(?m)^\s*(?:pub(?:\([^)]*\))?\s+)?const\s+([A-Z][A-Z0-9_]*)\s*:", text)
+        if pattern.fullmatch(name)
+    ]
+
+
 def check_source_regex_values(manifest: dict[str, Any], zmk_config_dir: Path) -> list[Result]:
     results: list[Result] = []
     for check in manifest.get("source_regex_values", []):
@@ -2614,6 +2625,103 @@ def check_rust_byte_arrays(manifest: dict[str, Any], project_root: Path) -> list
     return results
 
 
+def check_rust_const_inventories(manifest: dict[str, Any], project_root: Path) -> list[Result]:
+    results: list[Result] = []
+    for check in manifest.get("rust_const_inventories", []):
+        expected = list(check["expected"])
+        result_id = check["id"]
+        try:
+            actual = rust_const_inventory(
+                project_root / check["target_file"], check["name_regex"]
+            )
+        except (OSError, ValueError, re.error) as e:
+            results.append(
+                Result(
+                    result_id,
+                    "rust_const_inventory",
+                    0,
+                    max(1, len(expected)),
+                    str(e),
+                )
+            )
+            continue
+        results.append(
+            ordered_inventory_result(result_id, "rust_const_inventory", expected, actual)
+        )
+    return results
+
+
+def check_iqs9151_register_porting(
+    manifest: dict[str, Any], project_root: Path
+) -> list[Result]:
+    expected_inventory = list(
+        manifest.get("source_inventory", {}).get("iqs9151_register_addresses", [])
+    )
+    entries = list(manifest.get("iqs9151_register_porting", []))
+    actual_inventory = [
+        f"{entry['source_const']}={int(entry['source_value'])}" for entry in entries
+    ]
+    results = [
+        ordered_inventory_result(
+            "iqs9151_upstream_register_address_classification",
+            "iqs9151_register_porting",
+            expected_inventory,
+            actual_inventory,
+        )
+    ]
+
+    for entry in entries:
+        source_const = entry["source_const"]
+        source_value = int(entry["source_value"])
+        status = entry["status"]
+        result_id = f"iqs9151_register_porting.{source_const}"
+        passed = 0
+        total = 1
+        messages: list[str] = []
+
+        if f"{source_const}={source_value}" in expected_inventory:
+            passed += 1
+        else:
+            messages.append(f"source register {source_const}={source_value} is not in inventory")
+
+        if status == "ported":
+            total += 1
+            target_file = entry.get("target_file", "src/iqs9151.rs")
+            target_const = entry["target_const"]
+            try:
+                actual_const = parse_rust_const(project_root / target_file, target_const)
+            except (OSError, ValueError) as e:
+                messages.append(str(e))
+            else:
+                if actual_const == source_value:
+                    passed += 1
+                else:
+                    messages.append(
+                        f"{target_const} expected source value {source_value!r}, got {actual_const!r}"
+                    )
+        elif status == "not_ported":
+            total += 1
+            reason = str(entry.get("reason", "")).strip()
+            if reason:
+                passed += 1
+            else:
+                messages.append(f"{source_const} is not ported but has no reason")
+        else:
+            messages.append(f"{source_const} has invalid status {status!r}")
+
+        results.append(
+            Result(
+                result_id,
+                "iqs9151_register_porting",
+                passed,
+                total,
+                "ok" if not messages else "; ".join(messages),
+            )
+        )
+
+    return results
+
+
 def check_code_contains(manifest: dict[str, Any], project_root: Path) -> list[Result]:
     results: list[Result] = []
     for check in manifest.get("code_contains", []):
@@ -3124,6 +3232,8 @@ def check_zmk_source(
     results.extend(check_source_regex_values(manifest, zmk_config_dir))
     results.extend(check_zmk_matrix_transform(manifest, zmk_config_dir))
     results.extend(check_rust_const_values(manifest, zmk_config_dir, project_root))
+    results.extend(check_rust_const_inventories(manifest, project_root))
+    results.extend(check_iqs9151_register_porting(manifest, project_root))
     results.extend(check_rust_byte_arrays(manifest, project_root))
     results.extend(check_vial_layout(manifest, project_root, zmk_config_dir))
     return results
