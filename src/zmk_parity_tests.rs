@@ -6,6 +6,8 @@ const KEYBOARD_TOML: &str = include_str!("../keyboard.toml");
 const FIRMWARE_WORKFLOW_YAML: &str = include_str!("../.github/workflows/firmware.yml");
 const HARDWARE_VALIDATION_MANIFEST_TOML: &str =
     include_str!("../tools/hardware_validation_manifest.toml");
+const HARDWARE_VALIDATION_EVIDENCE_EXAMPLE_TOML: &str =
+    include_str!("../tools/hardware_validation_evidence.example.toml");
 const MAKEFILE_TOML: &str = include_str!("../Makefile.toml");
 const PORTING_COVERAGE_MANIFEST_TOML: &str =
     include_str!("../tools/porting_coverage_manifest.toml");
@@ -303,6 +305,111 @@ checks = "not an array"
 }
 
 #[test]
+fn hardware_validation_evidence_overlay_can_validate_individual_checks() {
+    let evidence = r#"
+[[evidence]]
+id = "iqs9151_right_i2c_identity"
+status = "validated"
+validated_at = "2026-05-29"
+tester = "hardware bench"
+artifact_or_notes = "I2C scan found 0x56 and product register 0x1000 read 0x09bc."
+"#;
+    let path = write_temp_file("hardware-validation-evidence", evidence);
+    let output = run_hardware_validation(&["--evidence", path.to_str().unwrap(), "--json"]);
+    let _ = std::fs::remove_file(&path);
+
+    assert!(
+        output.status.success(),
+        "hardware validation evidence overlay failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(parsed["total"].as_i64(), Some(12));
+    assert_eq!(parsed["validated"].as_i64(), Some(1));
+    assert_eq!(parsed["by_status"]["validated"].as_i64(), Some(1));
+    assert_eq!(parsed["by_status"]["requires_hardware"].as_i64(), Some(11));
+    assert_eq!(parsed["errors"].as_array().unwrap().len(), 0);
+}
+
+#[test]
+fn hardware_validation_does_not_count_incomplete_validated_evidence() {
+    let evidence = r#"
+[[evidence]]
+id = "iqs9151_right_i2c_identity"
+status = "validated"
+validated_at = "2026-05-29"
+artifact_or_notes = "missing tester should not count"
+"#;
+    let path = write_temp_file("hardware-validation-incomplete-evidence", evidence);
+    let output = run_hardware_validation(&["--evidence", path.to_str().unwrap(), "--json"]);
+    let _ = std::fs::remove_file(&path);
+
+    assert!(
+        output.status.success(),
+        "incomplete hardware evidence json report failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(parsed["validated"].as_i64(), Some(0));
+    assert_eq!(parsed["classified"].as_bool(), Some(false));
+    assert!(
+        parsed["errors"].as_array().unwrap()[0]
+            .as_str()
+            .unwrap()
+            .contains("validated checks require evidence field(s): tester")
+    );
+
+    let require_output =
+        run_hardware_validation(&["--evidence", path.to_str().unwrap(), "--require-classified"]);
+    assert!(
+        !require_output.status.success(),
+        "incomplete hardware evidence unexpectedly passed --require-classified"
+    );
+}
+
+#[test]
+fn hardware_validation_evidence_overlay_rejects_unknown_and_duplicate_ids() {
+    let evidence = r#"
+[[evidence]]
+id = "unknown_check"
+status = "validated"
+validated_at = "2026-05-29"
+tester = "hardware bench"
+artifact_or_notes = "unknown"
+
+[[evidence]]
+id = "vial_thumb_layer_taps"
+status = "validated"
+validated_at = "2026-05-29"
+tester = "hardware bench"
+artifact_or_notes = "first"
+
+[[evidence]]
+id = "vial_thumb_layer_taps"
+status = "validated"
+validated_at = "2026-05-29"
+tester = "hardware bench"
+artifact_or_notes = "duplicate"
+"#;
+    let path = write_temp_file("hardware-validation-bad-evidence", evidence);
+    let output =
+        run_hardware_validation(&["--evidence", path.to_str().unwrap(), "--require-classified"]);
+    let _ = std::fs::remove_file(&path);
+
+    assert!(
+        !output.status.success(),
+        "bad hardware evidence unexpectedly passed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("unknown_check: evidence references unknown hardware check"));
+    assert!(stderr.contains("vial_thumb_layer_taps: duplicate evidence entry"));
+}
+
+#[test]
 fn local_validation_entrypoints_match_ci_gates() {
     assert!(
         MAKEFILE_TOML.contains("--require-porting-complete"),
@@ -323,13 +430,24 @@ fn local_validation_entrypoints_match_ci_gates() {
         "--require-porting-complete",
         "tools/hardware_validation.py --require-classified",
         "tools/hardware_validation.py --markdown",
+        "tools/hardware_validation.py --evidence path/to/evidence.toml --markdown",
         "tools/hardware_validation_manifest.toml",
+        "tools/hardware_validation_evidence.example.toml",
     ] {
         assert!(
             PULL_REQUEST_TEMPLATE_MD.contains(required),
             "PR template is missing validation item {required:?}"
         );
     }
+    assert!(
+        FIRMWARE_WORKFLOW_YAML.contains("tools/hardware_validation_evidence.example.toml"),
+        "firmware CI path filters should include the hardware evidence template"
+    );
+    assert!(
+        HARDWARE_VALIDATION_EVIDENCE_EXAMPLE_TOML
+            .contains("tools/hardware_validation.py --evidence path/to/evidence.toml --markdown"),
+        "hardware evidence example should document overlay report usage"
+    );
 }
 
 #[test]

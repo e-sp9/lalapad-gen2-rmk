@@ -112,7 +112,7 @@ Reset/storage-clear UF2 files, when generated for hardware testing, are kept und
 
 ```shell
 python3 -m json.tool vial.json >/tmp/lalapad-vial-check.json
-python3 -c 'import tomllib; [tomllib.load(open(path, "rb")) for path in ("keyboard.toml", "Cargo.toml", "tools/porting_coverage_manifest.toml", "tools/hardware_validation_manifest.toml")]; print("toml ok")'
+python3 -c 'import tomllib; [tomllib.load(open(path, "rb")) for path in ("keyboard.toml", "Cargo.toml", "tools/porting_coverage_manifest.toml", "tools/hardware_validation_manifest.toml", "tools/hardware_validation_evidence.example.toml")]; print("toml ok")'
 rmkit get-chip --keyboard-toml-path keyboard.toml
 rmkit get-project-name --keyboard-toml-path keyboard.toml
 python3 tools/porting_coverage.py --require-zmk-source --require-porting-complete
@@ -122,6 +122,12 @@ python3 tools/check_flash_layout.py --config-only
 cargo check --release --bin central
 cargo check --release --bin peripheral
 cargo build --release
+```
+
+When real hardware evidence changed, also run:
+
+```shell
+python3 tools/hardware_validation.py --evidence path/to/evidence.toml --markdown
 ```
 
 `tools/porting_coverage.py` reads `tools/porting_coverage_manifest.toml` and,
@@ -179,7 +185,10 @@ must stay explicitly tracked, but it does not use `--require-validated` because
 real hardware evidence cannot be created by GitHub Actions. The CI job also
 writes `python3 tools/hardware_validation.py --markdown` to the GitHub Actions
 step summary so remaining real-device evidence is visible next to each release
-build.
+build. Real hardware results can be kept in a separate overlay file using the
+format shown in `tools/hardware_validation_evidence.example.toml` and passed
+with `--evidence path/to/evidence.toml`; this lets the manifest remain the
+stable requirement list while measured evidence drives the validation rate.
 
 Host-side parity tests can be run explicitly with:
 

@@ -288,6 +288,7 @@ Run:
 ```sh
 python3 tools/hardware_validation.py --require-classified
 python3 tools/hardware_validation.py --markdown
+python3 tools/hardware_validation.py --evidence path/to/evidence.toml --markdown
 ```
 
 The command prints the real-hardware validation rate and remaining evidence
@@ -296,4 +297,8 @@ item must have a valid status and evidence description. CI intentionally does
 not use `--require-validated`; changing a check to `validated` requires actual
 device evidence from the checklist, not just a green software build. The
 Markdown mode emits the same tracker as a table for release notes, PR review,
-and the GitHub Actions step summary.
+and the GitHub Actions step summary. Hardware evidence can also be recorded in
+a separate overlay file using the format in
+`tools/hardware_validation_evidence.example.toml`; each evidence entry updates
+one manifest check by id and must provide `validated_at`, `tester`, and
+`artifact_or_notes` before it can count as `validated`.
