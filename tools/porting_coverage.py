@@ -2857,6 +2857,12 @@ def coverage_by_kind(results: list[Result]) -> dict[str, CoverageBucket]:
     return dict(sorted(by_kind.items()))
 
 
+def result_inventory_digest(results: list[Result]) -> tuple[int, str]:
+    entries = sorted(f"{result.kind}\t{result.id}\t{result.total}" for result in results)
+    payload = "\n".join(entries) + "\n"
+    return len(entries), hashlib.sha256(payload.encode()).hexdigest()
+
+
 def compare_int_field(
     errors: list[str],
     label: str,
@@ -2879,6 +2885,8 @@ def baseline_errors(
     total: int,
     by_kind: dict[str, CoverageBucket],
     status_summary: PortingStatusSummary,
+    result_count: int,
+    result_inventory_sha256: str,
 ) -> list[str]:
     errors: list[str] = []
     coverage = baseline.get("coverage", {})
@@ -2886,6 +2894,21 @@ def baseline_errors(
         return ["coverage baseline must contain a [coverage] table"]
     compare_int_field(errors, "coverage", coverage, {"passed": passed, "total": total}, "passed")
     compare_int_field(errors, "coverage", coverage, {"passed": passed, "total": total}, "total")
+    compare_int_field(
+        errors,
+        "coverage",
+        coverage,
+        {"result_count": result_count},
+        "result_count",
+    )
+    expected_sha256 = str(coverage.get("result_inventory_sha256", "")).strip()
+    if not expected_sha256:
+        errors.append("coverage: baseline missing field result_inventory_sha256")
+    elif result_inventory_sha256 != expected_sha256:
+        errors.append(
+            "coverage.result_inventory_sha256: "
+            f"expected baseline {expected_sha256}, got {result_inventory_sha256}"
+        )
 
     expected_by_kind = coverage.get("by_kind", {})
     if not isinstance(expected_by_kind, dict) or not expected_by_kind:
@@ -3586,7 +3609,7 @@ def main(argv: list[str]) -> int:
         "--coverage-baseline",
         type=Path,
         default=None,
-        help="Fail if the coverage denominator or implementation-status snapshot drifts.",
+        help="Fail if the coverage denominator, result-id inventory, or implementation-status snapshot drifts.",
     )
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
@@ -3597,6 +3620,7 @@ def main(argv: list[str]) -> int:
     passed = sum(result.passed for result in results)
     total = sum(result.total for result in results)
     by_kind = coverage_by_kind(results)
+    result_count, result_sha256 = result_inventory_digest(results)
     baseline_failures: list[str] = []
     if args.coverage_baseline is not None:
         try:
@@ -3610,6 +3634,8 @@ def main(argv: list[str]) -> int:
                 total,
                 by_kind,
                 status_summary,
+                result_count,
+                result_sha256,
             )
     if args.json:
         print(
@@ -3618,6 +3644,8 @@ def main(argv: list[str]) -> int:
                     "passed": passed,
                     "total": total,
                     "rate": None if total == 0 else passed / total,
+                    "result_count": result_count,
+                    "result_inventory_sha256": result_sha256,
                     "by_kind": {
                         kind: {
                             "passed": bucket.passed,

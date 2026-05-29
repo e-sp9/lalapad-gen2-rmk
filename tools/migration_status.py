@@ -54,6 +54,7 @@ def software_status(
     passed = sum(result.passed for result in results)
     total = sum(result.total for result in results)
     by_kind = porting_coverage.coverage_by_kind(results)
+    result_count, result_sha256 = porting_coverage.result_inventory_digest(results)
     baseline_failures: list[dict[str, str | int]] = []
     if coverage_baseline_path is not None:
         try:
@@ -67,6 +68,8 @@ def software_status(
                 total,
                 by_kind,
                 implementation,
+                result_count,
+                result_sha256,
             )
         baseline_failures = [
             {

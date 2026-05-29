@@ -145,9 +145,9 @@ text and JSON reports also include coverage grouped by result kind, making it
 clear whether a regression is in RMK keymap/config checks, ZMK source
 inventory, DTS/Kconfig mirrors, Rust constants, or firmware code needles. The
 `--coverage-baseline tools/porting_coverage_baseline.toml` gate also freezes
-the current denominator and per-kind totals, so deleting coverage items cannot
-silently turn into a smaller `100.00%`. The Rust checks cover the RMK-side
-IQS9151 register-address
+the current denominator, result-id inventory hash, and per-kind totals, so
+deleting or swapping coverage items cannot silently turn into a smaller
+`100.00%`. The Rust checks cover the RMK-side IQS9151 register-address
 inventory, upstream IQS9151 register and bit-flag porting classifications,
 product/register address values, reset/gesture bits, IQS9151 feature-enable
 flags, dynamic-scale bounds, timing values, and initialization byte-array

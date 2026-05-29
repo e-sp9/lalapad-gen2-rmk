@@ -1,6 +1,8 @@
 [coverage]
 passed = 2351
 total = 2351
+result_count = 430
+result_inventory_sha256 = "8873e29305c21e9e2a6dff93cf395e6af248c5a8f0c46d3a4fefe25fb7386aa8"
 
 [coverage.by_kind.behavior]
 passed = 10

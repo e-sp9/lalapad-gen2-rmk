@@ -277,9 +277,9 @@ coverage results, so a regression can be traced to RMK keymap/config checks,
 ZMK source inventories, Kconfig/DTS mirrors, Rust constants, IQS9151 byte
 arrays, or firmware code-needle checks instead of treating the total percentage
 as a black box. `tools/porting_coverage_baseline.toml` records the current
-overall and per-kind denominator. Use `--coverage-baseline` in CI and release
-checks so a removed check fails explicitly instead of producing a smaller
-`100.00%`.
+overall denominator, result-id inventory hash, and per-kind denominator. Use
+`--coverage-baseline` in CI and release checks so a removed or swapped check
+fails explicitly instead of producing a smaller `100.00%`.
 It is intended to prevent regressions like a visible `LT(...)` binding whose
 tap-hold behavior is changed by RMK's global flow-tap setting.
 

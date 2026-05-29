@@ -179,6 +179,14 @@ fn porting_coverage_baseline_matches_current_denominator() {
         parsed["total"].as_i64(),
         baseline["coverage"]["total"].as_integer()
     );
+    assert_eq!(
+        parsed["result_count"].as_i64(),
+        baseline["coverage"]["result_count"].as_integer()
+    );
+    assert_eq!(
+        parsed["result_inventory_sha256"].as_str(),
+        baseline["coverage"]["result_inventory_sha256"].as_str()
+    );
     assert_eq!(parsed["baseline_errors"].as_array().unwrap().len(), 0);
 
     let baseline_by_kind = baseline["coverage"]["by_kind"].as_table().unwrap();
@@ -203,6 +211,8 @@ fn porting_coverage_rejects_denominator_baseline_drift() {
 [coverage]
 passed = 1
 total = 1
+result_count = 1
+result_inventory_sha256 = "bad"
 
 [coverage.by_kind.layout]
 passed = 1
@@ -228,6 +238,8 @@ ported = 1
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("porting coverage baseline drift:"));
     assert!(stderr.contains("coverage.total: expected baseline 1, got 2351"));
+    assert!(stderr.contains("coverage.result_count: expected baseline 1, got 430"));
+    assert!(stderr.contains("coverage.result_inventory_sha256: expected baseline bad"));
     assert!(
         stderr.contains("coverage.by_kind.behavior: actual report kind is missing from baseline")
     );
@@ -424,6 +436,8 @@ fn migration_status_rejects_coverage_baseline_drift() {
 [coverage]
 passed = 2351
 total = 1
+result_count = 1
+result_inventory_sha256 = "bad"
 
 [coverage.by_kind.layout]
 passed = 3
@@ -456,6 +470,8 @@ ported_by_config_image = 6
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("Software failures:"));
     assert!(stdout.contains("coverage.total: expected baseline 1, got 2351"));
+    assert!(stdout.contains("coverage.result_count: expected baseline 1, got 430"));
+    assert!(stdout.contains("coverage.result_inventory_sha256: expected baseline bad"));
 }
 
 #[test]
