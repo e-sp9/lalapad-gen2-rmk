@@ -171,7 +171,7 @@ The base keymap is translated from `config/lalapadgen2.keymap`, but some ZMK-spe
   The RMK 0.8.2 combo path used here does not expose ZMK-style
   `require-prior-idle-ms`, so the firmware keeps the upstream ZMK default 50 ms
   combo timeout.
-- ZMK dynamic trackpad sensitivity controls are mapped to `User9..User13` and handled by the local RMK vendor hook described above. Scale changes are persisted in RMK storage as a LaLaPad-specific record.
+- ZMK dynamic trackpad sensitivity controls are mapped to `User9..User13` and handled by the local RMK vendor hook described above. Scale changes are persisted in RMK storage as a LaLaPad-specific record. When `clear_storage` or a reset firmware erases storage, no scale record is restored and the compiled `10/10` cursor/scroll defaults remain active until the user changes them again.
 - ZMK trackpad virtual positions `52..67` are represented in the RMK keymap as rows `5..6`, and IQS9151 runtime instances are wired into the central and peripheral firmware entrypoints.
 - ZMK's RGBLED widget is represented by a local RMK controller rather than the ZMK module. Battery, connection, and central layer-change indications are preserved, but on-demand `&ind_bat` / `&ind_con` keymap behaviors are not exposed as RMK keycodes.
 - RMK storage is pinned to `0x000E0000` for 8 nRF flash sectors. The default
@@ -275,9 +275,9 @@ blocker.
 The text and JSON reports also include a `by_kind` breakdown of the same
 coverage results, so a regression can be traced to RMK keymap/config checks,
 ZMK source inventories, Kconfig/DTS mirrors, Cargo dependency resolution, Rust
-constants, IQS9151 byte arrays, local RMK composite mouse patch invariants,
-Vial custom-key semantics, or firmware code-needle checks instead of treating
-the total percentage as a black box.
+constants, IQS9151 byte arrays, local RMK composite mouse and dynamic-scale
+storage patch invariants, Vial custom-key semantics, or firmware code-needle
+checks instead of treating the total percentage as a black box.
 `tools/porting_coverage_baseline.toml` records the current
 overall denominator, result-id inventory hash, and per-kind denominator. Use
 `--coverage-baseline` in CI and release checks so a removed or swapped check

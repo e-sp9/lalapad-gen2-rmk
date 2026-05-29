@@ -151,7 +151,7 @@ fn porting_coverage_complete_gate_accepts_explicit_status_completion() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("Porting coverage by kind:"));
     assert!(stdout.contains("- dependency: 11/11 = 100.00%"));
-    assert!(stdout.contains("- rmk_patch: 33/33 = 100.00%"));
+    assert!(stdout.contains("- rmk_patch: 59/59 = 100.00%"));
     assert!(stdout.contains("- scenario:"));
     assert!(stdout.contains("- vial_user_key_semantics: 57/57 = 100.00%"));
     assert!(stdout.contains("- zmk_source_cell:"));
@@ -240,8 +240,8 @@ ported = 1
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("porting coverage baseline drift:"));
-    assert!(stderr.contains("coverage.total: expected baseline 1, got 2452"));
-    assert!(stderr.contains("coverage.result_count: expected baseline 1, got 448"));
+    assert!(stderr.contains("coverage.total: expected baseline 1, got 2478"));
+    assert!(stderr.contains("coverage.result_count: expected baseline 1, got 450"));
     assert!(stderr.contains("coverage.result_inventory_sha256: expected baseline bad"));
     assert!(
         stderr.contains("coverage.by_kind.behavior: actual report kind is missing from baseline")
@@ -424,7 +424,7 @@ fn migration_status_combines_software_and_hardware_progress() {
     );
     let stdout = String::from_utf8_lossy(&markdown.stdout);
     assert!(stdout.contains("## RMK Migration Status"));
-    assert!(stdout.contains("| Software coverage | 2452 | 2452 | 100.00% |"));
+    assert!(stdout.contains("| Software coverage | 2478 | 2478 | 100.00% |"));
     assert!(stdout.contains("### Hardware Progress By Area"));
     assert!(stdout.contains("| trackpad | 0 | 7 | 0.00% |"));
     assert!(stdout.contains("### Hardware Progress By Side"));
@@ -437,7 +437,7 @@ fn migration_status_combines_software_and_hardware_progress() {
 fn migration_status_rejects_coverage_baseline_drift() {
     let bad_baseline = r#"
 [coverage]
-passed = 2452
+passed = 2478
 total = 1
 result_count = 1
 result_inventory_sha256 = "bad"
@@ -472,8 +472,8 @@ ported_by_config_image = 6
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("Software failures:"));
-    assert!(stdout.contains("coverage.total: expected baseline 1, got 2452"));
-    assert!(stdout.contains("coverage.result_count: expected baseline 1, got 448"));
+    assert!(stdout.contains("coverage.total: expected baseline 1, got 2478"));
+    assert!(stdout.contains("coverage.result_count: expected baseline 1, got 450"));
     assert!(stdout.contains("coverage.result_inventory_sha256: expected baseline bad"));
 }
 
@@ -2409,6 +2409,14 @@ bad_ble = pc.load_toml(Path("tools/porting_coverage_manifest.toml"))
 bad_ble["rmk_patch_invariants"][2]["needles"][5] = "missing mouse resolution feature characteristic"
 bad_ble_result = pc.check_rmk_patch_invariants(bad_ble, Path("."))
 
+bad_bridge = pc.load_toml(Path("tools/porting_coverage_manifest.toml"))
+bad_bridge["rmk_patch_invariants"][3]["needles"][5] = "missing dynamic scale storage send"
+bad_bridge_result = pc.check_rmk_patch_invariants(bad_bridge, Path("."))
+
+bad_storage = pc.load_toml(Path("tools/porting_coverage_manifest.toml"))
+bad_storage["rmk_patch_invariants"][4]["needles"][14] = "missing dynamic scale restore event"
+bad_storage_result = pc.check_rmk_patch_invariants(bad_storage, Path("."))
+
 def pack(results):
     return [result.__dict__ | {"ok": result.ok} for result in results]
 
@@ -2417,6 +2425,8 @@ print(json.dumps({
     "bad_descriptor": pack(bad_descriptor_result),
     "bad_handler": pack(bad_handler_result),
     "bad_ble": pack(bad_ble_result),
+    "bad_bridge": pack(bad_bridge_result),
+    "bad_storage": pack(bad_storage_result),
 }))
 "#,
     );
@@ -2430,7 +2440,7 @@ print(json.dumps({
 
     let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     let ok = parsed["ok"].as_array().unwrap();
-    assert_eq!(ok.len(), 3);
+    assert_eq!(ok.len(), 5);
     assert!(ok.iter().all(|result| result["ok"] == true));
 
     let bad_descriptor = parsed["bad_descriptor"]
@@ -2482,6 +2492,40 @@ print(json.dumps({
             .as_str()
             .unwrap()
             .contains("missing mouse resolution feature characteristic")
+    );
+
+    let bad_bridge = parsed["bad_bridge"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "rmk_lalapad_dynamic_scale_action_storage_bridge")
+        .expect("changed dynamic scale storage bridge result is missing");
+    assert_eq!(bad_bridge["kind"], "rmk_patch");
+    assert_eq!(bad_bridge["passed"].as_i64(), Some(7));
+    assert_eq!(bad_bridge["total"].as_i64(), Some(8));
+    assert_eq!(bad_bridge["ok"], false);
+    assert!(
+        bad_bridge["message"]
+            .as_str()
+            .unwrap()
+            .contains("missing dynamic scale storage send")
+    );
+
+    let bad_storage = parsed["bad_storage"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "rmk_lalapad_dynamic_scale_storage_patch")
+        .expect("changed dynamic scale storage patch result is missing");
+    assert_eq!(bad_storage["kind"], "rmk_patch");
+    assert_eq!(bad_storage["passed"].as_i64(), Some(17));
+    assert_eq!(bad_storage["total"].as_i64(), Some(18));
+    assert_eq!(bad_storage["ok"], false);
+    assert!(
+        bad_storage["message"]
+            .as_str()
+            .unwrap()
+            .contains("missing dynamic scale restore event")
     );
 }
 

@@ -2370,6 +2370,44 @@ needles = [
   "self.mouse_report.notify(self.conn, &buf).await",
 ]
 
+[[rmk_patch_invariants]]
+id = "rmk_lalapad_dynamic_scale_action_storage_bridge"
+target_file = "vendor/rmk-0.8.2/src/keyboard.rs"
+needles = [
+  "async fn process_lalapad_dynamic_scale_user_action(group: u8, action: u8)",
+  "queue_lalapad_dynamic_scale_event(group, action);",
+  "let (cursor_x10, scroll_x10) = apply_lalapad_dynamic_scale_action(group, action);",
+  "#[cfg(feature = \"storage\")]",
+  "crate::channel::FLASH_CHANNEL",
+  ".send(crate::storage::FlashOperationMessage::LalapadDynamicScale {",
+  "cursor_x10,",
+  "scroll_x10,",
+]
+
+[[rmk_patch_invariants]]
+id = "rmk_lalapad_dynamic_scale_storage_patch"
+target_file = "vendor/rmk-0.8.2/src/storage/mod.rs"
+needles = [
+  "LalapadDynamicScale { cursor_x10: u16, scroll_x10: u16 },",
+  "LalapadDynamicScale = 10,",
+  "10 => Some(StorageKeys::LalapadDynamicScale),",
+  "LalapadDynamicScale(LalapadDynamicScaleConfig),",
+  "Self::LalapadDynamicScale(_) => StorageKeys::LalapadDynamicScale as u32,",
+  "Self::LalapadDynamicScale(d) => ser_storage_variant!(buffer, StorageKeys::LalapadDynamicScale, d),",
+  "StorageKeys::LalapadDynamicScale => {",
+  "Ok((Self::LalapadDynamicScale(data), size))",
+  "#[derive(Clone, Copy, Debug, serde::Serialize, serde::Deserialize, postcard::experimental::max_size::MaxSize)]",
+  "pub(crate) struct LalapadDynamicScaleConfig {",
+  "pub(crate) cursor_x10: u16,",
+  "pub(crate) scroll_x10: u16,",
+  "if let Ok(Some(StorageData::LalapadDynamicScale(scale))) = fetch_item::<u32, StorageData, _>(",
+  "&(StorageKeys::LalapadDynamicScale as u32),",
+  "crate::keyboard::queue_lalapad_dynamic_scale_state(scale.cursor_x10, scale.scroll_x10);",
+  "FlashOperationMessage::LalapadDynamicScale {",
+  "let data = StorageData::LalapadDynamicScale(LalapadDynamicScaleConfig {",
+  "store_item::<u32, StorageData, _>(",
+]
+
 [[cargo_dependency_invariants]]
 id = "cargo_uses_local_rmk_0_8_2_patch"
 cargo_file = "Cargo.toml"
