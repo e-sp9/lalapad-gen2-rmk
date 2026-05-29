@@ -517,6 +517,22 @@ vial_custom_keycodes = [
   "TP_SC_DEC",
   "TP_SCALE_RST",
 ]
+vial_user_key_semantics = [
+  { key = "User0", name = "BT0", handler_needles = ["id < NUM_BLE_PROFILE as u8", "SwitchProfile(id)"] },
+  { key = "User1", name = "BT1", handler_needles = ["id < NUM_BLE_PROFILE as u8", "SwitchProfile(id)"] },
+  { key = "User2", name = "BT2", handler_needles = ["id < NUM_BLE_PROFILE as u8", "SwitchProfile(id)"] },
+  { key = "User3", name = "BT3", handler_needles = ["id < NUM_BLE_PROFILE as u8", "SwitchProfile(id)"] },
+  { key = "User4", name = "NEXT_BT", handler_needles = ["id == NUM_BLE_PROFILE as u8", "NextProfile"] },
+  { key = "User5", name = "PREV_BT", handler_needles = ["id == NUM_BLE_PROFILE as u8 + 1", "PreviousProfile"] },
+  { key = "User6", name = "CLR_BT", handler_needles = ["id == NUM_BLE_PROFILE as u8 + 2", "ClearProfile"] },
+  { key = "User7", name = "SWITCH", handler_needles = ["id == NUM_BLE_PROFILE as u8 + 3", "ToggleConnection"] },
+  { key = "User8", name = "CLR_PEER", handler_needles = ["id == NUM_BLE_PROFILE as u8 + 4", "ClearAllProfiles", "ClearPeer"] },
+  { key = "User9", name = "TP_XY_INC", handler_needles = ["id == NUM_BLE_PROFILE as u8 + 5", "LALAPAD_ZDS_XY, LALAPAD_ZDS_INC"] },
+  { key = "User10", name = "TP_XY_DEC", handler_needles = ["id == NUM_BLE_PROFILE as u8 + 6", "LALAPAD_ZDS_XY, LALAPAD_ZDS_DEC"] },
+  { key = "User11", name = "TP_SC_INC", handler_needles = ["id == NUM_BLE_PROFILE as u8 + 7", "LALAPAD_ZDS_SC, LALAPAD_ZDS_INC"] },
+  { key = "User12", name = "TP_SC_DEC", handler_needles = ["id == NUM_BLE_PROFILE as u8 + 8", "LALAPAD_ZDS_SC, LALAPAD_ZDS_DEC"] },
+  { key = "User13", name = "TP_SCALE_RST", handler_needles = ["id == NUM_BLE_PROFILE as u8 + 9", "LALAPAD_ZDS_ALL, LALAPAD_ZDS_RST"] },
+]
 
 [[source_deltas]]
 id = "delta_base_mo1_to_left_ctrl"

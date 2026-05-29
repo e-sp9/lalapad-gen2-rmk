@@ -151,6 +151,7 @@ fn porting_coverage_complete_gate_accepts_explicit_status_completion() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("Porting coverage by kind:"));
     assert!(stdout.contains("- scenario:"));
+    assert!(stdout.contains("- vial_user_key_semantics: 57/57 = 100.00%"));
     assert!(stdout.contains("- zmk_source_cell:"));
     assert!(stdout.contains("Porting status: 69/69 = 100.00% implemented"));
 }
@@ -237,8 +238,8 @@ ported = 1
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("porting coverage baseline drift:"));
-    assert!(stderr.contains("coverage.total: expected baseline 1, got 2351"));
-    assert!(stderr.contains("coverage.result_count: expected baseline 1, got 430"));
+    assert!(stderr.contains("coverage.total: expected baseline 1, got 2408"));
+    assert!(stderr.contains("coverage.result_count: expected baseline 1, got 444"));
     assert!(stderr.contains("coverage.result_inventory_sha256: expected baseline bad"));
     assert!(
         stderr.contains("coverage.by_kind.behavior: actual report kind is missing from baseline")
@@ -421,7 +422,7 @@ fn migration_status_combines_software_and_hardware_progress() {
     );
     let stdout = String::from_utf8_lossy(&markdown.stdout);
     assert!(stdout.contains("## RMK Migration Status"));
-    assert!(stdout.contains("| Software coverage | 2351 | 2351 | 100.00% |"));
+    assert!(stdout.contains("| Software coverage | 2408 | 2408 | 100.00% |"));
     assert!(stdout.contains("### Hardware Progress By Area"));
     assert!(stdout.contains("| trackpad | 0 | 7 | 0.00% |"));
     assert!(stdout.contains("### Hardware Progress By Side"));
@@ -434,7 +435,7 @@ fn migration_status_combines_software_and_hardware_progress() {
 fn migration_status_rejects_coverage_baseline_drift() {
     let bad_baseline = r#"
 [coverage]
-passed = 2351
+passed = 2408
 total = 1
 result_count = 1
 result_inventory_sha256 = "bad"
@@ -469,8 +470,8 @@ ported_by_config_image = 6
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("Software failures:"));
-    assert!(stdout.contains("coverage.total: expected baseline 1, got 2351"));
-    assert!(stdout.contains("coverage.result_count: expected baseline 1, got 430"));
+    assert!(stdout.contains("coverage.total: expected baseline 1, got 2408"));
+    assert!(stdout.contains("coverage.result_count: expected baseline 1, got 444"));
     assert!(stdout.contains("coverage.result_inventory_sha256: expected baseline bad"));
 }
 
@@ -2291,6 +2292,89 @@ fn porting_coverage_rejects_duplicate_rmk_combos() {
             .as_str()
             .unwrap()
             .contains("duplicated RMK combos")
+    );
+}
+
+#[test]
+fn porting_coverage_rejects_vial_user_key_semantic_drift() {
+    let output = run_python(
+        r#"
+import importlib.util
+import json
+import sys
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("porting_coverage", "tools/porting_coverage.py")
+pc = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = pc
+spec.loader.exec_module(pc)
+
+manifest = pc.load_toml(Path("tools/porting_coverage_manifest.toml"))
+keyboard = pc.load_toml(Path("keyboard.toml"))
+ok = pc.check_vial_user_key_semantics(manifest, keyboard, Path("."))
+
+bad_name = pc.load_toml(Path("tools/porting_coverage_manifest.toml"))
+bad_name["layout"]["vial_user_key_semantics"][9]["name"] = "TP_XY_WRONG"
+bad_name_result = pc.check_vial_user_key_semantics(bad_name, keyboard, Path("."))
+
+bad_handler = pc.load_toml(Path("tools/porting_coverage_manifest.toml"))
+bad_handler["layout"]["vial_user_key_semantics"][13]["handler_needles"] = ["missing dynamic scale reset branch"]
+bad_handler_result = pc.check_vial_user_key_semantics(bad_handler, keyboard, Path("."))
+
+def pack(results):
+    return [result.__dict__ | {"ok": result.ok} for result in results]
+
+print(json.dumps({
+    "ok": pack(ok),
+    "bad_name": pack(bad_name_result),
+    "bad_handler": pack(bad_handler_result),
+}))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "Vial user key semantic check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let ok = parsed["ok"].as_array().unwrap();
+    assert_eq!(ok.len(), 14);
+    assert!(ok.iter().all(|result| result["ok"] == true));
+
+    let bad_name = parsed["bad_name"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "vial_user_key_semantics.User9.TP_XY_WRONG")
+        .expect("changed Vial user key semantic result is missing");
+    assert_eq!(bad_name["kind"], "vial_user_key_semantics");
+    assert_eq!(bad_name["passed"].as_i64(), Some(3));
+    assert_eq!(bad_name["total"].as_i64(), Some(4));
+    assert_eq!(bad_name["ok"], false);
+    assert!(
+        bad_name["message"]
+            .as_str()
+            .unwrap()
+            .contains("User9 expected Vial name")
+    );
+
+    let bad_handler = parsed["bad_handler"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "vial_user_key_semantics.User13.TP_SCALE_RST")
+        .expect("changed RMK handler semantic result is missing");
+    assert_eq!(bad_handler["passed"].as_i64(), Some(2));
+    assert_eq!(bad_handler["total"].as_i64(), Some(3));
+    assert_eq!(bad_handler["ok"], false);
+    assert!(
+        bad_handler["message"]
+            .as_str()
+            .unwrap()
+            .contains("missing dynamic scale reset branch")
     );
 }
 

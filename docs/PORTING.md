@@ -275,8 +275,9 @@ blocker.
 The text and JSON reports also include a `by_kind` breakdown of the same
 coverage results, so a regression can be traced to RMK keymap/config checks,
 ZMK source inventories, Kconfig/DTS mirrors, Rust constants, IQS9151 byte
-arrays, or firmware code-needle checks instead of treating the total percentage
-as a black box. `tools/porting_coverage_baseline.toml` records the current
+arrays, Vial custom-key semantics, or firmware code-needle checks instead of
+treating the total percentage as a black box.
+`tools/porting_coverage_baseline.toml` records the current
 overall denominator, result-id inventory hash, and per-kind denominator. Use
 `--coverage-baseline` in CI and release checks so a removed or swapped check
 fails explicitly instead of producing a smaller `100.00%`.

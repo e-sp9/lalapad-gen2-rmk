@@ -3216,6 +3216,76 @@ def check_vial_layout(manifest: dict[str, Any], project_root: Path, zmk_config_d
     return results
 
 
+def user_key_index(key: str) -> int:
+    match = re.fullmatch(r"User(\d+)", key)
+    if not match:
+        raise ValueError(f"invalid RMK user key {key!r}")
+    return int(match.group(1))
+
+
+def check_vial_user_key_semantics(
+    manifest: dict[str, Any],
+    keyboard: dict[str, Any],
+    project_root: Path,
+) -> list[Result]:
+    vial = load_json(project_root / "vial.json")
+    actual_names = [item.get("name") for item in vial.get("customKeycodes", [])]
+    handler_text = (project_root / "vendor/rmk-0.8.2/src/keyboard.rs").read_text()
+    profile_count = int(path_get(keyboard, "rmk.ble_profiles_num"))
+    expected = list(
+        manifest.get("layout", {}).get("vial_user_key_semantics", [])
+    )
+    results: list[Result] = []
+
+    for entry in expected:
+        key = str(entry["key"])
+        name = str(entry["name"])
+        try:
+            index = user_key_index(key)
+        except ValueError as e:
+            results.append(Result(f"vial_user_key_semantics.{key}", "vial_user_key_semantics", 0, 1, str(e)))
+            continue
+
+        passed = 0
+        total = 2 + len(entry.get("handler_needles", []))
+        messages: list[str] = []
+        actual_name = actual_names[index] if index < len(actual_names) else None
+        if actual_name == name:
+            passed += 1
+        else:
+            messages.append(f"{key} expected Vial name {name!r}, got {actual_name!r}")
+
+        expected_profile_count = sum(
+            1
+            for semantic in expected
+            if re.fullmatch(r"BT\d+", str(semantic.get("name", "")))
+        )
+        if profile_count == expected_profile_count:
+            passed += 1
+        else:
+            messages.append(
+                f"rmk.ble_profiles_num expected {expected_profile_count}, got {profile_count}"
+            )
+
+        for needle in entry.get("handler_needles", []):
+            if needle in handler_text:
+                passed += 1
+            else:
+                messages.append(f"missing handler needle {needle!r}")
+
+        results.append(
+            Result(
+                f"vial_user_key_semantics.{key}.{name}",
+                "vial_user_key_semantics",
+                passed,
+                total,
+                "ok" if not messages else "; ".join(messages),
+            )
+        )
+
+    return results
+
+
 def check_zmk_source_deltas(manifest: dict[str, Any], raw_layers: list[list[list[str]]]) -> list[Result]:
     results: list[Result] = []
     for delta in manifest.get("source_deltas", []):
@@ -3486,6 +3556,7 @@ def check_zmk_source(
     results.extend(check_iqs9151_bit_porting(manifest, project_root))
     results.extend(check_rust_byte_arrays(manifest, project_root))
     results.extend(check_vial_layout(manifest, project_root, zmk_config_dir))
+    results.extend(check_vial_user_key_semantics(manifest, keyboard, project_root))
     return results
 
 

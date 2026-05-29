@@ -174,7 +174,10 @@ inventory. The
 source-backed gate uses structured inventories instead of regex-only ZMK source
 checks for these high-risk DTS, GPIO, trackpad, and split-routing details, and
 it cross-checks thumb tap/hold layer-resolution scenarios against the ZMK
-source keymap after documented RMK deltas are applied. It also resolves every
+source keymap after documented RMK deltas are applied. It also checks that
+Vial's `customKeycodes` names match RMK's `User0..User13` BLE and dynamic-scale
+handler semantics, so host-side remapping cannot silently point at the wrong
+firmware action. It also resolves every
 position on layer 1, layer 2, and the system tri-layer against the ZMK source
 keymap to catch transparent-key fallthrough drift. ZMK hold-tap timing values
 are also mirrored against the RMK Morse timing settings. Use
