@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import re
 import sys
 import tomllib
 from dataclasses import dataclass
@@ -25,6 +26,7 @@ VALIDATED_STATUSES = frozenset({"validated"})
 REQUIRED_FIELDS = ("id", "area", "side", "requirement", "evidence", "source", "status")
 VALIDATED_EVIDENCE_FIELDS = ("validated_at", "tester", "artifact_or_notes")
 EVIDENCE_UPDATE_FIELDS = ("status", "validated_at", "tester", "artifact_or_notes")
+MARKDOWN_HEADING_RE = re.compile(r"^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$")
 
 
 @dataclass
@@ -49,6 +51,58 @@ class HardwareValidationSummary:
 def load_toml(path: Path) -> dict[str, Any]:
     with path.open("rb") as f:
         return tomllib.load(f)
+
+
+def markdown_anchor(heading: str) -> str:
+    text = re.sub(r"`([^`]*)`", r"\1", heading)
+    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
+    text = re.sub(r"<[^>]+>", "", text)
+    text = re.sub(r"[^\w\s-]", "", text.lower(), flags=re.UNICODE)
+    return re.sub(r"\s+", "-", text.strip())
+
+
+def markdown_anchors(path: Path) -> set[str]:
+    anchors: set[str] = set()
+    seen: dict[str, int] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        match = MARKDOWN_HEADING_RE.match(line)
+        if not match:
+            continue
+        base = markdown_anchor(match.group(1))
+        if not base:
+            continue
+        index = seen.get(base, 0)
+        anchors.add(base if index == 0 else f"{base}-{index}")
+        seen[base] = index + 1
+    return anchors
+
+
+def validate_source_ref(check_id: str, source: str, source_root: Path) -> list[str]:
+    errors: list[str] = []
+    source_path_text, separator, anchor = source.partition("#")
+    if not source_path_text:
+        return [f"{check_id}: source must include a file path"]
+
+    root = source_root.resolve()
+    source_path = (root / source_path_text).resolve()
+    try:
+        source_path.relative_to(root)
+    except ValueError:
+        return [f"{check_id}: source path must stay inside {source_root}"]
+
+    if not source_path.is_file():
+        return [f"{check_id}: source file {source_path_text!r} does not exist"]
+    if source_path.suffix.lower() not in {".md", ".markdown"}:
+        return [f"{check_id}: source file {source_path_text!r} must be Markdown"]
+    if separator and not anchor:
+        return [f"{check_id}: source anchor must not be empty"]
+    if anchor:
+        anchors = markdown_anchors(source_path)
+        if anchor not in anchors:
+            errors.append(
+                f"{check_id}: source anchor #{anchor} was not found in {source_path_text!r}"
+            )
+    return errors
 
 
 def merge_evidence(
@@ -97,7 +151,9 @@ def merge_evidence(
 
 
 def summarize(
-    manifest: dict[str, Any], initial_errors: list[str] | None = None
+    manifest: dict[str, Any],
+    initial_errors: list[str] | None = None,
+    source_root: Path | None = None,
 ) -> HardwareValidationSummary:
     checks = manifest.get("checks", [])
     by_status = {status: 0 for status in sorted(VALID_STATUSES)}
@@ -120,6 +176,9 @@ def summarize(
         missing = [field for field in REQUIRED_FIELDS if not str(check.get(field, "")).strip()]
         if missing:
             errors.append(f"{check_id}: missing required field(s): {', '.join(missing)}")
+        source = str(check.get("source", "")).strip()
+        if source:
+            errors.extend(validate_source_ref(check_id, source, source_root or Path(".")))
 
         if check_id in seen_ids:
             errors.append(f"{check_id}: duplicate check id")
@@ -323,7 +382,7 @@ def main() -> None:
     manifest, evidence_errors = merge_evidence(
         load_toml(args.manifest), [load_toml(path) for path in args.evidence]
     )
-    summary = summarize(manifest, evidence_errors)
+    summary = summarize(manifest, evidence_errors, Path("."))
     output_modes = sum(bool(mode) for mode in [args.json, args.markdown, args.evidence_template])
     if output_modes > 1:
         parser.error("--json, --markdown, and --evidence-template are mutually exclusive")

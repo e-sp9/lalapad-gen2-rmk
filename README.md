@@ -183,10 +183,11 @@ proven by the static source-backed porting gate: IQS9151 electrical identity,
 RDY behavior, left/right trackpad runtime behavior, BLE split reconnection,
 Vial thumb layer-tap behavior, RGB/battery indicators, and reset/reflash
 behavior. CI runs it with `--require-classified` so every hardware-only item
-must stay explicitly tracked, but it does not use `--require-validated` because
-real hardware evidence cannot be created by GitHub Actions. The CI job also
-writes `python3 tools/hardware_validation.py --markdown` to the GitHub Actions
-step summary so remaining real-device evidence is visible next to each release
+must stay explicitly tracked and linked to an existing Markdown source heading,
+but it does not use `--require-validated` because real hardware evidence cannot
+be created by GitHub Actions. The CI job also writes
+`python3 tools/hardware_validation.py --markdown` to the GitHub Actions step
+summary so remaining real-device evidence is visible next to each release
 build. Real hardware results can be kept in a separate overlay file using the
 format shown in `tools/hardware_validation_evidence.example.toml` and passed
 with `--evidence path/to/evidence.toml`; this lets the manifest remain the

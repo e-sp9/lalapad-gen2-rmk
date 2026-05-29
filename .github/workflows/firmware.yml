@@ -23,7 +23,9 @@ on:
       - 'tools/hardware_validation_manifest.toml'
       - 'tools/porting_coverage.py'
       - 'tools/porting_coverage_manifest.toml'
+      - 'README.md'
       - 'docs/PORTING.md'
+      - 'docs/TRACKPAD_HARDWARE_CHECK.md'
       - '.github/workflows/firmware.yml'
   workflow_dispatch:
 

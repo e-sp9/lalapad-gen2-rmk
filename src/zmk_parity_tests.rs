@@ -283,6 +283,114 @@ artifact_or_notes = "photo | serial log"
 }
 
 #[test]
+fn hardware_validation_requires_valid_source_anchors() {
+    let manifest = r#"
+[[checks]]
+id = "bad_source"
+area = "trackpad"
+side = "right"
+requirement = "A hardware-only behavior is documented."
+evidence = "Run the documented hardware check."
+source = "docs/TRACKPAD_HARDWARE_CHECK.md#missing-heading"
+status = "requires_hardware"
+"#;
+    let path = write_temp_file("hardware-validation-bad-source", manifest);
+    let output =
+        run_hardware_validation(&["--manifest", path.to_str().unwrap(), "--require-classified"]);
+    let _ = std::fs::remove_file(&path);
+
+    assert!(
+        !output.status.success(),
+        "bad hardware source link unexpectedly passed --require-classified\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("bad_source: source anchor #missing-heading was not found"),
+        "bad hardware source link should explain the missing anchor"
+    );
+}
+
+#[test]
+fn hardware_validation_source_must_be_markdown() {
+    let manifest = r#"
+[[checks]]
+id = "toml_source"
+area = "trackpad"
+side = "right"
+requirement = "A hardware-only behavior is documented."
+evidence = "Run the documented hardware check."
+source = "Cargo.toml"
+status = "requires_hardware"
+"#;
+    let path = write_temp_file("hardware-validation-toml-source", manifest);
+    let output =
+        run_hardware_validation(&["--manifest", path.to_str().unwrap(), "--require-classified"]);
+    let _ = std::fs::remove_file(&path);
+
+    assert!(
+        !output.status.success(),
+        "non-Markdown hardware source link unexpectedly passed --require-classified"
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("toml_source: source file 'Cargo.toml' must be Markdown"),
+        "non-Markdown source should explain the file type error"
+    );
+}
+
+#[test]
+fn hardware_validation_markdown_anchor_generation_handles_common_headings() {
+    let script = r###"
+import importlib.util
+from pathlib import Path
+import sys
+import tempfile
+
+spec = importlib.util.spec_from_file_location("hardware_validation", "tools/hardware_validation.py")
+hv = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = hv
+spec.loader.exec_module(hv)
+
+path = Path(tempfile.gettempdir()) / "lalapad-hardware-validation-anchors.md"
+path.write_text(
+    "# Heading ###\n"
+    "## `Backtick Code`\n"
+    "## [Link Label](https://example.com)!\n"
+    "## Duplicate\n"
+    "## Duplicate\n",
+    encoding="utf-8",
+)
+try:
+    print("\n".join(sorted(hv.markdown_anchors(path))))
+finally:
+    path.unlink(missing_ok=True)
+"###;
+    let output = run_python(script);
+
+    assert!(
+        output.status.success(),
+        "hardware validation anchor parser failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    for expected in [
+        "backtick-code",
+        "duplicate",
+        "duplicate-1",
+        "heading",
+        "link-label",
+    ] {
+        assert!(
+            stdout.lines().any(|line| line == expected),
+            "anchor parser output is missing {expected:?}: {stdout}"
+        );
+    }
+}
+
+#[test]
 fn hardware_validation_require_validated_rejects_malformed_manifest() {
     let manifest = r#"
 checks = "not an array"
@@ -504,6 +612,16 @@ fn local_validation_entrypoints_match_ci_gates() {
             .contains("tools/hardware_validation.py --evidence path/to/evidence.toml --markdown"),
         "hardware evidence example should document overlay report usage"
     );
+
+    let manifest = hardware_validation_manifest_toml();
+    for check in manifest["checks"].as_array().unwrap() {
+        let source = check["source"].as_str().unwrap();
+        let source_file = source.split('#').next().unwrap();
+        assert!(
+            FIRMWARE_WORKFLOW_YAML.contains(source_file),
+            "firmware CI path filters should include hardware validation source file {source_file}"
+        );
+    }
 }
 
 #[test]
