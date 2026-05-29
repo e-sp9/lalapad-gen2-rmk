@@ -33,6 +33,15 @@ args = ["tools/hardware_validation.py", "--markdown"]
 command = "python3"
 args = ["tools/hardware_validation.py", "--evidence-template"]
 
+[tasks.migration-status]
+command = "python3"
+args = [
+    "tools/migration_status.py",
+    "--require-zmk-source",
+    "--require-software-complete",
+    "--require-hardware-classified",
+]
+
 [tasks.firmware-dirs]
 command = "mkdir"
 args = ["-p", "firmware/normal", "firmware/reset", "firmware/hex"]

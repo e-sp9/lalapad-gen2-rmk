@@ -252,6 +252,7 @@ Run:
 
 ```sh
 python3 tools/porting_coverage.py --require-zmk-source --require-porting-complete
+python3 tools/migration_status.py --require-zmk-source --require-software-complete --require-hardware-classified
 ```
 
 The firmware GitHub Actions workflow checks out `e-sp9/zmk-config-LalaPadGen2`,
@@ -278,6 +279,14 @@ arrays, or firmware code-needle checks instead of treating the total percentage
 as a black box.
 It is intended to prevent regressions like a visible `LT(...)` binding whose
 tap-hold behavior is changed by RMK's global flow-tap setting.
+
+`tools/migration_status.py` is the combined dashboard for release review. It
+runs the same source-backed software checks and the hardware validation tracker
+in one report. The CI gate uses `--require-software-complete` and
+`--require-hardware-classified`, which means software migration must stay at
+100% while hardware-only checks are allowed to remain unvalidated but cannot
+become malformed or untracked. A true final hardware claim should add
+`--require-hardware-validated --require-firmware-ref <tag-or-commit>`.
 
 ## Real-Hardware Validation Gate
 

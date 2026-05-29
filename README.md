@@ -116,6 +116,7 @@ python3 -c 'import tomllib; [tomllib.load(open(path, "rb")) for path in ("keyboa
 rmkit get-chip --keyboard-toml-path keyboard.toml
 rmkit get-project-name --keyboard-toml-path keyboard.toml
 python3 tools/porting_coverage.py --require-zmk-source --require-porting-complete
+python3 tools/migration_status.py --require-zmk-source --require-software-complete --require-hardware-classified
 python3 tools/hardware_validation.py --require-classified
 python3 tools/hardware_validation.py --markdown
 python3 tools/hardware_validation.py --evidence-template
@@ -179,6 +180,14 @@ mandatory in another checkout layout. The firmware CI checks out
 `e-sp9/zmk-config-LalaPadGen2`, parses `vial.json`, RMK/Cargo/manifest TOML,
 and flash layout, runs this source-backed complete-porting gate, and then runs
 the host-side parity test suite before building release binaries.
+
+`tools/migration_status.py` combines the source-backed migration gate and the
+real-hardware validation tracker into a single release dashboard. In normal CI
+it must show software coverage and implementation at `100.00%`, while hardware
+validation can remain below 100% as long as every hardware-only check is still
+classified. Use `--require-hardware-validated --require-firmware-ref
+<tag-or-commit>` only when claiming that a specific flashed firmware has passed
+every real-device check.
 
 `tools/hardware_validation.py` reads
 `tools/hardware_validation_manifest.toml` and tracks checks that cannot be

@@ -18,6 +18,7 @@
 - [ ] `rmkit get-chip --keyboard-toml-path keyboard.toml`
 - [ ] `rmkit get-project-name --keyboard-toml-path keyboard.toml`
 - [ ] `python3 tools/porting_coverage.py --require-zmk-source --require-porting-complete`
+- [ ] `python3 tools/migration_status.py --require-zmk-source --require-software-complete --require-hardware-classified`
 - [ ] `python3 tools/hardware_validation.py --require-classified`
 - [ ] `python3 tools/hardware_validation.py --markdown`
 - [ ] `python3 tools/hardware_validation.py --evidence-template`

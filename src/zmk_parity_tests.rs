@@ -49,6 +49,15 @@ fn run_hardware_validation(args: &[&str]) -> std::process::Output {
         .unwrap()
 }
 
+fn run_migration_status(args: &[&str]) -> std::process::Output {
+    Command::new("python3")
+        .arg("tools/migration_status.py")
+        .args(args)
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .output()
+        .unwrap()
+}
+
 fn write_temp_file(name: &str, contents: &str) -> std::path::PathBuf {
     let path = std::env::temp_dir().join(format!("lalapad-{name}-{}.toml", std::process::id()));
     std::fs::write(&path, contents).unwrap();
@@ -225,6 +234,45 @@ fn hardware_validation_manifest_is_classified_but_not_release_blocking() {
         assert_eq!(check["area"].as_str(), Some(area));
         assert_eq!(check["side"].as_str(), Some(side));
     }
+}
+
+#[test]
+fn migration_status_combines_software_and_hardware_progress() {
+    let output = run_migration_status(&[
+        "--json",
+        "--require-software-complete",
+        "--require-hardware-classified",
+    ]);
+
+    assert!(
+        output.status.success(),
+        "migration status failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(parsed["software"]["complete"].as_bool(), Some(true));
+    assert_eq!(
+        parsed["software"]["passed"].as_i64(),
+        parsed["software"]["total"].as_i64()
+    );
+    assert_eq!(
+        parsed["software"]["implementation"]["implemented"].as_i64(),
+        parsed["software"]["implementation"]["total"].as_i64()
+    );
+    assert_eq!(
+        parsed["software"]["by_kind"]["scenario"]["rate"].as_f64(),
+        Some(1.0)
+    );
+    assert_eq!(parsed["hardware"]["classified"].as_bool(), Some(true));
+    assert_eq!(parsed["hardware"]["validated"].as_i64(), Some(0));
+    assert_eq!(parsed["hardware"]["total"].as_i64(), Some(12));
+    assert_eq!(
+        parsed["ready_for_release_without_hardware"].as_bool(),
+        Some(true)
+    );
+    assert_eq!(parsed["fully_validated"].as_bool(), Some(false));
 }
 
 #[test]
@@ -756,6 +804,13 @@ fn local_validation_entrypoints_match_ci_gates() {
         "cargo make porting-coverage should require complete implementation status"
     );
     assert!(
+        MAKEFILE_TOML.contains("[tasks.migration-status]")
+            && MAKEFILE_TOML.contains("tools/migration_status.py")
+            && MAKEFILE_TOML.contains("--require-software-complete")
+            && MAKEFILE_TOML.contains("--require-hardware-classified"),
+        "cargo make migration-status should expose the combined release dashboard gate"
+    );
+    assert!(
         MAKEFILE_TOML.contains("[tasks.hardware-validation]")
             && MAKEFILE_TOML.contains("tools/hardware_validation.py")
             && MAKEFILE_TOML.contains("--require-classified"),
@@ -777,6 +832,7 @@ fn local_validation_entrypoints_match_ci_gates() {
     );
     for required in [
         "--require-porting-complete",
+        "tools/migration_status.py --require-zmk-source --require-software-complete --require-hardware-classified",
         "tools/hardware_validation.py --require-classified",
         "tools/hardware_validation.py --markdown",
         "tools/hardware_validation.py --evidence-template",
@@ -794,6 +850,13 @@ fn local_validation_entrypoints_match_ci_gates() {
     assert!(
         FIRMWARE_WORKFLOW_YAML.contains("tools/hardware_validation_evidence.example.toml"),
         "firmware CI path filters should include the hardware evidence template"
+    );
+    assert!(
+        FIRMWARE_WORKFLOW_YAML.contains("tools/migration_status.py")
+            && FIRMWARE_WORKFLOW_YAML.contains("--require-software-complete")
+            && FIRMWARE_WORKFLOW_YAML.contains("--require-hardware-classified")
+            && FIRMWARE_WORKFLOW_YAML.contains("--markdown >> \"$GITHUB_STEP_SUMMARY\""),
+        "firmware CI should publish the combined migration status dashboard"
     );
     assert!(
         FIRMWARE_WORKFLOW_YAML.contains(".github/workflows/auto-tag.yml"),

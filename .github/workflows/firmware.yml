@@ -22,6 +22,7 @@ on:
       - 'tools/hardware_validation.py'
       - 'tools/hardware_validation_evidence.example.toml'
       - 'tools/hardware_validation_manifest.toml'
+      - 'tools/migration_status.py'
       - 'tools/porting_coverage.py'
       - 'tools/porting_coverage_manifest.toml'
       - 'README.md'
@@ -108,6 +109,12 @@ jobs:
             --zmk-keymap zmk-config-LalaPadGen2/config/lalapadgen2.keymap \
             --require-zmk-source \
             --require-porting-complete
+          python3 tools/migration_status.py \
+            --zmk-keymap zmk-config-LalaPadGen2/config/lalapadgen2.keymap \
+            --require-zmk-source \
+            --require-software-complete \
+            --require-hardware-classified \
+            --markdown >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run host parity tests
         run: cargo test --lib --target x86_64-unknown-linux-gnu
