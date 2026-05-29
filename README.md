@@ -117,6 +117,7 @@ rmkit get-chip --keyboard-toml-path keyboard.toml
 rmkit get-project-name --keyboard-toml-path keyboard.toml
 python3 tools/porting_coverage.py --require-zmk-source --require-porting-complete
 python3 tools/hardware_validation.py --require-classified
+python3 tools/hardware_validation.py --markdown
 python3 tools/check_flash_layout.py --config-only
 cargo check --release --bin central
 cargo check --release --bin peripheral
@@ -175,7 +176,10 @@ RDY behavior, left/right trackpad runtime behavior, BLE split reconnection,
 Vial thumb layer-tap behavior, RGB/battery indicators, and reset/reflash
 behavior. CI runs it with `--require-classified` so every hardware-only item
 must stay explicitly tracked, but it does not use `--require-validated` because
-real hardware evidence cannot be created by GitHub Actions.
+real hardware evidence cannot be created by GitHub Actions. The CI job also
+writes `python3 tools/hardware_validation.py --markdown` to the GitHub Actions
+step summary so remaining real-device evidence is visible next to each release
+build.
 
 Host-side parity tests can be run explicitly with:
 

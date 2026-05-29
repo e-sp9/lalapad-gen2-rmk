@@ -46,6 +46,12 @@ fn run_hardware_validation(args: &[&str]) -> std::process::Output {
         .unwrap()
 }
 
+fn write_temp_file(name: &str, contents: &str) -> std::path::PathBuf {
+    let path = std::env::temp_dir().join(format!("lalapad-{name}-{}.toml", std::process::id()));
+    std::fs::write(&path, contents).unwrap();
+    path
+}
+
 fn run_python(script: &str) -> std::process::Output {
     Command::new("python3")
         .arg("-c")
@@ -166,6 +172,12 @@ fn hardware_validation_manifest_is_classified_but_not_release_blocking() {
         "firmware CI should keep the real-hardware validation tracker classified"
     );
     assert!(
+        FIRMWARE_WORKFLOW_YAML.contains(
+            "python3 tools/hardware_validation.py --markdown >> \"$GITHUB_STEP_SUMMARY\""
+        ),
+        "firmware CI should publish a hardware validation summary table"
+    );
+    assert!(
         !FIRMWARE_WORKFLOW_YAML.contains("--require-validated"),
         "release CI must not claim real-hardware validation without physical evidence"
     );
@@ -201,6 +213,96 @@ fn hardware_validation_manifest_is_classified_but_not_release_blocking() {
 }
 
 #[test]
+fn hardware_validation_markdown_report_lists_required_evidence() {
+    let output = run_hardware_validation(&["--markdown"]);
+
+    assert!(
+        output.status.success(),
+        "hardware validation markdown report failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let manifest = hardware_validation_manifest_toml();
+    let expected_total = manifest["checks"].as_array().unwrap().len();
+    assert!(stdout.contains("## Real-Hardware Validation"));
+    assert!(stdout.contains(&format!(
+        "Hardware validation: 0/{expected_total} = 0.00% validated"
+    )));
+    assert!(stdout.contains(
+        "| ID | Area | Side | Status | Requirement | Required evidence | Validated at | Tester | Artifact/notes |"
+    ));
+    for required in [
+        "iqs9151_right_i2c_identity",
+        "left_trackpad_split_cursor_tap_scroll",
+        "vial_thumb_layer_taps",
+        "storage_reset_and_reflash",
+    ] {
+        assert!(
+            stdout.contains(required),
+            "hardware validation markdown report is missing {required}"
+        );
+    }
+}
+
+#[test]
+fn hardware_validation_markdown_escapes_table_cells_and_shows_validation_evidence() {
+    let manifest = r#"
+[[checks]]
+id = "pipe_check"
+area = "trackpad"
+side = "right"
+requirement = """A | B
+C"""
+evidence = "Scope | log"
+source = "docs/TRACKPAD_HARDWARE_CHECK.md"
+status = "validated"
+validated_at = "2026-05-29"
+tester = "bench | tester"
+artifact_or_notes = "photo | serial log"
+"#;
+    let path = write_temp_file("hardware-validation-pipes", manifest);
+    let output = run_hardware_validation(&["--manifest", path.to_str().unwrap(), "--markdown"]);
+    let _ = std::fs::remove_file(&path);
+
+    assert!(
+        output.status.success(),
+        "hardware validation markdown escaped report failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Hardware validation: 1/1 = 100.00% validated"));
+    assert!(stdout.contains("A \\| B C"));
+    assert!(stdout.contains("Scope \\| log"));
+    assert!(stdout.contains("bench \\| tester"));
+    assert!(stdout.contains("photo \\| serial log"));
+}
+
+#[test]
+fn hardware_validation_require_validated_rejects_malformed_manifest() {
+    let manifest = r#"
+checks = "not an array"
+"#;
+    let path = write_temp_file("hardware-validation-malformed", manifest);
+    let output =
+        run_hardware_validation(&["--manifest", path.to_str().unwrap(), "--require-validated"]);
+    let _ = std::fs::remove_file(&path);
+
+    assert!(
+        !output.status.success(),
+        "malformed hardware manifest unexpectedly passed --require-validated\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("checks must be an array"),
+        "malformed hardware manifest should explain the schema error"
+    );
+}
+
+#[test]
 fn local_validation_entrypoints_match_ci_gates() {
     assert!(
         MAKEFILE_TOML.contains("--require-porting-complete"),
@@ -212,9 +314,15 @@ fn local_validation_entrypoints_match_ci_gates() {
             && MAKEFILE_TOML.contains("--require-classified"),
         "Makefile.toml should expose the hardware validation classification gate"
     );
+    assert!(
+        MAKEFILE_TOML.contains("[tasks.hardware-validation-report]")
+            && MAKEFILE_TOML.contains("--markdown"),
+        "Makefile.toml should expose a hardware validation markdown report"
+    );
     for required in [
         "--require-porting-complete",
         "tools/hardware_validation.py --require-classified",
+        "tools/hardware_validation.py --markdown",
         "tools/hardware_validation_manifest.toml",
     ] {
         assert!(

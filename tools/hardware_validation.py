@@ -125,6 +125,53 @@ def as_json(summary: HardwareValidationSummary) -> dict[str, Any]:
     }
 
 
+def markdown_escape(value: Any) -> str:
+    return str(value).replace("|", "\\|").replace("\n", " ")
+
+
+def as_markdown(manifest: dict[str, Any], summary: HardwareValidationSummary) -> str:
+    if summary.rate is None:
+        headline = "Hardware validation: 0/0 = n/a"
+    else:
+        headline = (
+            f"Hardware validation: {summary.validated}/{summary.total} = "
+            f"{summary.rate:.2f}% validated"
+        )
+    status_counts = ", ".join(
+        f"`{status}`={count}" for status, count in summary.by_status.items() if count
+    )
+    lines = [
+        "## Real-Hardware Validation",
+        "",
+        headline,
+        "",
+        f"Status: {status_counts or 'none'}",
+        "",
+        "| ID | Area | Side | Status | Requirement | Required evidence | Validated at | Tester | Artifact/notes |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+    ]
+    for check in manifest.get("checks", []):
+        if not isinstance(check, dict):
+            continue
+        lines.append(
+            "| {id} | {area} | {side} | `{status}` | {requirement} | {evidence} | {validated_at} | {tester} | {artifact_or_notes} |".format(
+                id=markdown_escape(check.get("id", "")),
+                area=markdown_escape(check.get("area", "")),
+                side=markdown_escape(check.get("side", "")),
+                status=markdown_escape(check.get("status", "")),
+                requirement=markdown_escape(check.get("requirement", "")),
+                evidence=markdown_escape(check.get("evidence", "")),
+                validated_at=markdown_escape(check.get("validated_at", "")),
+                tester=markdown_escape(check.get("tester", "")),
+                artifact_or_notes=markdown_escape(check.get("artifact_or_notes", "")),
+            )
+        )
+    if summary.errors:
+        lines.extend(["", "### Manifest Errors", ""])
+        lines.extend(f"- {markdown_escape(error)}" for error in summary.errors)
+    return "\n".join(lines) + "\n"
+
+
 def print_text(summary: HardwareValidationSummary) -> None:
     if summary.rate is None:
         print("Hardware validation: 0/0 = n/a")
@@ -158,6 +205,7 @@ def main() -> None:
         default=Path("tools/hardware_validation_manifest.toml"),
     )
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--markdown", action="store_true")
     parser.add_argument(
         "--require-classified",
         action="store_true",
@@ -170,15 +218,20 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    summary = summarize(load_toml(args.manifest))
+    manifest = load_toml(args.manifest)
+    summary = summarize(manifest)
+    if args.json and args.markdown:
+        parser.error("--json and --markdown are mutually exclusive")
     if args.json:
         print(json.dumps(as_json(summary), indent=2, sort_keys=True))
+    elif args.markdown:
+        print(as_markdown(manifest, summary), end="")
     else:
         print_text(summary)
 
     if args.require_classified and not summary.classified:
         raise SystemExit(1)
-    if args.require_validated and summary.validated != summary.total:
+    if args.require_validated and (not summary.classified or summary.validated != summary.total):
         raise SystemExit(1)
 
 

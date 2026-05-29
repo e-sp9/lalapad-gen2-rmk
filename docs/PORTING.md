@@ -287,10 +287,13 @@ Run:
 
 ```sh
 python3 tools/hardware_validation.py --require-classified
+python3 tools/hardware_validation.py --markdown
 ```
 
 The command prints the real-hardware validation rate and remaining evidence
 needed. CI uses `--require-classified` only, which means every hardware-only
 item must have a valid status and evidence description. CI intentionally does
 not use `--require-validated`; changing a check to `validated` requires actual
-device evidence from the checklist, not just a green software build.
+device evidence from the checklist, not just a green software build. The
+Markdown mode emits the same tracker as a table for release notes, PR review,
+and the GitHub Actions step summary.

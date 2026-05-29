@@ -19,6 +19,7 @@
 - [ ] `rmkit get-project-name --keyboard-toml-path keyboard.toml`
 - [ ] `python3 tools/porting_coverage.py --require-zmk-source --require-porting-complete`
 - [ ] `python3 tools/hardware_validation.py --require-classified`
+- [ ] `python3 tools/hardware_validation.py --markdown`
 - [ ] `cargo check --release --bin central`
 - [ ] `cargo check --release --bin peripheral`
 - [ ] `cargo build --release`
