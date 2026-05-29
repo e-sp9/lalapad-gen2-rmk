@@ -3281,6 +3281,15 @@ manifest = {
             "expected": 2457,
         },
         {
+            "id": "source_backed_bool_const",
+            "source_file": "source.conf",
+            "source_key": "CONFIG_INPUT_IQS9151_1F_TAP_ENABLE",
+            "source_expected": "y",
+            "target_file": "firmware.rs",
+            "target_const": "DEFAULT_ONE_FINGER_TAP_ENABLED",
+            "expected": True,
+        },
+        {
             "id": "missing_const",
             "target_file": "firmware.rs",
             "target_const": "MISSING_CONST",
@@ -3308,13 +3317,14 @@ def pack(results):
 
 with tempfile.TemporaryDirectory() as tempdir:
     root = Path(tempdir)
-    (root / "source.conf").write_text("CONFIG_INPUT_IQS9151_RESOLUTION_X=2457\n")
+    (root / "source.conf").write_text("CONFIG_INPUT_IQS9151_RESOLUTION_X=2457\nCONFIG_INPUT_IQS9151_1F_TAP_ENABLE=y\n")
     firmware = root / "firmware.rs"
     firmware.write_text('''
     pub const ADDR_PRODUCT_NUMBER: u16 = 0x1000;
     const DEFAULT_CURSOR_INERTIA_ENABLED: bool = true;
     pub const INFO_SHOW_RESET: u16 = 1 << 7;
     pub const DEFAULT_X_RESOLUTION: u16 = 2457;
+    pub const DEFAULT_ONE_FINGER_TAP_ENABLED: bool = true;
     ''')
     ok = pack(pc.check_rust_const_values(manifest, root, root))
 
@@ -3323,8 +3333,9 @@ with tempfile.TemporaryDirectory() as tempdir:
     const DEFAULT_CURSOR_INERTIA_ENABLED: bool = false;
     pub const INFO_SHOW_RESET: u16 = 1 << 6;
     pub const DEFAULT_X_RESOLUTION: u16 = 2000;
+    pub const DEFAULT_ONE_FINGER_TAP_ENABLED: bool = false;
     ''')
-    (root / "source.conf").write_text("CONFIG_INPUT_IQS9151_RESOLUTION_X=2000\n")
+    (root / "source.conf").write_text("CONFIG_INPUT_IQS9151_RESOLUTION_X=2000\nCONFIG_INPUT_IQS9151_1F_TAP_ENABLE=n\n")
     changed = pack(pc.check_rust_const_values(manifest, root, root))
 
 print(json.dumps({"ok": ok, "changed": changed}))
@@ -3362,6 +3373,17 @@ print(json.dumps({"ok": ok, "changed": changed}))
     assert_eq!(source_backed["passed"].as_i64(), Some(2));
     assert_eq!(source_backed["total"].as_i64(), Some(2));
     assert_eq!(source_backed["ok"], true);
+
+    let source_backed_bool = parsed["ok"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "source_backed_bool_const")
+        .expect("missing source-backed bool rust const result");
+    assert_eq!(source_backed_bool["kind"], "rust_const");
+    assert_eq!(source_backed_bool["passed"].as_i64(), Some(2));
+    assert_eq!(source_backed_bool["total"].as_i64(), Some(2));
+    assert_eq!(source_backed_bool["ok"], true);
 
     let missing_const = parsed["ok"]
         .as_array()
@@ -3439,6 +3461,22 @@ print(json.dumps({"ok": ok, "changed": changed}))
             .as_str()
             .unwrap()
             .contains("source expected")
+    );
+
+    let changed_bool_source = parsed["changed"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "source_backed_bool_const")
+        .expect("missing changed source-backed bool const result");
+    assert_eq!(changed_bool_source["kind"], "rust_const");
+    assert_eq!(changed_bool_source["passed"].as_i64(), Some(0));
+    assert_eq!(changed_bool_source["total"].as_i64(), Some(2));
+    assert!(
+        changed_bool_source["message"]
+            .as_str()
+            .unwrap()
+            .contains("source expected 'y', got 'n'")
     );
 }
 

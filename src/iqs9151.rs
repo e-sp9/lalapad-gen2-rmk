@@ -78,6 +78,17 @@ pub const DEFAULT_SCROLL_LOW_SPEED_THRESHOLD: i16 = 0;
 pub const DEFAULT_SCROLL_INERTIA_DIVISOR: u16 = 12;
 pub const DEFAULT_SCROLL_MAX_STEP: i16 = i16::MAX;
 pub const DEFAULT_SCROLL_INERTIA_MAX_STEP: i16 = i16::MAX;
+pub const DEFAULT_ROTATE_0_ENABLED: bool = true;
+pub const DEFAULT_ONE_FINGER_TAP_ENABLED: bool = true;
+pub const DEFAULT_ONE_FINGER_PRESSHOLD_ENABLED: bool = true;
+pub const DEFAULT_TWO_FINGER_TAP_ENABLED: bool = true;
+pub const DEFAULT_TWO_FINGER_PRESSHOLD_ENABLED: bool = true;
+pub const DEFAULT_SCROLL_Y_ENABLED: bool = true;
+pub const DEFAULT_SCROLL_X_ENABLED: bool = true;
+pub const DEFAULT_SCROLL_INERTIA_ENABLED: bool = true;
+pub const DEFAULT_TWO_FINGER_PINCH_ENABLED: bool = true;
+pub const DEFAULT_THREE_FINGER_TAP_ENABLED: bool = true;
+pub const DEFAULT_THREE_FINGER_PRESSHOLD_ENABLED: bool = true;
 pub const DEFAULT_ONE_FINGER_TAP_MAX_MS: u32 = 250;
 pub const DEFAULT_ONE_FINGER_TAP_MOVE: u16 = 50;
 pub const DEFAULT_ONE_FINGER_DRAG_HOLD_MS: u32 = 160;
@@ -938,6 +949,11 @@ where
         self.scroll_remainder_x = 0;
         self.scroll_remainder_y = 0;
         self.reset_scroll_smoothing();
+        if !self.effective_scroll_config().inertia_enabled {
+            self.scroll_history.reset();
+            self.scroll_inertia.reset();
+            return;
+        }
         if let Some(seed) = self.scroll_history.seed(now_ms) {
             self.scroll_inertia.start(seed, now_ms);
         }
@@ -2119,6 +2135,9 @@ impl TrackpadMotionConfig {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TrackpadScrollConfig {
+    pub scroll_x_enabled: bool,
+    pub scroll_y_enabled: bool,
+    pub inertia_enabled: bool,
     pub divisor: u16,
     pub low_speed_divisor: u16,
     pub low_speed_threshold: i16,
@@ -2130,6 +2149,9 @@ pub struct TrackpadScrollConfig {
 impl Default for TrackpadScrollConfig {
     fn default() -> Self {
         Self {
+            scroll_x_enabled: DEFAULT_SCROLL_X_ENABLED,
+            scroll_y_enabled: DEFAULT_SCROLL_Y_ENABLED,
+            inertia_enabled: DEFAULT_SCROLL_INERTIA_ENABLED,
             divisor: DEFAULT_SCROLL_DIVISOR,
             low_speed_divisor: DEFAULT_SCROLL_LOW_SPEED_DIVISOR,
             low_speed_threshold: DEFAULT_SCROLL_LOW_SPEED_THRESHOLD,
@@ -2143,6 +2165,9 @@ impl Default for TrackpadScrollConfig {
 impl TrackpadScrollConfig {
     pub const fn new(divisor: u16) -> Self {
         Self {
+            scroll_x_enabled: DEFAULT_SCROLL_X_ENABLED,
+            scroll_y_enabled: DEFAULT_SCROLL_Y_ENABLED,
+            inertia_enabled: DEFAULT_SCROLL_INERTIA_ENABLED,
             divisor,
             low_speed_divisor: DEFAULT_SCROLL_LOW_SPEED_DIVISOR,
             low_speed_threshold: DEFAULT_SCROLL_LOW_SPEED_THRESHOLD,
@@ -2206,6 +2231,8 @@ impl TrackpadScrollConfig {
         low_speed_threshold: i16,
         max_step: i16,
     ) -> Option<TrackpadMotionEvent> {
+        let relative_x = if self.scroll_x_enabled { relative_x } else { 0 };
+        let relative_y = if self.scroll_y_enabled { relative_y } else { 0 };
         let divisor_x =
             effective_scroll_divisor(relative_x, divisor, low_speed_divisor, low_speed_threshold);
         let divisor_y =
@@ -2782,6 +2809,13 @@ impl Iterator for TrackpadClickEvents {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TrackpadGestureConfig {
+    pub one_finger_tap_enabled: bool,
+    pub one_finger_presshold_enabled: bool,
+    pub two_finger_tap_enabled: bool,
+    pub two_finger_presshold_enabled: bool,
+    pub two_finger_pinch_enabled: bool,
+    pub three_finger_tap_enabled: bool,
+    pub three_finger_presshold_enabled: bool,
     pub one_finger_tap_max_ms: u32,
     pub one_finger_drag_hold_ms: u32,
     pub one_finger_tap_move: u16,
@@ -2796,6 +2830,13 @@ pub struct TrackpadGestureConfig {
 impl Default for TrackpadGestureConfig {
     fn default() -> Self {
         Self {
+            one_finger_tap_enabled: DEFAULT_ONE_FINGER_TAP_ENABLED,
+            one_finger_presshold_enabled: DEFAULT_ONE_FINGER_PRESSHOLD_ENABLED,
+            two_finger_tap_enabled: DEFAULT_TWO_FINGER_TAP_ENABLED,
+            two_finger_presshold_enabled: DEFAULT_TWO_FINGER_PRESSHOLD_ENABLED,
+            two_finger_pinch_enabled: DEFAULT_TWO_FINGER_PINCH_ENABLED,
+            three_finger_tap_enabled: DEFAULT_THREE_FINGER_TAP_ENABLED,
+            three_finger_presshold_enabled: DEFAULT_THREE_FINGER_PRESSHOLD_ENABLED,
             one_finger_tap_max_ms: DEFAULT_ONE_FINGER_TAP_MAX_MS,
             one_finger_drag_hold_ms: DEFAULT_ONE_FINGER_DRAG_HOLD_MS,
             one_finger_tap_move: DEFAULT_ONE_FINGER_TAP_MOVE,
@@ -3197,18 +3238,21 @@ impl TrackpadGestureRecognizer {
                 return None;
             };
 
-            let tapdrag_second_touch = take_pending_tapdrag_second_touch(
-                &mut self.one_finger_click_pending,
-                &mut self.one_finger_click_pending_ms,
-                now_ms,
-                ONE_FINGER_TAPDRAG_GAP_MAX_MS,
-            );
+            let tapdrag_second_touch = self.config.one_finger_presshold_enabled
+                && take_pending_tapdrag_second_touch(
+                    &mut self.one_finger_click_pending,
+                    &mut self.one_finger_click_pending_ms,
+                    now_ms,
+                    ONE_FINGER_TAPDRAG_GAP_MAX_MS,
+                );
 
             self.one_finger.start(
                 now_ms,
                 x,
                 y,
-                !tapdrag_second_touch && self.tap_start_allowed(prev_frame, now_ms),
+                self.config.one_finger_tap_enabled
+                    && !tapdrag_second_touch
+                    && self.tap_start_allowed(prev_frame, now_ms),
                 tapdrag_second_touch,
             );
             return None;
@@ -3236,7 +3280,8 @@ impl TrackpadGestureRecognizer {
         }
 
         if self.one_finger.tapdrag_second_touch {
-            let second_tap_detected = frame.finger_count() == 0
+            let second_tap_detected = self.config.one_finger_presshold_enabled
+                && frame.finger_count() == 0
                 && self.one_finger.hold_valid(
                     now_ms,
                     self.config.one_finger_tap_max_ms,
@@ -3256,7 +3301,8 @@ impl TrackpadGestureRecognizer {
             };
         }
 
-        let tap_detected = frame.finger_count() == 0
+        let tap_detected = self.config.one_finger_tap_enabled
+            && frame.finger_count() == 0
             && self.one_finger.tap_valid(
                 now_ms,
                 self.config.one_finger_tap_max_ms,
@@ -3283,12 +3329,13 @@ impl TrackpadGestureRecognizer {
             .flatten();
 
         if !self.two_finger.active && two_now {
-            let tapdrag_reentry = pending_tapdrag_second_touch(
-                self.two_finger_click_pending,
-                self.two_finger_click_pending_ms,
-                now_ms,
-                TWO_FINGER_TAPDRAG_GAP_MAX_MS,
-            );
+            let tapdrag_reentry = self.config.two_finger_presshold_enabled
+                && pending_tapdrag_second_touch(
+                    self.two_finger_click_pending,
+                    self.two_finger_click_pending_ms,
+                    now_ms,
+                    TWO_FINGER_TAPDRAG_GAP_MAX_MS,
+                );
             let Some(metrics) = have_xy else {
                 if !tapdrag_reentry {
                     if let Some(delta) = two_finger_relative_scroll_delta(
@@ -3303,12 +3350,13 @@ impl TrackpadGestureRecognizer {
                 return None;
             };
 
-            let tapdrag_second_touch = take_pending_tapdrag_second_touch(
-                &mut self.two_finger_click_pending,
-                &mut self.two_finger_click_pending_ms,
-                now_ms,
-                TWO_FINGER_TAPDRAG_GAP_MAX_MS,
-            );
+            let tapdrag_second_touch = self.config.two_finger_presshold_enabled
+                && take_pending_tapdrag_second_touch(
+                    &mut self.two_finger_click_pending,
+                    &mut self.two_finger_click_pending_ms,
+                    now_ms,
+                    TWO_FINGER_TAPDRAG_GAP_MAX_MS,
+                );
             let relative_scroll = if tapdrag_second_touch || current_positions_confident {
                 None
             } else {
@@ -3322,7 +3370,8 @@ impl TrackpadGestureRecognizer {
             self.two_finger.start(
                 now_ms,
                 metrics,
-                !tapdrag_second_touch
+                self.config.two_finger_tap_enabled
+                    && !tapdrag_second_touch
                     && (self.tap_start_allowed(prev_frame, now_ms)
                         || self.two_finger_one_lead_valid),
                 tapdrag_second_touch,
@@ -3384,7 +3433,8 @@ impl TrackpadGestureRecognizer {
                     return Some(TrackpadGestureEvent::Scroll(delta));
                 }
             }
-            self.two_finger.classify_mode();
+            self.two_finger
+                .classify_mode(self.config.two_finger_pinch_enabled);
             self.two_finger.release_pending = false;
             if self.two_finger.mode == TwoFingerMode::Scroll {
                 return Some(TrackpadGestureEvent::Scroll(TrackpadScrollDelta {
@@ -3414,7 +3464,8 @@ impl TrackpadGestureRecognizer {
                 return None;
             }
 
-            let tap_detected = frame.finger_count() == 0
+            let tap_detected = self.config.two_finger_tap_enabled
+                && frame.finger_count() == 0
                 && pending_ms <= TWO_FINGER_RELEASE_PENDING_MAX_MS
                 && self.two_finger.tap_valid(
                     now_ms,
@@ -3444,7 +3495,8 @@ impl TrackpadGestureRecognizer {
         }
 
         if self.two_finger.tapdrag_second_touch {
-            let second_tap_detected = frame.finger_count() == 0
+            let second_tap_detected = self.config.two_finger_presshold_enabled
+                && frame.finger_count() == 0
                 && self.two_finger.hold_valid(
                     now_ms,
                     self.config.two_finger_tap_max_ms,
@@ -3469,11 +3521,13 @@ impl TrackpadGestureRecognizer {
             };
         }
 
-        if self.two_finger.tap_valid(
-            now_ms,
-            self.config.two_finger_tap_max_ms,
-            self.config.two_finger_tap_move,
-        ) {
+        if self.config.two_finger_tap_enabled
+            && self.two_finger.tap_valid(
+                now_ms,
+                self.config.two_finger_tap_max_ms,
+                self.config.two_finger_tap_move,
+            )
+        {
             let finger_count = frame.finger_count();
             if finger_count == 1 {
                 self.two_finger.release_pending = true;
@@ -3510,18 +3564,20 @@ impl TrackpadGestureRecognizer {
                 return None;
             };
 
-            let tapdrag_second_touch = take_pending_tapdrag_second_touch(
-                &mut self.three_finger_click_pending,
-                &mut self.three_finger_click_pending_ms,
-                now_ms,
-                THREE_FINGER_TAPDRAG_GAP_MAX_MS,
-            );
+            let tapdrag_second_touch = self.config.three_finger_presshold_enabled
+                && take_pending_tapdrag_second_touch(
+                    &mut self.three_finger_click_pending,
+                    &mut self.three_finger_click_pending_ms,
+                    now_ms,
+                    THREE_FINGER_TAPDRAG_GAP_MAX_MS,
+                );
 
             self.three_finger.start(
                 now_ms,
                 x,
                 y,
-                !tapdrag_second_touch
+                self.config.three_finger_tap_enabled
+                    && !tapdrag_second_touch
                     && (self.tap_start_allowed(prev_frame, now_ms)
                         || self.three_finger_one_lead_valid
                         || self.three_finger_two_lead_valid),
@@ -3573,7 +3629,8 @@ impl TrackpadGestureRecognizer {
         }
 
         if self.three_finger.tapdrag_second_touch {
-            let second_tap_detected = frame.finger_count() == 0
+            let second_tap_detected = self.config.three_finger_presshold_enabled
+                && frame.finger_count() == 0
                 && self.three_finger.hold_valid(
                     now_ms,
                     self.config.three_finger_tap_max_ms,
@@ -3608,7 +3665,8 @@ impl TrackpadGestureRecognizer {
                 return None;
             }
 
-            let tap_detected = frame.finger_count() == 0
+            let tap_detected = self.config.three_finger_tap_enabled
+                && frame.finger_count() == 0
                 && pending_ms <= THREE_FINGER_RELEASE_PENDING_MAX_MS
                 && !self.three_finger.hold_sent
                 && !self.three_finger.swipe_sent
@@ -3625,7 +3683,8 @@ impl TrackpadGestureRecognizer {
             };
         }
 
-        if !self.three_finger.hold_sent
+        if self.config.three_finger_tap_enabled
+            && !self.three_finger.hold_sent
             && !self.three_finger.swipe_sent
             && self.three_finger.tap_valid(
                 now_ms,
@@ -3929,7 +3988,7 @@ impl TwoFingerState {
         }
     }
 
-    fn classify_mode(&mut self) {
+    fn classify_mode(&mut self, pinch_enabled: bool) {
         if self.mode != TwoFingerMode::None {
             return;
         }
@@ -3937,7 +3996,10 @@ impl TwoFingerState {
         let abs_center = abs_i32(self.centroid_dx).max(abs_i32(self.centroid_dy));
         let abs_distance = abs_i32(self.distance_delta);
 
-        if abs_distance >= TWO_FINGER_PINCH_START_DISTANCE && abs_distance > abs_center {
+        if pinch_enabled
+            && abs_distance >= TWO_FINGER_PINCH_START_DISTANCE
+            && abs_distance > abs_center
+        {
             self.mode = TwoFingerMode::Pinch;
             self.tap_candidate = false;
         } else if abs_center >= TWO_FINGER_SCROLL_START_MOVE {
@@ -4682,7 +4744,81 @@ mod tests {
         assert_eq!(DEFAULT_THREE_FINGER_TAP_MOVE, 35);
         assert_eq!(DEFAULT_THREE_FINGER_DRAG_HOLD_MS, 200);
         assert_eq!(DEFAULT_THREE_FINGER_SWIPE_MOVE, 200);
+        assert!(DEFAULT_ROTATE_0_ENABLED);
+        assert!(DEFAULT_ONE_FINGER_TAP_ENABLED);
+        assert!(DEFAULT_ONE_FINGER_PRESSHOLD_ENABLED);
+        assert!(DEFAULT_TWO_FINGER_TAP_ENABLED);
+        assert!(DEFAULT_TWO_FINGER_PRESSHOLD_ENABLED);
+        assert!(DEFAULT_SCROLL_Y_ENABLED);
+        assert!(DEFAULT_SCROLL_X_ENABLED);
+        assert!(DEFAULT_SCROLL_INERTIA_ENABLED);
+        assert!(DEFAULT_TWO_FINGER_PINCH_ENABLED);
+        assert!(DEFAULT_THREE_FINGER_TAP_ENABLED);
+        assert!(DEFAULT_THREE_FINGER_PRESSHOLD_ENABLED);
         assert!(DEFAULT_CURSOR_INERTIA_ENABLED);
+    }
+
+    #[test]
+    fn feature_enable_defaults_are_wired_into_runtime_configs() {
+        let disabled_one_tap = TrackpadGestureConfig {
+            one_finger_tap_enabled: false,
+            ..TrackpadGestureConfig::default()
+        };
+        let mut recognizer = TrackpadGestureRecognizer::new(disabled_one_tap);
+        assert_eq!(
+            recognizer.update(frame_with_fingers(1, 100, 100, 0, 0), 0),
+            None
+        );
+        assert_eq!(recognizer.update(CoordinateFrame::empty(), 100), None);
+
+        let start_metrics = TwoFingerMetrics {
+            centroid_x: 100,
+            centroid_y: 100,
+            distance: 80,
+        };
+        let mut two = TwoFingerState::new();
+        two.start(0, start_metrics, true, false);
+        two.update_metrics(TwoFingerMetrics {
+            centroid_x: 100,
+            centroid_y: 100,
+            distance: 200,
+        });
+        two.classify_mode(false);
+        assert_eq!(two.mode, TwoFingerMode::None);
+
+        let mut remainder_x = 0;
+        let mut remainder_y = 0;
+        let scroll_y_only = TrackpadScrollConfig {
+            scroll_x_enabled: false,
+            ..TrackpadScrollConfig::default()
+        };
+        assert_eq!(
+            scroll_y_only.scroll_event(
+                TrackpadSide::Right,
+                120,
+                120,
+                &mut remainder_x,
+                &mut remainder_y,
+            ),
+            Some(TrackpadMotionEvent::scroll(TrackpadSide::Right, -10, 0))
+        );
+
+        let mut remainder_x = 0;
+        let mut remainder_y = 0;
+        let scroll_x_only = TrackpadScrollConfig {
+            scroll_y_enabled: false,
+            ..TrackpadScrollConfig::default()
+        };
+        assert_eq!(
+            scroll_x_only.scroll_event(
+                TrackpadSide::Right,
+                120,
+                120,
+                &mut remainder_x,
+                &mut remainder_y,
+            ),
+            Some(TrackpadMotionEvent::scroll(TrackpadSide::Right, 0, 10))
+        );
     }
 
     #[test]
@@ -6412,7 +6548,7 @@ mod tests {
                 distance: 10,
             }
         );
-        two.classify_mode();
+        two.classify_mode(DEFAULT_TWO_FINGER_PINCH_ENABLED);
         assert_eq!(two.mode, TwoFingerMode::Scroll);
         two.cancel_tap_if_needed(221, 50, 10);
         two.cancel_hold_if_needed(221, 50, 10);
@@ -6431,7 +6567,7 @@ mod tests {
             centroid_y: 100,
             distance: 200,
         });
-        two.classify_mode();
+        two.classify_mode(DEFAULT_TWO_FINGER_PINCH_ENABLED);
         assert_eq!(two.mode, TwoFingerMode::Pinch);
         assert_eq!(two.pinch_wheel(120), 40);
         two.start_relative_scroll(400);

@@ -1808,6 +1808,105 @@ target_const = "RESET_DELAY_MS"
 expected = 100
 
 [[rust_const_values]]
+id = "iqs9151_rotate_0_enabled"
+source_file = "boards/shields/lalapadgen2/lalapadgen2_right.conf"
+source_key = "CONFIG_INPUT_IQS9151_ROTATE_0"
+source_expected = "y"
+target_file = "src/iqs9151.rs"
+target_const = "DEFAULT_ROTATE_0_ENABLED"
+expected = true
+
+[[rust_const_values]]
+id = "iqs9151_one_finger_tap_enabled"
+source_file = "boards/shields/lalapadgen2/lalapadgen2_right.conf"
+source_key = "CONFIG_INPUT_IQS9151_1F_TAP_ENABLE"
+source_expected = "y"
+target_file = "src/iqs9151.rs"
+target_const = "DEFAULT_ONE_FINGER_TAP_ENABLED"
+expected = true
+
+[[rust_const_values]]
+id = "iqs9151_one_finger_presshold_enabled"
+source_file = "boards/shields/lalapadgen2/lalapadgen2_right.conf"
+source_key = "CONFIG_INPUT_IQS9151_1F_PRESSHOLD_ENABLE"
+source_expected = "y"
+target_file = "src/iqs9151.rs"
+target_const = "DEFAULT_ONE_FINGER_PRESSHOLD_ENABLED"
+expected = true
+
+[[rust_const_values]]
+id = "iqs9151_two_finger_tap_enabled"
+source_file = "boards/shields/lalapadgen2/lalapadgen2_right.conf"
+source_key = "CONFIG_INPUT_IQS9151_2F_TAP_ENABLE"
+source_expected = "y"
+target_file = "src/iqs9151.rs"
+target_const = "DEFAULT_TWO_FINGER_TAP_ENABLED"
+expected = true
+
+[[rust_const_values]]
+id = "iqs9151_two_finger_presshold_enabled"
+source_file = "boards/shields/lalapadgen2/lalapadgen2_right.conf"
+source_key = "CONFIG_INPUT_IQS9151_2F_PRESSHOLD_ENABLE"
+source_expected = "y"
+target_file = "src/iqs9151.rs"
+target_const = "DEFAULT_TWO_FINGER_PRESSHOLD_ENABLED"
+expected = true
+
+[[rust_const_values]]
+id = "iqs9151_scroll_y_enabled"
+source_file = "boards/shields/lalapadgen2/lalapadgen2_right.conf"
+source_key = "CONFIG_INPUT_IQS9151_SCROLL_Y_ENABLE"
+source_expected = "y"
+target_file = "src/iqs9151.rs"
+target_const = "DEFAULT_SCROLL_Y_ENABLED"
+expected = true
+
+[[rust_const_values]]
+id = "iqs9151_scroll_x_enabled"
+source_file = "boards/shields/lalapadgen2/lalapadgen2_right.conf"
+source_key = "CONFIG_INPUT_IQS9151_SCROLL_X_ENABLE"
+source_expected = "y"
+target_file = "src/iqs9151.rs"
+target_const = "DEFAULT_SCROLL_X_ENABLED"
+expected = true
+
+[[rust_const_values]]
+id = "iqs9151_scroll_inertia_enabled"
+source_file = "boards/shields/lalapadgen2/lalapadgen2_right.conf"
+source_key = "CONFIG_INPUT_IQS9151_SCROLL_INERTIA_ENABLE"
+source_expected = "y"
+target_file = "src/iqs9151.rs"
+target_const = "DEFAULT_SCROLL_INERTIA_ENABLED"
+expected = true
+
+[[rust_const_values]]
+id = "iqs9151_two_finger_pinch_enabled"
+source_file = "boards/shields/lalapadgen2/lalapadgen2_right.conf"
+source_key = "CONFIG_INPUT_IQS9151_2F_PINCH_ENABLE"
+source_expected = "y"
+target_file = "src/iqs9151.rs"
+target_const = "DEFAULT_TWO_FINGER_PINCH_ENABLED"
+expected = true
+
+[[rust_const_values]]
+id = "iqs9151_three_finger_tap_enabled"
+source_file = "boards/shields/lalapadgen2/lalapadgen2_right.conf"
+source_key = "CONFIG_INPUT_IQS9151_3F_TAP_ENABLE"
+source_expected = "y"
+target_file = "src/iqs9151.rs"
+target_const = "DEFAULT_THREE_FINGER_TAP_ENABLED"
+expected = true
+
+[[rust_const_values]]
+id = "iqs9151_three_finger_presshold_enabled"
+source_file = "boards/shields/lalapadgen2/lalapadgen2_right.conf"
+source_key = "CONFIG_INPUT_IQS9151_3F_PRESSHOLD_ENABLE"
+source_expected = "y"
+target_file = "src/iqs9151.rs"
+target_const = "DEFAULT_THREE_FINGER_PRESSHOLD_ENABLED"
+expected = true
+
+[[rust_const_values]]
 id = "iqs9151_x_resolution"
 source_file = "boards/shields/lalapadgen2/lalapadgen2_right.conf"
 source_key = "CONFIG_INPUT_IQS9151_RESOLUTION_X"
@@ -1953,6 +2052,9 @@ expected = 40
 
 [[rust_const_values]]
 id = "trackpad_cursor_inertia_enabled"
+source_file = "boards/shields/lalapadgen2/lalapadgen2_right.conf"
+source_key = "CONFIG_INPUT_IQS9151_CURSOR_INERTIA_ENABLE"
+source_expected = "y"
 target_file = "src/iqs9151.rs"
 target_const = "DEFAULT_CURSOR_INERTIA_ENABLED"
 expected = true

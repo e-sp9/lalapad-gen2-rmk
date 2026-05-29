@@ -128,9 +128,9 @@ when the upstream ZMK checkout from the manifest is present, also parses
 RMK Rust constants to verify that the migration contract still matches the
 source firmware. The Rust checks cover the RMK-side IQS9151 register-address
 inventory, upstream IQS9151 register and bit-flag porting classifications,
-product/register address values, reset/gesture bits, dynamic-scale bounds,
-timing values, and initialization byte-array checksums. It also checks
-left/right IQS9151 Kconfig parity and the
+product/register address values, reset/gesture bits, IQS9151 feature-enable
+flags, dynamic-scale bounds, timing values, and initialization byte-array
+checksums. It also checks left/right IQS9151 Kconfig parity and the
 ZMK trackpad listener routing shape, verifies that every active ZMK Kconfig key
 in the source files is classified by the migration contract, and checks Vial's
 matrix positions, ZMK `default_transform` order, the active ZMK physical-layout

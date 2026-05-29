@@ -2578,7 +2578,12 @@ def check_rust_const_values(manifest: dict[str, Any], zmk_config_dir: Path, proj
                 if source_path not in source_cache:
                     source_cache[source_path] = parse_kconfig(source_path)
                 actual_source = source_cache[source_path].get(check["source_key"])
-                expected_source = str(expected).lower() if isinstance(expected, bool) else str(expected)
+                expected_source = str(
+                    check.get(
+                        "source_expected",
+                        str(expected).lower() if isinstance(expected, bool) else expected,
+                    )
+                )
                 if actual_source == expected_source:
                     passed += 1
                 else:
