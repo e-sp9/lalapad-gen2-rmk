@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use std::process::Command;
 
 const KEYBOARD_TOML: &str = include_str!("../keyboard.toml");
+const FIRMWARE_WORKFLOW_YAML: &str = include_str!("../.github/workflows/firmware.yml");
 const PORTING_COVERAGE_MANIFEST_TOML: &str =
     include_str!("../tools/porting_coverage_manifest.toml");
 const VIAL_JSON: &str = include_str!("../vial.json");
@@ -85,6 +86,39 @@ fn porting_coverage_complete_gate_accepts_explicit_status_completion() {
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("Porting status: 69/69 = 100.00% implemented"));
+}
+
+#[test]
+fn firmware_ci_runs_complete_porting_gate_before_builds() {
+    let gate_command = "python3 tools/porting_coverage.py";
+    let zmk_required_flag = "--require-zmk-source";
+    let complete_required_flag = "--require-porting-complete";
+    let host_tests = "cargo test --lib --target x86_64-unknown-linux-gnu";
+    let release_build = "cargo make build";
+
+    for required in [gate_command, zmk_required_flag, complete_required_flag] {
+        assert!(
+            FIRMWARE_WORKFLOW_YAML.contains(required),
+            "firmware CI is missing complete porting gate component {required:?}"
+        );
+    }
+
+    let gate_index = FIRMWARE_WORKFLOW_YAML.find(gate_command).unwrap();
+    let zmk_required_index = FIRMWARE_WORKFLOW_YAML.find(zmk_required_flag).unwrap();
+    let complete_required_index = FIRMWARE_WORKFLOW_YAML.find(complete_required_flag).unwrap();
+    let host_tests_index = FIRMWARE_WORKFLOW_YAML.find(host_tests).unwrap();
+    let release_build_index = FIRMWARE_WORKFLOW_YAML.find(release_build).unwrap();
+
+    assert!(gate_index < zmk_required_index);
+    assert!(gate_index < complete_required_index);
+    assert!(
+        complete_required_index < host_tests_index,
+        "complete porting gate must run before host parity tests"
+    );
+    assert!(
+        complete_required_index < release_build_index,
+        "complete porting gate must run before release binaries are built"
+    );
 }
 
 #[test]
