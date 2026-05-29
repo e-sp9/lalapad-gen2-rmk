@@ -1,8 +1,8 @@
 [coverage]
-passed = 2408
-total = 2408
-result_count = 444
-result_inventory_sha256 = "936ac2abb630e7d92cf3a141f1f1ebb3b828f03db18087841ed456c315d61ee2"
+passed = 2441
+total = 2441
+result_count = 447
+result_inventory_sha256 = "5a86769a974ce8dbc4f8e170f38e76e19eb3e00eba3c4e8910724011c293ce78"
 
 [coverage.by_kind.behavior]
 passed = 10
@@ -43,6 +43,10 @@ total = 33
 [coverage.by_kind.layout]
 passed = 3
 total = 3
+
+[coverage.by_kind.rmk_patch]
+passed = 33
+total = 33
 
 [coverage.by_kind.rust_byte_array]
 passed = 10

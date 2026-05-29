@@ -2316,6 +2316,60 @@ target_const = "IQS9151_SNAP_ENABLE"
 expected_len = 88
 expected_sha256 = "10eef285deef7a4b7c82b22aa53589b7833df29de3814649c772bbd5c832f365"
 
+[[rmk_patch_invariants]]
+id = "rmk_composite_mouse_hid_report_descriptor"
+target_file = "vendor/rmk-0.8.2/src/descriptor.rs"
+target_const = "COMPOSITE_REPORT_DESCRIPTOR"
+expected_len = 160
+expected_sha256 = "72f6f5eb26aa550ebb6f2bae8fdf4bc9ac56d60a920595ab51ffc943636bf16e"
+needles = [
+  "pub const MOUSE_RESOLUTION_MULTIPLIER_REPORT: u8 = 0xFF;",
+  "pub(crate) pan: i8",
+]
+byte_sequences = [
+  { id = "mouse_report_id_1", values = [0x85, 0x01] },
+  { id = "eight_mouse_buttons", values = [0x05, 0x09, 0x19, 0x01, 0x29, 0x08, 0x15, 0x00, 0x25, 0x01, 0x95, 0x08, 0x75, 0x01, 0x81, 0x02] },
+  { id = "relative_x_y_axes", values = [0x09, 0x30, 0x09, 0x31, 0x95, 0x02, 0x75, 0x08, 0x15, 0x81, 0x25, 0x7F, 0x81, 0x06] },
+  { id = "vertical_wheel_resolution_multiplier_feature", values = [0xA1, 0x02, 0x09, 0x48, 0x15, 0x00, 0x25, 0x0F, 0x35, 0x01, 0x45, 0x10, 0x75, 0x04, 0x95, 0x01, 0xA4, 0xB1, 0x02] },
+  { id = "relative_vertical_wheel", values = [0x09, 0x38, 0x35, 0x00, 0x45, 0x00, 0x15, 0x81, 0x25, 0x7F, 0x75, 0x08, 0x95, 0x01, 0x81, 0x06] },
+  { id = "horizontal_pan_resolution_multiplier_feature", values = [0xA1, 0x02, 0x05, 0x01, 0x09, 0x48, 0xB4, 0xB1, 0x02] },
+  { id = "relative_consumer_ac_pan", values = [0x05, 0x0C, 0x0A, 0x38, 0x02, 0x15, 0x81, 0x25, 0x7F, 0x75, 0x08, 0x95, 0x01, 0x81, 0x06] },
+]
+
+[[rmk_patch_invariants]]
+id = "rmk_mouse_wheel_pan_keyboard_handler"
+target_file = "vendor/rmk-0.8.2/src/keyboard.rs"
+needles = [
+  "KeyCode::MouseWheelUp =>",
+  "self.mouse_report.wheel = unit;",
+  "KeyCode::MouseWheelDown =>",
+  "self.mouse_report.wheel = -unit;",
+  "KeyCode::MouseWheelLeft =>",
+  "self.mouse_report.pan = -unit;",
+  "KeyCode::MouseWheelRight =>",
+  "self.mouse_report.pan = unit;",
+  "self.mouse_report.wheel != 0 && self.mouse_report.pan != 0",
+  "config.get_wheel_delay(self.mouse_wheel_repeat)",
+  "is_wheel_key && self.mouse_wheel_repeat < u8::MAX",
+]
+
+[[rmk_patch_invariants]]
+id = "rmk_ble_composite_mouse_feature_report"
+target_file = "vendor/rmk-0.8.2/src/ble/ble_server.rs"
+needles = [
+  "COMPOSITE_REPORT_DESCRIPTOR_LEN, CompositeReport, CompositeReportType, KeyboardReport",
+  "MOUSE_RESOLUTION_MULTIPLIER_REPORT",
+  "#[descriptor(uuid = \"2908\", read, value = [CompositeReportType::Mouse as u8, 1u8])]",
+  "pub(crate) mouse_report: [u8; 5]",
+  "#[descriptor(uuid = \"2908\", read, value = [CompositeReportType::Mouse as u8, 3u8])]",
+  "#[characteristic(uuid = \"2a4d\", read, write, value = [MOUSE_RESOLUTION_MULTIPLIER_REPORT])]",
+  "pub(crate) mouse_resolution_report: [u8; 1]",
+  "mouse_report: Characteristic<[u8; 5]>",
+  "server.composite_service.mouse_report",
+  "let mut buf = [0u8; 5];",
+  "self.mouse_report.notify(self.conn, &buf).await",
+]
+
 [[code_contains]]
 id = "central_iqs9151_pins_and_side"
 file = "src/central.rs"

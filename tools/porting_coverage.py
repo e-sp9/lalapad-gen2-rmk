@@ -1238,14 +1238,23 @@ def parse_rust_byte_array(path: Path, name: str) -> list[int]:
         text,
         re.S,
     )
+    declared_len: int | None
+    if match:
+        declared_len = int(match.group("len"))
+    else:
+        match = re.search(
+            rf"(?m)^\s*(?:pub(?:\([^)]*\))?\s+)?const\s+{re.escape(name)}\s*:\s*&\[u8\]\s*=\s*&\[(?P<body>.*?)\];",
+            text,
+            re.S,
+        )
+        declared_len = None
     if not match:
         raise ValueError(f"byte array const {name!r} not found in {path}")
     values = [
         int(value, 16) if value.lower().startswith("0x") else int(value)
         for value in re.findall(r"0x[0-9a-fA-F]+|\b\d+\b", match.group("body"))
     ]
-    declared_len = int(match.group("len"))
-    if len(values) != declared_len:
+    if declared_len is not None and len(values) != declared_len:
         raise ValueError(
             f"byte array const {name!r} length mismatch in {path}: declared {declared_len}, got {len(values)}"
         )
@@ -2667,6 +2676,79 @@ def check_rust_byte_arrays(manifest: dict[str, Any], project_root: Path) -> list
     return results
 
 
+def contains_subsequence(values: list[int], expected: list[int]) -> bool:
+    if not expected:
+        return True
+    return any(
+        values[index : index + len(expected)] == expected
+        for index in range(len(values) - len(expected) + 1)
+    )
+
+
+def check_rmk_patch_invariants(manifest: dict[str, Any], project_root: Path) -> list[Result]:
+    results: list[Result] = []
+    for check in manifest.get("rmk_patch_invariants", []):
+        passed = 0
+        total = 0
+        messages: list[str] = []
+        target_file = project_root / check["target_file"]
+
+        byte_values: list[int] | None = None
+        if "target_const" in check:
+            total += 2
+            try:
+                byte_values = parse_rust_byte_array(target_file, check["target_const"])
+            except (OSError, ValueError) as e:
+                messages.append(str(e))
+            else:
+                expected_len = int(check["expected_len"])
+                if len(byte_values) == expected_len:
+                    passed += 1
+                else:
+                    messages.append(f"length expected {expected_len}, got {len(byte_values)}")
+
+                actual_sha256 = hashlib.sha256(bytes(byte_values)).hexdigest()
+                expected_sha256 = check["expected_sha256"]
+                if actual_sha256 == expected_sha256:
+                    passed += 1
+                else:
+                    messages.append(f"sha256 expected {expected_sha256}, got {actual_sha256}")
+
+        for sequence in check.get("byte_sequences", []):
+            total += 1
+            expected_values = [int(value) for value in sequence["values"]]
+            sequence_id = sequence.get("id", expected_values)
+            if byte_values is not None and contains_subsequence(byte_values, expected_values):
+                passed += 1
+            else:
+                messages.append(f"missing byte sequence {sequence_id!r}")
+
+        if "needles" in check:
+            try:
+                text = target_file.read_text()
+            except OSError as e:
+                total += len(check["needles"])
+                messages.append(str(e))
+            else:
+                for needle in check["needles"]:
+                    total += 1
+                    if needle in text:
+                        passed += 1
+                    else:
+                        messages.append(f"missing needle {needle!r}")
+
+        results.append(
+            Result(
+                check["id"],
+                "rmk_patch",
+                passed,
+                total,
+                "ok" if not messages else "; ".join(messages),
+            )
+        )
+    return results
+
+
 def check_rust_const_inventories(manifest: dict[str, Any], project_root: Path) -> list[Result]:
     results: list[Result] = []
     for check in manifest.get("rust_const_inventories", []):
@@ -3555,6 +3637,7 @@ def check_zmk_source(
     results.extend(check_iqs9151_register_porting(manifest, project_root))
     results.extend(check_iqs9151_bit_porting(manifest, project_root))
     results.extend(check_rust_byte_arrays(manifest, project_root))
+    results.extend(check_rmk_patch_invariants(manifest, project_root))
     results.extend(check_vial_layout(manifest, project_root, zmk_config_dir))
     results.extend(check_vial_user_key_semantics(manifest, keyboard, project_root))
     return results
