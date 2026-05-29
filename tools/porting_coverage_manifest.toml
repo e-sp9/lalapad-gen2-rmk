@@ -126,6 +126,10 @@ physical_layout_attrs = [
     "100,100,1200,600,0,0,0",
   ] },
 ]
+input_behavior_bindings = [
+  { source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi", source_block = "trackpad_key_behaviors_R", expected = ["INPUT_BTN_0:&tp_to_pos POS_TP_LCLK_R", "INPUT_BTN_1:&tp_to_pos POS_TP_RCLK_R", "INPUT_BTN_2:&tp_to_pos POS_TP_MCLK_R", "INPUT_BTN_3:&tp_to_pos POS_TP_LEFT_R", "INPUT_BTN_4:&tp_to_pos POS_TP_RIGHT_R", "INPUT_BTN_5:&tp_to_pos POS_TP_UP_R", "INPUT_BTN_6:&tp_to_pos POS_TP_DOWN_R", "INPUT_BTN_7:&tp_to_pos POS_TP_PINCH_R"] },
+  { source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi", source_block = "trackpad_key_behaviors_L", expected = ["INPUT_BTN_0:&tp_to_pos POS_TP_LCLK_L", "INPUT_BTN_1:&tp_to_pos POS_TP_RCLK_L", "INPUT_BTN_2:&tp_to_pos POS_TP_MCLK_L", "INPUT_BTN_3:&tp_to_pos POS_TP_LEFT_L", "INPUT_BTN_4:&tp_to_pos POS_TP_RIGHT_L", "INPUT_BTN_5:&tp_to_pos POS_TP_UP_L", "INPUT_BTN_6:&tp_to_pos POS_TP_DOWN_L", "INPUT_BTN_7:&tp_to_pos POS_TP_PINCH_L"] },
+]
 west_manifest = [
   "remote:zmkfirmware:url-base=https://github.com/zmkfirmware",
   "remote:ShiniNet:url-base=https://github.com/ShiniNet/",

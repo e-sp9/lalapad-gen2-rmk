@@ -242,6 +242,29 @@ fn porting_coverage_includes_exact_rmk_inventory_gates() {
             assert_eq!(layout_inventory["ok"], true);
         }
 
+        for binding_file in
+            porting_coverage_manifest_toml()["source_inventory"]["input_behavior_bindings"]
+                .as_array()
+                .unwrap()
+        {
+            let source_block = binding_file["source_block"].as_str().unwrap();
+            let expected_entries = binding_file["expected"].as_array().unwrap().len() as i64;
+            let binding_inventory = results
+                .iter()
+                .find(|result| {
+                    result["id"] == format!("zmk_source.input_behavior_bindings.{source_block}")
+                })
+                .unwrap_or_else(|| {
+                    panic!(
+                        "ZMK input behavior binding inventory coverage result is missing for {source_block}"
+                    )
+                });
+            assert_eq!(binding_inventory["kind"], "zmk_inventory");
+            assert_eq!(binding_inventory["passed"].as_i64(), Some(expected_entries));
+            assert_eq!(binding_inventory["total"].as_i64(), Some(expected_entries));
+            assert_eq!(binding_inventory["ok"], true);
+        }
+
         let west_inventory = results
             .iter()
             .find(|result| result["id"] == "zmk_source.west_manifest")
@@ -1094,6 +1117,126 @@ print(json.dumps({
             .as_str()
             .unwrap()
             .contains("missing physical layout source file")
+    );
+}
+
+#[test]
+fn porting_coverage_rejects_unclassified_zmk_input_behavior_bindings() {
+    let output = run_python(
+        r#"
+import importlib.util
+import json
+import sys
+import tempfile
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("porting_coverage", "tools/porting_coverage.py")
+pc = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = pc
+spec.loader.exec_module(pc)
+
+manifest = {
+    "source_inventory": {
+        "input_behavior_bindings": [{
+            "source_file": "lalapadgen2.dtsi",
+            "source_block": "trackpad_key_behaviors_R",
+            "expected": [
+                "INPUT_BTN_0:&tp_to_pos POS_TP_LCLK_R",
+                "INPUT_BTN_1:&tp_to_pos POS_TP_RCLK_R",
+            ],
+        }],
+    },
+}
+
+def pack(results):
+    return [result.__dict__ | {"ok": result.ok} for result in results]
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    fixture = root / "lalapadgen2.dtsi"
+    fixture.write_text('''
+    trackpad_key_behaviors_R: trackpad_key_behaviors_R {
+        codes = <INPUT_BTN_0 INPUT_BTN_1>;
+        bindings = <&tp_to_pos POS_TP_LCLK_R &tp_to_pos POS_TP_RCLK_R>;
+    };
+    ''')
+    ok = pack(pc.check_zmk_input_behavior_binding_inventory(manifest, root))
+
+    fixture.write_text('''
+    trackpad_key_behaviors_R: trackpad_key_behaviors_R {
+        codes = <INPUT_BTN_0 INPUT_BTN_1 INPUT_BTN_2>;
+        bindings = <&tp_to_pos POS_TP_LCLK_R &tp_to_pos POS_TP_PINCH_R &tp_to_pos POS_TP_NEW_R>;
+    };
+    ''')
+    changed = pack(pc.check_zmk_input_behavior_binding_inventory(manifest, root))
+
+    fixture.write_text('''
+    trackpad_key_behaviors_R: trackpad_key_behaviors_R {
+        codes = <INPUT_BTN_0 INPUT_BTN_1>;
+        bindings = <&tp_to_pos POS_TP_LCLK_R>;
+    };
+    ''')
+    mismatched_lengths = pack(pc.check_zmk_input_behavior_binding_inventory(manifest, root))
+    fixture.unlink()
+    missing_file = pack(pc.check_zmk_input_behavior_binding_inventory(manifest, root))
+
+print(json.dumps({
+    "ok": ok,
+    "changed": changed,
+    "mismatched_lengths": mismatched_lengths,
+    "missing_file": missing_file,
+}))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "input behavior binding inventory parser check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let ok_inventory = &parsed["ok"][0];
+    assert_eq!(ok_inventory["kind"], "zmk_inventory");
+    assert_eq!(ok_inventory["passed"].as_i64(), Some(2));
+    assert_eq!(ok_inventory["total"].as_i64(), Some(2));
+    assert_eq!(ok_inventory["ok"], true);
+
+    let changed_inventory = &parsed["changed"][0];
+    assert_eq!(changed_inventory["kind"], "zmk_inventory");
+    assert_eq!(changed_inventory["passed"].as_i64(), Some(1));
+    assert_eq!(changed_inventory["total"].as_i64(), Some(3));
+    assert_eq!(changed_inventory["ok"], false);
+    assert!(
+        changed_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("POS_TP_NEW_R")
+    );
+
+    let mismatched_lengths_inventory = &parsed["mismatched_lengths"][0];
+    assert_eq!(mismatched_lengths_inventory["kind"], "zmk_inventory");
+    assert_eq!(mismatched_lengths_inventory["passed"].as_i64(), Some(0));
+    assert_eq!(mismatched_lengths_inventory["total"].as_i64(), Some(2));
+    assert_eq!(mismatched_lengths_inventory["ok"], false);
+    assert!(
+        mismatched_lengths_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("codes/bindings length mismatch")
+    );
+
+    let missing_file_inventory = &parsed["missing_file"][0];
+    assert_eq!(missing_file_inventory["kind"], "zmk_inventory");
+    assert_eq!(missing_file_inventory["passed"].as_i64(), Some(0));
+    assert_eq!(missing_file_inventory["total"].as_i64(), Some(2));
+    assert_eq!(missing_file_inventory["ok"], false);
+    assert!(
+        missing_file_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("missing input behavior source file")
     );
 }
 
