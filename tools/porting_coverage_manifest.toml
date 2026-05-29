@@ -461,6 +461,40 @@ iqs9151_register_addresses = [
   "IQS9151_ADDR_SNAP_ENABLE=4766",
   "IQS9151_ADDR_TOUCH_THRESHOLD_ADJUST=4854",
 ]
+iqs9151_bit_flags = [
+  "IQS9151_INFO_SHOW_RESET=128",
+  "IQS9151_INFO_GLOBAL_TP_TOUCH=512",
+  "IQS9151_INFO_TP_TOUCH_TOGGLED=8192",
+  "IQS9151_TP_MOVEMENT_DETECTED=16",
+  "IQS9151_TP_FINGER_COUNT_MASK=15",
+  "IQS9151_TP_FINGER1_CONFIDENCE=256",
+  "IQS9151_TP_FINGER2_CONFIDENCE=512",
+  "IQS9151_TRACKPAD_SETTING_FLIP_X=1",
+  "IQS9151_TRACKPAD_SETTING_FLIP_Y=2",
+  "IQS9151_TRACKPAD_SETTING_SWITCH_XY=4",
+  "IQS9151_SFG_SINGLE_TAP=1",
+  "IQS9151_SFG_PRESS_HOLD=8",
+  "IQS9151_TFG_TWO_TAP=1",
+  "IQS9151_TFG_TWO_PRESS_HOLD=8",
+  "IQS9151_TFG_ZOOM_IN=16",
+  "IQS9151_TFG_ZOOM_OUT=32",
+  "IQS9151_TFG_VSCROLL=64",
+  "IQS9151_TFG_HSCROLL=128",
+  "IQS9151_SYS_CTRL_SW_RESET=512",
+  "IQS9151_SYS_CTRL_ACK_RESET=128",
+  "IQS9151_SYS_CTRL_ALP_RE_ATI=64",
+  "IQS9151_SYS_CTRL_TP_RE_ATI=32",
+  "IQS9151_SYS_CTRL_TP_RESEED=8",
+  "IQS9151_CFG_SNAP_EVENT_EN=32768",
+  "IQS9151_CFG_SWITCH_EVENT_EN=16384",
+  "IQS9151_CFG_TP_TOUCH_EVENT_EN=8192",
+  "IQS9151_CFG_ALP_EVENT_EN=4096",
+  "IQS9151_CFG_RE_ATI_EVENT_EN=2048",
+  "IQS9151_CFG_TP_EVENT_EN=1024",
+  "IQS9151_CFG_GESTURE_EVENT_EN=512",
+  "IQS9151_CFG_EVENT_MODE=256",
+  "IQS9151_CFG_MANUAL_MODE=128",
+]
 
 [layout]
 rows = 7
@@ -1358,6 +1392,198 @@ source_const = "IQS9151_ADDR_TOUCH_THRESHOLD_ADJUST"
 source_value = 4854
 status = "not_ported"
 reason = "The current RMK port does not expose the upstream driver's touch-threshold adjustment register as a standalone runtime setting."
+
+[[iqs9151_bit_porting]]
+source_const = "IQS9151_INFO_SHOW_RESET"
+source_value = 128
+status = "ported"
+target_const = "INFO_SHOW_RESET"
+
+[[iqs9151_bit_porting]]
+source_const = "IQS9151_INFO_GLOBAL_TP_TOUCH"
+source_value = 512
+status = "ported"
+target_const = "INFO_GLOBAL_TP_TOUCH"
+
+[[iqs9151_bit_porting]]
+source_const = "IQS9151_INFO_TP_TOUCH_TOGGLED"
+source_value = 8192
+status = "ported"
+target_const = "INFO_TP_TOUCH_TOGGLED"
+
+[[iqs9151_bit_porting]]
+source_const = "IQS9151_TP_MOVEMENT_DETECTED"
+source_value = 16
+status = "ported"
+target_const = "TP_MOVEMENT_DETECTED"
+
+[[iqs9151_bit_porting]]
+source_const = "IQS9151_TP_FINGER_COUNT_MASK"
+source_value = 15
+status = "ported"
+target_const = "TP_FINGER_COUNT_MASK"
+
+[[iqs9151_bit_porting]]
+source_const = "IQS9151_TP_FINGER1_CONFIDENCE"
+source_value = 256
+status = "ported"
+target_const = "TP_FINGER1_CONFIDENCE"
+
+[[iqs9151_bit_porting]]
+source_const = "IQS9151_TP_FINGER2_CONFIDENCE"
+source_value = 512
+status = "ported"
+target_const = "TP_FINGER2_CONFIDENCE"
+
+[[iqs9151_bit_porting]]
+source_const = "IQS9151_TRACKPAD_SETTING_FLIP_X"
+source_value = 1
+status = "ported"
+target_const = "TRACKPAD_SETTING_FLIP_X"
+
+[[iqs9151_bit_porting]]
+source_const = "IQS9151_TRACKPAD_SETTING_FLIP_Y"
+source_value = 2
+status = "ported"
+target_const = "TRACKPAD_SETTING_FLIP_Y"
+
+[[iqs9151_bit_porting]]
+source_const = "IQS9151_TRACKPAD_SETTING_SWITCH_XY"
+source_value = 4
+status = "ported"
+target_const = "TRACKPAD_SETTING_SWITCH_XY"
+
+[[iqs9151_bit_porting]]
+source_const = "IQS9151_SFG_SINGLE_TAP"
+source_value = 1
+status = "ported"
+target_const = "SFG_SINGLE_TAP"
+
+[[iqs9151_bit_porting]]
+source_const = "IQS9151_SFG_PRESS_HOLD"
+source_value = 8
+status = "not_ported"
+reason = "RMK recognizes press-hold/tap-drag from coordinate timing instead of the IQS9151 built-in press-hold gesture bit."
+
+[[iqs9151_bit_porting]]
+source_const = "IQS9151_TFG_TWO_TAP"
+source_value = 1
+status = "ported"
+target_const = "TFG_TWO_TAP"
+
+[[iqs9151_bit_porting]]
+source_const = "IQS9151_TFG_TWO_PRESS_HOLD"
+source_value = 8
+status = "not_ported"
+reason = "RMK recognizes two-finger tap-drag from coordinate timing instead of the IQS9151 built-in press-hold gesture bit."
+
+[[iqs9151_bit_porting]]
+source_const = "IQS9151_TFG_ZOOM_IN"
+source_value = 16
+status = "not_ported"
+reason = "RMK derives pinch direction and wheel reports from two-finger distance changes rather than the IQS9151 built-in zoom-in bit."
+
+[[iqs9151_bit_porting]]
+source_const = "IQS9151_TFG_ZOOM_OUT"
+source_value = 32
+status = "not_ported"
+reason = "RMK derives pinch direction and wheel reports from two-finger distance changes rather than the IQS9151 built-in zoom-out bit."
+
+[[iqs9151_bit_porting]]
+source_const = "IQS9151_TFG_VSCROLL"
+source_value = 64
+status = "not_ported"
+reason = "RMK derives vertical scroll from two-finger centroid/relative motion instead of the IQS9151 built-in vertical-scroll bit."
+
+[[iqs9151_bit_porting]]
+source_const = "IQS9151_TFG_HSCROLL"
+source_value = 128
+status = "not_ported"
+reason = "RMK derives horizontal pan from two-finger centroid/relative motion instead of the IQS9151 built-in horizontal-scroll bit."
+
+[[iqs9151_bit_porting]]
+source_const = "IQS9151_SYS_CTRL_SW_RESET"
+source_value = 512
+status = "ported"
+target_const = "SYS_CTRL_SW_RESET"
+
+[[iqs9151_bit_porting]]
+source_const = "IQS9151_SYS_CTRL_ACK_RESET"
+source_value = 128
+status = "ported"
+target_const = "SYS_CTRL_ACK_RESET"
+
+[[iqs9151_bit_porting]]
+source_const = "IQS9151_SYS_CTRL_ALP_RE_ATI"
+source_value = 64
+status = "ported"
+target_const = "SYS_CTRL_ALP_RE_ATI"
+
+[[iqs9151_bit_porting]]
+source_const = "IQS9151_SYS_CTRL_TP_RE_ATI"
+source_value = 32
+status = "ported"
+target_const = "SYS_CTRL_TP_RE_ATI"
+
+[[iqs9151_bit_porting]]
+source_const = "IQS9151_SYS_CTRL_TP_RESEED"
+source_value = 8
+status = "not_ported"
+reason = "RMK runs ALP/trackpad re-ATI during startup but does not issue the optional TP reseed control bit."
+
+[[iqs9151_bit_porting]]
+source_const = "IQS9151_CFG_SNAP_EVENT_EN"
+source_value = 32768
+status = "not_ported"
+reason = "RMK writes the upstream configuration image and only exposes standalone overrides for event mode and selected touch/gesture event bits."
+
+[[iqs9151_bit_porting]]
+source_const = "IQS9151_CFG_SWITCH_EVENT_EN"
+source_value = 16384
+status = "not_ported"
+reason = "RMK writes the upstream configuration image and does not expose a standalone switch-event override."
+
+[[iqs9151_bit_porting]]
+source_const = "IQS9151_CFG_TP_TOUCH_EVENT_EN"
+source_value = 8192
+status = "ported"
+target_const = "CFG_TP_TOUCH_EVENT_EN"
+
+[[iqs9151_bit_porting]]
+source_const = "IQS9151_CFG_ALP_EVENT_EN"
+source_value = 4096
+status = "not_ported"
+reason = "RMK writes the upstream configuration image and does not expose a standalone ALP-event override."
+
+[[iqs9151_bit_porting]]
+source_const = "IQS9151_CFG_RE_ATI_EVENT_EN"
+source_value = 2048
+status = "not_ported"
+reason = "RMK writes the upstream configuration image and does not expose a standalone re-ATI-event override."
+
+[[iqs9151_bit_porting]]
+source_const = "IQS9151_CFG_TP_EVENT_EN"
+source_value = 1024
+status = "ported"
+target_const = "CFG_TP_EVENT_EN"
+
+[[iqs9151_bit_porting]]
+source_const = "IQS9151_CFG_GESTURE_EVENT_EN"
+source_value = 512
+status = "ported"
+target_const = "CFG_GESTURE_EVENT_EN"
+
+[[iqs9151_bit_porting]]
+source_const = "IQS9151_CFG_EVENT_MODE"
+source_value = 256
+status = "ported"
+target_const = "CFG_EVENT_MODE"
+
+[[iqs9151_bit_porting]]
+source_const = "IQS9151_CFG_MANUAL_MODE"
+source_value = 128
+status = "not_ported"
+reason = "RMK keeps the sensor in event mode and does not expose the upstream manual-mode bit as a runtime setting."
 
 [[rust_const_values]]
 id = "iqs9151_i2c_address"

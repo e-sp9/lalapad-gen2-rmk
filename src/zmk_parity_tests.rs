@@ -765,6 +765,43 @@ fn porting_coverage_includes_exact_rmk_inventory_gates() {
         assert_eq!(register_result["total"].as_i64(), Some(2));
         assert_eq!(register_result["ok"], true);
     }
+
+    let bit_porting_inventory = results
+        .iter()
+        .find(|result| result["id"] == "iqs9151_upstream_bit_flag_classification")
+        .expect("IQS9151 upstream bit flag classification coverage result is missing");
+    let expected_bit_count =
+        porting_coverage_manifest_toml()["source_inventory"]["iqs9151_bit_flags"]
+            .as_array()
+            .unwrap()
+            .len() as i64;
+    assert_eq!(bit_porting_inventory["kind"], "iqs9151_bit_porting");
+    assert_eq!(
+        bit_porting_inventory["passed"].as_i64(),
+        Some(expected_bit_count)
+    );
+    assert_eq!(
+        bit_porting_inventory["total"].as_i64(),
+        Some(expected_bit_count)
+    );
+    assert_eq!(bit_porting_inventory["ok"], true);
+
+    for bit in porting_coverage_manifest_toml()["iqs9151_bit_porting"]
+        .as_array()
+        .unwrap()
+    {
+        let source_const = bit["source_const"].as_str().unwrap();
+        let bit_result = results
+            .iter()
+            .find(|result| result["id"] == format!("iqs9151_bit_porting.{source_const}"))
+            .unwrap_or_else(|| {
+                panic!("IQS9151 bit flag porting result is missing for {source_const}")
+            });
+        assert_eq!(bit_result["kind"], "iqs9151_bit_porting");
+        assert_eq!(bit_result["passed"].as_i64(), Some(2));
+        assert_eq!(bit_result["total"].as_i64(), Some(2));
+        assert_eq!(bit_result["ok"], true);
+    }
 }
 
 #[test]
@@ -3693,6 +3730,140 @@ print(json.dumps({"ok": ok, "bad": bad}))
             .as_str()
             .unwrap()
             .contains("ADDR_D expected source value 4, got 5")
+    );
+}
+
+#[test]
+fn porting_coverage_rejects_iqs9151_bit_porting_drift() {
+    let output = run_python(
+        r#"
+import importlib.util
+import json
+import sys
+import tempfile
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("porting_coverage", "tools/porting_coverage.py")
+pc = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = pc
+spec.loader.exec_module(pc)
+
+ok_manifest = {
+    "source_inventory": {
+        "iqs9151_bit_flags": [
+            "IQS9151_FLAG_A=128",
+            "IQS9151_FLAG_B=15",
+            "IQS9151_FLAG_C=512",
+        ],
+    },
+    "iqs9151_bit_porting": [
+        {"source_const": "IQS9151_FLAG_A", "source_value": 128, "status": "ported", "target_const": "FLAG_A"},
+        {"source_const": "IQS9151_FLAG_B", "source_value": 15, "status": "ported", "target_const": "FLAG_B"},
+        {"source_const": "IQS9151_FLAG_C", "source_value": 512, "status": "not_ported", "reason": "not needed"},
+    ],
+}
+bad_manifest = {
+    "source_inventory": ok_manifest["source_inventory"],
+    "iqs9151_bit_porting": [
+        {"source_const": "IQS9151_FLAG_A", "source_value": 128, "status": "ported", "target_const": "FLAG_A"},
+        {"source_const": "IQS9151_FLAG_B", "source_value": 15, "status": "not_ported", "reason": ""},
+        {"source_const": "IQS9151_FLAG_D", "source_value": 64, "status": "ported", "target_const": "FLAG_D"},
+    ],
+}
+
+def pack(results):
+    return [result.__dict__ | {"ok": result.ok} for result in results]
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    (root / "src").mkdir()
+    (root / "src" / "iqs9151.rs").write_text('''
+    pub const FLAG_A: u16 = 1 << 7;
+    pub const FLAG_B: u16 = 0x000f;
+    pub const FLAG_D: u16 = 1 << 5;
+    ''')
+    ok = pack(pc.check_iqs9151_bit_porting(ok_manifest, root))
+    bad = pack(pc.check_iqs9151_bit_porting(bad_manifest, root))
+
+print(json.dumps({"ok": ok, "bad": bad}))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "IQS9151 bit porting parser check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let ok_inventory = parsed["ok"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "iqs9151_upstream_bit_flag_classification")
+        .expect("missing ok bit classification result");
+    assert_eq!(ok_inventory["kind"], "iqs9151_bit_porting");
+    assert_eq!(ok_inventory["passed"].as_i64(), Some(3));
+    assert_eq!(ok_inventory["total"].as_i64(), Some(3));
+    assert_eq!(ok_inventory["ok"], true);
+    for result in parsed["ok"].as_array().unwrap() {
+        assert_eq!(result["kind"], "iqs9151_bit_porting");
+        assert_eq!(result["ok"], true);
+    }
+
+    let bad_inventory = parsed["bad"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "iqs9151_upstream_bit_flag_classification")
+        .expect("missing bad bit classification result");
+    assert_eq!(bad_inventory["passed"].as_i64(), Some(2));
+    assert_eq!(bad_inventory["total"].as_i64(), Some(3));
+    assert_eq!(bad_inventory["ok"], false);
+    assert!(
+        bad_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("expected 'IQS9151_FLAG_C=512', got 'IQS9151_FLAG_D=64'")
+    );
+
+    let missing_reason = parsed["bad"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "iqs9151_bit_porting.IQS9151_FLAG_B")
+        .expect("missing no-reason bit result");
+    assert_eq!(missing_reason["passed"].as_i64(), Some(1));
+    assert_eq!(missing_reason["total"].as_i64(), Some(2));
+    assert_eq!(missing_reason["ok"], false);
+    assert!(
+        missing_reason["message"]
+            .as_str()
+            .unwrap()
+            .contains("has no reason")
+    );
+
+    let extra_source = parsed["bad"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "iqs9151_bit_porting.IQS9151_FLAG_D")
+        .expect("missing extra-source bit result");
+    assert_eq!(extra_source["passed"].as_i64(), Some(0));
+    assert_eq!(extra_source["total"].as_i64(), Some(2));
+    assert_eq!(extra_source["ok"], false);
+    assert!(
+        extra_source["message"]
+            .as_str()
+            .unwrap()
+            .contains("source bit flag IQS9151_FLAG_D=64 is not in inventory")
+    );
+    assert!(
+        extra_source["message"]
+            .as_str()
+            .unwrap()
+            .contains("FLAG_D expected source value 64, got 32")
     );
 }
 

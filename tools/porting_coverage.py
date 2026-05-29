@@ -1242,6 +1242,22 @@ def rust_const_inventory(path: Path, name_regex: str) -> list[str]:
     ]
 
 
+def rust_const_value_as_int(value: Any) -> int:
+    if isinstance(value, bool):
+        raise ValueError(f"boolean const value {value!r} is not numeric")
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().replace("_", "")
+        if normalized.startswith("0x"):
+            return int(normalized, 16)
+        if match := re.fullmatch(r"1\s*<<\s*(\d+)", normalized):
+            return 1 << int(match.group(1))
+        if re.fullmatch(r"-?\d+", normalized):
+            return int(normalized)
+    raise ValueError(f"const value {value!r} is not numeric")
+
+
 def check_source_regex_values(manifest: dict[str, Any], zmk_config_dir: Path) -> list[Result]:
     results: list[Result] = []
     for check in manifest.get("source_regex_values", []):
@@ -2654,17 +2670,53 @@ def check_rust_const_inventories(manifest: dict[str, Any], project_root: Path) -
 def check_iqs9151_register_porting(
     manifest: dict[str, Any], project_root: Path
 ) -> list[Result]:
-    expected_inventory = list(
-        manifest.get("source_inventory", {}).get("iqs9151_register_addresses", [])
+    return check_iqs9151_symbol_porting(
+        manifest,
+        project_root,
+        inventory_key="iqs9151_register_addresses",
+        manifest_key="iqs9151_register_porting",
+        inventory_result_id="iqs9151_upstream_register_address_classification",
+        result_prefix="iqs9151_register_porting",
+        kind="iqs9151_register_porting",
+        source_label="source register",
     )
-    entries = list(manifest.get("iqs9151_register_porting", []))
+
+
+def check_iqs9151_bit_porting(
+    manifest: dict[str, Any], project_root: Path
+) -> list[Result]:
+    return check_iqs9151_symbol_porting(
+        manifest,
+        project_root,
+        inventory_key="iqs9151_bit_flags",
+        manifest_key="iqs9151_bit_porting",
+        inventory_result_id="iqs9151_upstream_bit_flag_classification",
+        result_prefix="iqs9151_bit_porting",
+        kind="iqs9151_bit_porting",
+        source_label="source bit flag",
+    )
+
+
+def check_iqs9151_symbol_porting(
+    manifest: dict[str, Any],
+    project_root: Path,
+    *,
+    inventory_key: str,
+    manifest_key: str,
+    inventory_result_id: str,
+    result_prefix: str,
+    kind: str,
+    source_label: str,
+) -> list[Result]:
+    expected_inventory = list(manifest.get("source_inventory", {}).get(inventory_key, []))
+    entries = list(manifest.get(manifest_key, []))
     actual_inventory = [
         f"{entry['source_const']}={int(entry['source_value'])}" for entry in entries
     ]
     results = [
         ordered_inventory_result(
-            "iqs9151_upstream_register_address_classification",
-            "iqs9151_register_porting",
+            inventory_result_id,
+            kind,
             expected_inventory,
             actual_inventory,
         )
@@ -2674,7 +2726,7 @@ def check_iqs9151_register_porting(
         source_const = entry["source_const"]
         source_value = int(entry["source_value"])
         status = entry["status"]
-        result_id = f"iqs9151_register_porting.{source_const}"
+        result_id = f"{result_prefix}.{source_const}"
         passed = 0
         total = 1
         messages: list[str] = []
@@ -2682,14 +2734,16 @@ def check_iqs9151_register_porting(
         if f"{source_const}={source_value}" in expected_inventory:
             passed += 1
         else:
-            messages.append(f"source register {source_const}={source_value} is not in inventory")
+            messages.append(f"{source_label} {source_const}={source_value} is not in inventory")
 
         if status == "ported":
             total += 1
             target_file = entry.get("target_file", "src/iqs9151.rs")
             target_const = entry["target_const"]
             try:
-                actual_const = parse_rust_const(project_root / target_file, target_const)
+                actual_const = rust_const_value_as_int(
+                    parse_rust_const(project_root / target_file, target_const)
+                )
             except (OSError, ValueError) as e:
                 messages.append(str(e))
             else:
@@ -2712,7 +2766,7 @@ def check_iqs9151_register_porting(
         results.append(
             Result(
                 result_id,
-                "iqs9151_register_porting",
+                kind,
                 passed,
                 total,
                 "ok" if not messages else "; ".join(messages),
@@ -3234,6 +3288,7 @@ def check_zmk_source(
     results.extend(check_rust_const_values(manifest, zmk_config_dir, project_root))
     results.extend(check_rust_const_inventories(manifest, project_root))
     results.extend(check_iqs9151_register_porting(manifest, project_root))
+    results.extend(check_iqs9151_bit_porting(manifest, project_root))
     results.extend(check_rust_byte_arrays(manifest, project_root))
     results.extend(check_vial_layout(manifest, project_root, zmk_config_dir))
     return results
