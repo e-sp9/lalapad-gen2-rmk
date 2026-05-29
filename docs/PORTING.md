@@ -290,6 +290,7 @@ python3 tools/hardware_validation.py --require-classified
 python3 tools/hardware_validation.py --markdown
 python3 tools/hardware_validation.py --evidence-template
 python3 tools/hardware_validation.py --evidence path/to/evidence.toml --markdown
+python3 tools/hardware_validation.py --evidence path/to/evidence.toml --require-validated --require-firmware-ref <tag-or-commit>
 ```
 
 The command prints the real-hardware validation rate and remaining evidence
@@ -302,7 +303,11 @@ tracker as a table for release notes, PR review, and the GitHub Actions step
 summary. Hardware evidence can also be recorded in a separate overlay file using
 the format in
 `tools/hardware_validation_evidence.example.toml`; each evidence entry updates
-one manifest check by id and must provide `validated_at`, `tester`, and
-`artifact_or_notes` before it can count as `validated`. Use
-`--evidence-template > hardware-validation-evidence.local.toml` to generate a
-complete local overlay for all current hardware checks.
+one manifest check by id and must provide `validated_at`, `tester`,
+`firmware_ref`, and `artifact_or_notes` before it can count as `validated`.
+`firmware_ref` is an exact string match against the release tag, commit hash, or
+other immutable identifier for the central/peripheral firmware pair that was
+flashed. `--require-firmware-ref` only rejects stale validated evidence; combine
+it with `--require-validated` when all checks must be proven for that exact
+firmware. Use `--evidence-template > hardware-validation-evidence.local.toml`
+to generate a complete local overlay for all current hardware checks.

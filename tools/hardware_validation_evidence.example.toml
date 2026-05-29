@@ -3,15 +3,18 @@
 #
 #   python3 tools/hardware_validation.py --evidence path/to/evidence.toml --markdown
 #   python3 tools/hardware_validation.py --evidence path/to/evidence.toml --require-validated
+#   python3 tools/hardware_validation.py --evidence path/to/evidence.toml --require-firmware-ref <tag-or-commit>
 #
 # Evidence entries are overlays keyed by check id from
 # tools/hardware_validation_manifest.toml. Keep artifact_or_notes specific:
-# include a release tag, firmware hash, photo/log path, probe reading, or Vial
-# observation note.
+# include a photo/log path, probe reading, or Vial observation note. Set
+# firmware_ref to the release tag, commit hash, or other immutable firmware
+# identifier that was flashed during the hardware test.
 
 # [[evidence]]
 # id = "iqs9151_right_i2c_identity"
 # status = "validated"
 # validated_at = "2026-05-29"
 # tester = "hardware bench"
+# firmware_ref = "v0.2.65"
 # artifact_or_notes = "I2C scan found 0x56 and product register 0x1000 read 0x09bc on the right half."

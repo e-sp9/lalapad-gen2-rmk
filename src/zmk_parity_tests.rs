@@ -233,7 +233,7 @@ fn hardware_validation_markdown_report_lists_required_evidence() {
         "Hardware validation: 0/{expected_total} = 0.00% validated"
     )));
     assert!(stdout.contains(
-        "| ID | Area | Side | Status | Requirement | Required evidence | Validated at | Tester | Artifact/notes |"
+        "| ID | Area | Side | Status | Requirement | Required evidence | Validated at | Tester | Firmware ref | Artifact/notes |"
     ));
     for required in [
         "iqs9151_right_i2c_identity",
@@ -262,6 +262,7 @@ source = "docs/TRACKPAD_HARDWARE_CHECK.md"
 status = "validated"
 validated_at = "2026-05-29"
 tester = "bench | tester"
+firmware_ref = "v0.2.65 | 35b3f1f"
 artifact_or_notes = "photo | serial log"
 "#;
     let path = write_temp_file("hardware-validation-pipes", manifest);
@@ -279,6 +280,7 @@ artifact_or_notes = "photo | serial log"
     assert!(stdout.contains("A \\| B C"));
     assert!(stdout.contains("Scope \\| log"));
     assert!(stdout.contains("bench \\| tester"));
+    assert!(stdout.contains("v0.2.65 \\| 35b3f1f"));
     assert!(stdout.contains("photo \\| serial log"));
 }
 
@@ -420,6 +422,7 @@ id = "iqs9151_right_i2c_identity"
 status = "validated"
 validated_at = "2026-05-29"
 tester = "hardware bench"
+firmware_ref = "35b3f1f"
 artifact_or_notes = "I2C scan found 0x56 and product register 0x1000 read 0x09bc."
 "#;
     let path = write_temp_file("hardware-validation-evidence", evidence);
@@ -438,6 +441,96 @@ artifact_or_notes = "I2C scan found 0x56 and product register 0x1000 read 0x09bc
     assert_eq!(parsed["by_status"]["validated"].as_i64(), Some(1));
     assert_eq!(parsed["by_status"]["requires_hardware"].as_i64(), Some(11));
     assert_eq!(parsed["errors"].as_array().unwrap().len(), 0);
+}
+
+#[test]
+fn hardware_validation_can_require_matching_firmware_ref() {
+    let evidence = r#"
+[[evidence]]
+id = "iqs9151_right_i2c_identity"
+status = "validated"
+validated_at = "2026-05-29"
+tester = "hardware bench"
+firmware_ref = "35b3f1f"
+artifact_or_notes = "I2C scan found 0x56 and product register 0x1000 read 0x09bc."
+"#;
+    let path = write_temp_file("hardware-validation-firmware-ref", evidence);
+    let ok = run_hardware_validation(&[
+        "--evidence",
+        path.to_str().unwrap(),
+        "--require-firmware-ref",
+        "35b3f1f",
+    ]);
+    let bad = run_hardware_validation(&[
+        "--evidence",
+        path.to_str().unwrap(),
+        "--require-firmware-ref",
+        "v0.2.64",
+    ]);
+    let _ = std::fs::remove_file(&path);
+
+    assert!(
+        ok.status.success(),
+        "matching firmware_ref should pass\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&ok.stdout),
+        String::from_utf8_lossy(&ok.stderr)
+    );
+    assert!(
+        !bad.status.success(),
+        "mismatched firmware_ref unexpectedly passed"
+    );
+    assert!(
+        String::from_utf8_lossy(&bad.stderr)
+            .contains("validated firmware_ref '35b3f1f' does not match required 'v0.2.64'"),
+        "mismatched firmware_ref should explain the stale evidence"
+    );
+}
+
+#[test]
+fn hardware_validation_requires_firmware_ref_for_validated_evidence() {
+    let evidence = r#"
+[[evidence]]
+id = "iqs9151_right_i2c_identity"
+status = "validated"
+validated_at = "2026-05-29"
+tester = "hardware bench"
+artifact_or_notes = "missing firmware_ref should not count"
+"#;
+    let path = write_temp_file("hardware-validation-missing-firmware-ref", evidence);
+    let output = run_hardware_validation(&["--evidence", path.to_str().unwrap(), "--json"]);
+    let require_output =
+        run_hardware_validation(&["--evidence", path.to_str().unwrap(), "--require-classified"]);
+    let _ = std::fs::remove_file(&path);
+
+    assert!(
+        output.status.success(),
+        "missing firmware_ref json report failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(parsed["validated"].as_i64(), Some(0));
+    assert_eq!(parsed["classified"].as_bool(), Some(false));
+    assert!(
+        parsed["errors"].as_array().unwrap()[0]
+            .as_str()
+            .unwrap()
+            .contains("validated checks require evidence field(s): firmware_ref")
+    );
+    assert!(
+        !require_output.status.success(),
+        "missing firmware_ref unexpectedly passed --require-classified"
+    );
+}
+
+#[test]
+fn hardware_validation_firmware_ref_gate_allows_zero_validated_checks() {
+    let output = run_hardware_validation(&["--require-firmware-ref", "35b3f1f"]);
+
+    assert!(
+        output.status.success(),
+        "--require-firmware-ref should only constrain validated evidence; use --require-validated for all-check enforcement"
+    );
 }
 
 #[test]
@@ -465,6 +558,7 @@ fn hardware_validation_can_generate_complete_evidence_template() {
         assert_eq!(entry["status"].as_str(), Some("requires_hardware"));
         assert_eq!(entry["validated_at"].as_str(), Some(""));
         assert_eq!(entry["tester"].as_str(), Some(""));
+        assert_eq!(entry["firmware_ref"].as_str(), Some(""));
         assert_eq!(entry["artifact_or_notes"].as_str(), Some(""));
         assert!(
             stdout.contains(check["requirement"].as_str().unwrap()),
@@ -531,6 +625,7 @@ id = "unknown_check"
 status = "validated"
 validated_at = "2026-05-29"
 tester = "hardware bench"
+firmware_ref = "35b3f1f"
 artifact_or_notes = "unknown"
 
 [[evidence]]
@@ -538,6 +633,7 @@ id = "vial_thumb_layer_taps"
 status = "validated"
 validated_at = "2026-05-29"
 tester = "hardware bench"
+firmware_ref = "35b3f1f"
 artifact_or_notes = "first"
 
 [[evidence]]
@@ -545,6 +641,7 @@ id = "vial_thumb_layer_taps"
 status = "validated"
 validated_at = "2026-05-29"
 tester = "hardware bench"
+firmware_ref = "35b3f1f"
 artifact_or_notes = "duplicate"
 "#;
     let path = write_temp_file("hardware-validation-bad-evidence", evidence);
@@ -595,6 +692,7 @@ fn local_validation_entrypoints_match_ci_gates() {
         "tools/hardware_validation.py --markdown",
         "tools/hardware_validation.py --evidence-template",
         "tools/hardware_validation.py --evidence path/to/evidence.toml --markdown",
+        "tools/hardware_validation.py --evidence path/to/evidence.toml --require-validated --require-firmware-ref <tag-or-commit>",
         "tools/hardware_validation_manifest.toml",
         "tools/hardware_validation_evidence.example.toml",
     ] {
@@ -609,7 +707,7 @@ fn local_validation_entrypoints_match_ci_gates() {
     );
     assert!(
         HARDWARE_VALIDATION_EVIDENCE_EXAMPLE_TOML
-            .contains("tools/hardware_validation.py --evidence path/to/evidence.toml --markdown"),
+            .contains("tools/hardware_validation.py --evidence path/to/evidence.toml --require-firmware-ref <tag-or-commit>"),
         "hardware evidence example should document overlay report usage"
     );
 

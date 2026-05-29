@@ -24,8 +24,14 @@ VALID_STATUSES = frozenset(
 )
 VALIDATED_STATUSES = frozenset({"validated"})
 REQUIRED_FIELDS = ("id", "area", "side", "requirement", "evidence", "source", "status")
-VALIDATED_EVIDENCE_FIELDS = ("validated_at", "tester", "artifact_or_notes")
-EVIDENCE_UPDATE_FIELDS = ("status", "validated_at", "tester", "artifact_or_notes")
+VALIDATED_EVIDENCE_FIELDS = ("validated_at", "tester", "firmware_ref", "artifact_or_notes")
+EVIDENCE_UPDATE_FIELDS = (
+    "status",
+    "validated_at",
+    "tester",
+    "firmware_ref",
+    "artifact_or_notes",
+)
 MARKDOWN_HEADING_RE = re.compile(r"^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$")
 
 
@@ -154,6 +160,7 @@ def summarize(
     manifest: dict[str, Any],
     initial_errors: list[str] | None = None,
     source_root: Path | None = None,
+    required_firmware_ref: str | None = None,
 ) -> HardwareValidationSummary:
     checks = manifest.get("checks", [])
     by_status = {status: 0 for status in sorted(VALID_STATUSES)}
@@ -199,6 +206,15 @@ def summarize(
                     errors.append(
                         f"{check_id}: validated checks require evidence field(s): "
                         f"{', '.join(missing_evidence)}"
+                    )
+                elif (
+                    required_firmware_ref is not None
+                    and str(check.get("firmware_ref", "")) != required_firmware_ref
+                ):
+                    errors.append(
+                        f"{check_id}: validated firmware_ref "
+                        f"{str(check.get('firmware_ref', ''))!r} does not match "
+                        f"required {required_firmware_ref!r}"
                     )
                 else:
                     validated += 1
@@ -254,9 +270,10 @@ def as_evidence_template(manifest: dict[str, Any]) -> str:
         "#",
         "#   python3 tools/hardware_validation.py --evidence path/to/evidence.toml --markdown",
         "#   python3 tools/hardware_validation.py --evidence path/to/evidence.toml --require-validated",
+        "#   python3 tools/hardware_validation.py --evidence path/to/evidence.toml --require-firmware-ref <tag-or-commit>",
         "#",
         "# Entries are keyed by id from tools/hardware_validation_manifest.toml.",
-        "# Change status to \"validated\" only when validated_at, tester, and artifact_or_notes are filled.",
+        "# Change status to \"validated\" only when validated_at, tester, firmware_ref, and artifact_or_notes are filled.",
         "",
     ]
     checks = manifest.get("checks", [])
@@ -269,6 +286,7 @@ def as_evidence_template(manifest: dict[str, Any]) -> str:
             lines.append('status = "requires_hardware"')
             lines.append('validated_at = ""')
             lines.append('tester = ""')
+            lines.append('firmware_ref = ""')
             lines.append('artifact_or_notes = ""')
             lines.append("# Requirement:")
             lines.extend(toml_comment(check.get("requirement", "")))
@@ -296,14 +314,14 @@ def as_markdown(manifest: dict[str, Any], summary: HardwareValidationSummary) ->
         "",
         f"Status: {status_counts or 'none'}",
         "",
-        "| ID | Area | Side | Status | Requirement | Required evidence | Validated at | Tester | Artifact/notes |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        "| ID | Area | Side | Status | Requirement | Required evidence | Validated at | Tester | Firmware ref | Artifact/notes |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for check in manifest.get("checks", []):
         if not isinstance(check, dict):
             continue
         lines.append(
-            "| {id} | {area} | {side} | `{status}` | {requirement} | {evidence} | {validated_at} | {tester} | {artifact_or_notes} |".format(
+            "| {id} | {area} | {side} | `{status}` | {requirement} | {evidence} | {validated_at} | {tester} | {firmware_ref} | {artifact_or_notes} |".format(
                 id=markdown_escape(check.get("id", "")),
                 area=markdown_escape(check.get("area", "")),
                 side=markdown_escape(check.get("side", "")),
@@ -312,6 +330,7 @@ def as_markdown(manifest: dict[str, Any], summary: HardwareValidationSummary) ->
                 evidence=markdown_escape(check.get("evidence", "")),
                 validated_at=markdown_escape(check.get("validated_at", "")),
                 tester=markdown_escape(check.get("tester", "")),
+                firmware_ref=markdown_escape(check.get("firmware_ref", "")),
                 artifact_or_notes=markdown_escape(check.get("artifact_or_notes", "")),
             )
         )
@@ -377,12 +396,16 @@ def main() -> None:
         action="store_true",
         help="fail until every real-hardware check has status validated",
     )
+    parser.add_argument(
+        "--require-firmware-ref",
+        help="fail if any validated hardware evidence was captured against a different firmware tag or commit",
+    )
     args = parser.parse_args()
 
     manifest, evidence_errors = merge_evidence(
         load_toml(args.manifest), [load_toml(path) for path in args.evidence]
     )
-    summary = summarize(manifest, evidence_errors, Path("."))
+    summary = summarize(manifest, evidence_errors, Path("."), args.require_firmware_ref)
     output_modes = sum(bool(mode) for mode in [args.json, args.markdown, args.evidence_template])
     if output_modes > 1:
         parser.error("--json, --markdown, and --evidence-template are mutually exclusive")
@@ -396,6 +419,8 @@ def main() -> None:
         print_text(summary)
 
     if args.require_classified and not summary.classified:
+        raise SystemExit(1)
+    if args.require_firmware_ref is not None and not summary.classified:
         raise SystemExit(1)
     if args.require_validated and (not summary.classified or summary.validated != summary.total):
         raise SystemExit(1)

@@ -191,10 +191,16 @@ summary so remaining real-device evidence is visible next to each release
 build. Real hardware results can be kept in a separate overlay file using the
 format shown in `tools/hardware_validation_evidence.example.toml` and passed
 with `--evidence path/to/evidence.toml`; this lets the manifest remain the
-stable requirement list while measured evidence drives the validation rate. The
-`--evidence-template` command generates a complete local overlay file containing
-every current hardware check; generated `hardware-validation-evidence*.toml`
-files are ignored by default.
+stable requirement list while measured evidence drives the validation rate.
+Validated evidence must include `validated_at`, `tester`, `firmware_ref`, and
+`artifact_or_notes`. `firmware_ref` is compared as an exact string, usually a
+release tag or commit hash for the central/peripheral firmware pair flashed
+during the test. Use `--require-firmware-ref <tag-or-commit>` to reject stale
+validated evidence; combine it with `--require-validated` when a release needs
+all hardware checks proven for that exact firmware. The `--evidence-template`
+command generates a complete local overlay file containing every current
+hardware check; generated `hardware-validation-evidence*.toml` files are
+ignored by default.
 
 Host-side parity tests can be run explicitly with:
 
