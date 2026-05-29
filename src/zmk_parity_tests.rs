@@ -3128,6 +3128,211 @@ print(json.dumps({
 }
 
 #[test]
+fn porting_coverage_rejects_rust_const_drift() {
+    let output = run_python(
+        r#"
+import importlib.util
+import json
+import sys
+import tempfile
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("porting_coverage", "tools/porting_coverage.py")
+pc = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = pc
+spec.loader.exec_module(pc)
+
+manifest = {
+    "rust_const_values": [
+        {
+            "id": "hex_const",
+            "target_file": "firmware.rs",
+            "target_const": "ADDR_PRODUCT_NUMBER",
+            "expected": 4096,
+        },
+        {
+            "id": "bool_const",
+            "target_file": "firmware.rs",
+            "target_const": "DEFAULT_CURSOR_INERTIA_ENABLED",
+            "expected": True,
+        },
+        {
+            "id": "expression_const",
+            "target_file": "firmware.rs",
+            "target_const": "INFO_SHOW_RESET",
+            "expected": "1 << 7",
+        },
+        {
+            "id": "source_backed_const",
+            "source_file": "source.conf",
+            "source_key": "CONFIG_INPUT_IQS9151_RESOLUTION_X",
+            "target_file": "firmware.rs",
+            "target_const": "DEFAULT_X_RESOLUTION",
+            "expected": 2457,
+        },
+        {
+            "id": "missing_const",
+            "target_file": "firmware.rs",
+            "target_const": "MISSING_CONST",
+            "expected": 1,
+        },
+        {
+            "id": "missing_source",
+            "source_file": "missing.conf",
+            "source_key": "CONFIG_INPUT_IQS9151_RESOLUTION_X",
+            "target_file": "firmware.rs",
+            "target_const": "DEFAULT_X_RESOLUTION",
+            "expected": 2457,
+        },
+        {
+            "id": "missing_target_file",
+            "target_file": "missing.rs",
+            "target_const": "DEFAULT_X_RESOLUTION",
+            "expected": 2457,
+        },
+    ],
+}
+
+def pack(results):
+    return [result.__dict__ | {"ok": result.ok} for result in results]
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    (root / "source.conf").write_text("CONFIG_INPUT_IQS9151_RESOLUTION_X=2457\n")
+    firmware = root / "firmware.rs"
+    firmware.write_text('''
+    pub const ADDR_PRODUCT_NUMBER: u16 = 0x1000;
+    const DEFAULT_CURSOR_INERTIA_ENABLED: bool = true;
+    pub const INFO_SHOW_RESET: u16 = 1 << 7;
+    pub const DEFAULT_X_RESOLUTION: u16 = 2457;
+    ''')
+    ok = pack(pc.check_rust_const_values(manifest, root, root))
+
+    firmware.write_text('''
+    pub const ADDR_PRODUCT_NUMBER: u16 = 0x1002;
+    const DEFAULT_CURSOR_INERTIA_ENABLED: bool = false;
+    pub const INFO_SHOW_RESET: u16 = 1 << 6;
+    pub const DEFAULT_X_RESOLUTION: u16 = 2000;
+    ''')
+    (root / "source.conf").write_text("CONFIG_INPUT_IQS9151_RESOLUTION_X=2000\n")
+    changed = pack(pc.check_rust_const_values(manifest, root, root))
+
+print(json.dumps({"ok": ok, "changed": changed}))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "Rust const inventory parser check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    for id in ["hex_const", "bool_const", "expression_const"] {
+        let inventory = parsed["ok"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|result| result["id"] == id)
+            .unwrap_or_else(|| panic!("missing rust const inventory result for {id}"));
+        assert_eq!(inventory["kind"], "rust_const");
+        assert_eq!(inventory["passed"].as_i64(), Some(1));
+        assert_eq!(inventory["total"].as_i64(), Some(1));
+        assert_eq!(inventory["ok"], true);
+    }
+
+    let source_backed = parsed["ok"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "source_backed_const")
+        .expect("missing source-backed rust const result");
+    assert_eq!(source_backed["kind"], "rust_const");
+    assert_eq!(source_backed["passed"].as_i64(), Some(2));
+    assert_eq!(source_backed["total"].as_i64(), Some(2));
+    assert_eq!(source_backed["ok"], true);
+
+    let missing_const = parsed["ok"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "missing_const")
+        .expect("missing missing-const result");
+    assert_eq!(missing_const["kind"], "rust_const");
+    assert_eq!(missing_const["passed"].as_i64(), Some(0));
+    assert_eq!(missing_const["total"].as_i64(), Some(1));
+    assert_eq!(missing_const["ok"], false);
+    assert!(
+        missing_const["message"]
+            .as_str()
+            .unwrap()
+            .contains("not found")
+    );
+
+    let missing_source = parsed["ok"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "missing_source")
+        .expect("missing missing-source result");
+    assert_eq!(missing_source["kind"], "rust_const");
+    assert_eq!(missing_source["passed"].as_i64(), Some(1));
+    assert_eq!(missing_source["total"].as_i64(), Some(2));
+    assert_eq!(missing_source["ok"], false);
+    assert!(
+        missing_source["message"]
+            .as_str()
+            .unwrap()
+            .contains("missing source Kconfig file")
+    );
+
+    let missing_target_file = parsed["ok"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "missing_target_file")
+        .expect("missing missing-target-file result");
+    assert_eq!(missing_target_file["kind"], "rust_const");
+    assert_eq!(missing_target_file["passed"].as_i64(), Some(0));
+    assert_eq!(missing_target_file["total"].as_i64(), Some(1));
+    assert_eq!(missing_target_file["ok"], false);
+    assert!(
+        missing_target_file["message"]
+            .as_str()
+            .unwrap()
+            .contains("missing.rs")
+    );
+
+    let changed_hex = parsed["changed"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "hex_const")
+        .expect("missing changed hex const result");
+    assert_eq!(changed_hex["kind"], "rust_const");
+    assert_eq!(changed_hex["passed"].as_i64(), Some(0));
+    assert_eq!(changed_hex["total"].as_i64(), Some(1));
+    assert!(changed_hex["message"].as_str().unwrap().contains("4098"));
+
+    let changed_source = parsed["changed"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "source_backed_const")
+        .expect("missing changed source-backed const result");
+    assert_eq!(changed_source["kind"], "rust_const");
+    assert_eq!(changed_source["passed"].as_i64(), Some(0));
+    assert_eq!(changed_source["total"].as_i64(), Some(2));
+    assert!(
+        changed_source["message"]
+            .as_str()
+            .unwrap()
+            .contains("source expected")
+    );
+}
+
+#[test]
 fn porting_coverage_rejects_unclassified_zmk_gpio_properties() {
     let output = run_python(
         r#"

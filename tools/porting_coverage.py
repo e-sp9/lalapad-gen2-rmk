@@ -2521,22 +2521,29 @@ def check_rust_const_values(manifest: dict[str, Any], zmk_config_dir: Path, proj
         expected = check["expected"]
         if "source_file" in check and "source_key" in check:
             source_path = zmk_config_dir / check["source_file"]
-            if source_path not in source_cache:
-                source_cache[source_path] = parse_kconfig(source_path)
-            actual_source = source_cache[source_path].get(check["source_key"])
-            expected_source = str(expected).lower() if isinstance(expected, bool) else str(expected)
             total += 1
-            if actual_source == expected_source:
+            if not source_path.exists():
+                messages.append(f"missing source Kconfig file {check['source_file']!r}")
+            else:
+                if source_path not in source_cache:
+                    source_cache[source_path] = parse_kconfig(source_path)
+                actual_source = source_cache[source_path].get(check["source_key"])
+                expected_source = str(expected).lower() if isinstance(expected, bool) else str(expected)
+                if actual_source == expected_source:
+                    passed += 1
+                else:
+                    messages.append(f"source expected {expected_source!r}, got {actual_source!r}")
+
+        total += 1
+        try:
+            actual_const = parse_rust_const(project_root / check["target_file"], check["target_const"])
+        except (OSError, ValueError) as e:
+            messages.append(str(e))
+        else:
+            if actual_const == expected:
                 passed += 1
             else:
-                messages.append(f"source expected {expected_source!r}, got {actual_source!r}")
-
-        actual_const = parse_rust_const(project_root / check["target_file"], check["target_const"])
-        total += 1
-        if actual_const == expected:
-            passed += 1
-        else:
-            messages.append(f"{check['target_const']} expected {expected!r}, got {actual_const!r}")
+                messages.append(f"{check['target_const']} expected {expected!r}, got {actual_const!r}")
 
         results.append(
             Result(

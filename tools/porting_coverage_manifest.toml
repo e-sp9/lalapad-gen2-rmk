@@ -1105,6 +1105,144 @@ target_const = "I2C_ADDRESS"
 expected = 86
 
 [[rust_const_values]]
+id = "iqs9151_product_number"
+target_file = "src/iqs9151.rs"
+target_const = "PRODUCT_NUMBER"
+expected = 2492
+
+[[rust_const_values]]
+id = "iqs9151_register_product_number"
+target_file = "src/iqs9151.rs"
+target_const = "ADDR_PRODUCT_NUMBER"
+expected = 4096
+
+[[rust_const_values]]
+id = "iqs9151_register_relative_x"
+target_file = "src/iqs9151.rs"
+target_const = "ADDR_RELATIVE_X"
+expected = 4116
+
+[[rust_const_values]]
+id = "iqs9151_register_relative_y"
+target_file = "src/iqs9151.rs"
+target_const = "ADDR_RELATIVE_Y"
+expected = 4118
+
+[[rust_const_values]]
+id = "iqs9151_register_single_gestures"
+target_file = "src/iqs9151.rs"
+target_const = "ADDR_SINGLE_GESTURES"
+expected = 4124
+
+[[rust_const_values]]
+id = "iqs9151_register_two_finger_gestures"
+target_file = "src/iqs9151.rs"
+target_const = "ADDR_TWO_FINGER_GESTURES"
+expected = 4126
+
+[[rust_const_values]]
+id = "iqs9151_register_info_flags"
+target_file = "src/iqs9151.rs"
+target_const = "ADDR_INFO_FLAGS"
+expected = 4128
+
+[[rust_const_values]]
+id = "iqs9151_register_trackpad_flags"
+target_file = "src/iqs9151.rs"
+target_const = "ADDR_TRACKPAD_FLAGS"
+expected = 4130
+
+[[rust_const_values]]
+id = "iqs9151_register_finger1_x"
+target_file = "src/iqs9151.rs"
+target_const = "ADDR_FINGER1_X"
+expected = 4132
+
+[[rust_const_values]]
+id = "iqs9151_register_finger1_y"
+target_file = "src/iqs9151.rs"
+target_const = "ADDR_FINGER1_Y"
+expected = 4134
+
+[[rust_const_values]]
+id = "iqs9151_register_finger2_x"
+target_file = "src/iqs9151.rs"
+target_const = "ADDR_FINGER2_X"
+expected = 4140
+
+[[rust_const_values]]
+id = "iqs9151_register_finger2_y"
+target_file = "src/iqs9151.rs"
+target_const = "ADDR_FINGER2_Y"
+expected = 4142
+
+[[rust_const_values]]
+id = "iqs9151_register_touch_status"
+target_file = "src/iqs9151.rs"
+target_const = "ADDR_TOUCH_STATUS"
+expected = 4188
+
+[[rust_const_values]]
+id = "iqs9151_register_system_control"
+target_file = "src/iqs9151.rs"
+target_const = "ADDR_SYSTEM_CONTROL"
+expected = 4540
+
+[[rust_const_values]]
+id = "iqs9151_register_trackpad_settings"
+target_file = "src/iqs9151.rs"
+target_const = "ADDR_TRACKPAD_SETTINGS"
+expected = 4578
+
+[[rust_const_values]]
+id = "iqs9151_register_gesture_enable"
+target_file = "src/iqs9151.rs"
+target_const = "ADDR_GESTURE_ENABLE"
+expected = 4598
+
+[[rust_const_values]]
+id = "iqs9151_register_two_finger_gesture_enable"
+target_file = "src/iqs9151.rs"
+target_const = "ADDR_TWO_FINGER_GESTURE_ENABLE"
+expected = 4600
+
+[[rust_const_values]]
+id = "iqs9151_info_show_reset_bit"
+target_file = "src/iqs9151.rs"
+target_const = "INFO_SHOW_RESET"
+expected = "1 << 7"
+
+[[rust_const_values]]
+id = "iqs9151_system_control_sw_reset_bit"
+target_file = "src/iqs9151.rs"
+target_const = "SYS_CTRL_SW_RESET"
+expected = "1 << 9"
+
+[[rust_const_values]]
+id = "iqs9151_system_control_ack_reset_bit"
+target_file = "src/iqs9151.rs"
+target_const = "SYS_CTRL_ACK_RESET"
+expected = "1 << 7"
+
+[[rust_const_values]]
+id = "iqs9151_gesture_event_enable_bit"
+target_file = "src/iqs9151.rs"
+target_const = "CFG_GESTURE_EVENT_EN"
+expected = "1 << 9"
+
+[[rust_const_values]]
+id = "iqs9151_show_reset_timeout"
+target_file = "src/iqs9151.rs"
+target_const = "SHOW_RESET_TIMEOUT_MS"
+expected = 3000
+
+[[rust_const_values]]
+id = "iqs9151_reset_delay"
+target_file = "src/iqs9151.rs"
+target_const = "RESET_DELAY_MS"
+expected = 100
+
+[[rust_const_values]]
 id = "iqs9151_x_resolution"
 source_file = "boards/shields/lalapadgen2/lalapadgen2_right.conf"
 source_key = "CONFIG_INPUT_IQS9151_RESOLUTION_X"
@@ -1247,6 +1385,42 @@ id = "trackpad_lowspeed_scroll_divisor"
 target_file = "src/iqs9151.rs"
 target_const = "LOW_SPEED_SCROLL_DIVISOR"
 expected = 40
+
+[[rust_const_values]]
+id = "trackpad_cursor_inertia_enabled"
+target_file = "src/iqs9151.rs"
+target_const = "DEFAULT_CURSOR_INERTIA_ENABLED"
+expected = true
+
+[[rust_const_values]]
+id = "trackpad_dynamic_scale_default"
+target_file = "src/iqs9151.rs"
+target_const = "DEFAULT_DYNAMIC_SCALE_X10"
+expected = 10
+
+[[rust_const_values]]
+id = "trackpad_dynamic_scale_min"
+target_file = "src/iqs9151.rs"
+target_const = "MIN_DYNAMIC_SCALE_X10"
+expected = 2
+
+[[rust_const_values]]
+id = "trackpad_dynamic_scale_max"
+target_file = "src/iqs9151.rs"
+target_const = "MAX_DYNAMIC_SCALE_X10"
+expected = 50
+
+[[rust_const_values]]
+id = "trackpad_dynamic_scale_custom_event"
+target_file = "src/iqs9151.rs"
+target_const = "CUSTOM_EVENT_DYNAMIC_SCALE"
+expected = 2
+
+[[rust_const_values]]
+id = "trackpad_dynamic_scale_state_custom_event"
+target_file = "src/iqs9151.rs"
+target_const = "CUSTOM_EVENT_DYNAMIC_SCALE_STATE"
+expected = 4
 
 [[rust_const_values]]
 id = "one_finger_tapdrag_gap"
