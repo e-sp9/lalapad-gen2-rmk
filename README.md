@@ -121,6 +121,7 @@ cargo make migration-status-report
 cargo make rmk-behavior-tests
 python3 tools/hardware_validation.py --hardware-baseline tools/hardware_validation_baseline.toml --require-classified
 python3 tools/hardware_validation.py --markdown
+python3 tools/hardware_validation.py --checklist
 python3 tools/hardware_validation.py --evidence-template
 python3 tools/check_flash_layout.py --config-only
 cargo check --release --bin central
@@ -132,6 +133,7 @@ When real hardware evidence changed, also run:
 
 ```shell
 python3 tools/hardware_validation.py --evidence-template > hardware-validation-evidence.local.toml
+python3 tools/hardware_validation.py --checklist > hardware-validation-checklist.local.md
 python3 tools/hardware_validation.py --evidence hardware-validation-evidence.local.toml --markdown
 ```
 
@@ -257,7 +259,9 @@ proven for that exact firmware. The `--evidence-template`
 command generates a complete local overlay file containing every current
 hardware check; pass `--firmware-ref-template <tag-or-commit>` with it to
 pre-fill the flashed firmware reference in every entry. Generated
-`hardware-validation-evidence*.toml` files are ignored by default.
+`--checklist` output turns the same manifest into a bench checklist for
+collecting those observations. Generated `hardware-validation-evidence*.toml`
+and `hardware-validation-checklist*.md` files are ignored by default.
 For the combined final gate, run:
 
 ```shell

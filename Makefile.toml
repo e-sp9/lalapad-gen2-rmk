@@ -55,6 +55,10 @@ args = ["tools/hardware_validation.py", "--markdown"]
 command = "python3"
 args = ["tools/hardware_validation.py", "--evidence-template"]
 
+[tasks.hardware-validation-checklist]
+command = "python3"
+args = ["tools/hardware_validation.py", "--checklist"]
+
 [tasks.migration-status]
 command = "python3"
 args = [

@@ -3,6 +3,7 @@ target
 .bindgen-headers
 .codex
 hardware-validation-evidence*.toml
+hardware-validation-checklist*.md
 
 *.bin
 *.elf

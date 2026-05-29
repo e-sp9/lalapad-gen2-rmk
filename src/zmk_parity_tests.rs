@@ -1513,6 +1513,56 @@ fn hardware_validation_can_generate_complete_evidence_template() {
 }
 
 #[test]
+fn hardware_validation_can_generate_bench_checklist() {
+    let output = run_hardware_validation(&["--checklist"]);
+
+    assert!(
+        output.status.success(),
+        "hardware validation checklist generation failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let manifest = hardware_validation_manifest_toml();
+    let checks = manifest["checks"].as_array().unwrap();
+    assert!(stdout.contains("# LaLaPad Gen2 RMK Hardware Validation Checklist"));
+    assert!(stdout.contains("Record the flashed firmware tag or commit before testing."));
+    assert!(stdout.contains("## trackpad"));
+    assert!(stdout.contains("## vial"));
+    for check in checks {
+        let check_id = check["id"].as_str().unwrap();
+        assert!(
+            stdout.contains(&format!("- [ ] `{check_id}`")),
+            "checklist should include checkbox for {check_id}"
+        );
+        assert!(
+            stdout.contains(check["requirement"].as_str().unwrap()),
+            "checklist should include requirement for {check_id}"
+        );
+        assert!(
+            stdout.contains(check["evidence"].as_str().unwrap()),
+            "checklist should include evidence instructions for {check_id}"
+        );
+        for needle in check["evidence_needles"].as_array().unwrap() {
+            assert!(
+                stdout.contains(needle.as_str().unwrap()),
+                "checklist should include required observation needle for {check_id}"
+            );
+        }
+    }
+
+    let bad_mix = run_hardware_validation(&["--checklist", "--markdown"]);
+    assert!(
+        !bad_mix.status.success(),
+        "--checklist and --markdown should be mutually exclusive"
+    );
+    assert!(
+        String::from_utf8_lossy(&bad_mix.stderr).contains("--checklist"),
+        "exclusive output mode error should mention --checklist"
+    );
+}
+
+#[test]
 fn hardware_validation_evidence_template_can_prefill_firmware_ref() {
     let output =
         run_hardware_validation(&["--evidence-template", "--firmware-ref-template", "v0.2.66"]);
@@ -1741,6 +1791,7 @@ fn local_validation_entrypoints_match_ci_gates() {
     let migration_status_final_task = makefile_task_block("migration-status-final");
     let hardware_validation_task = makefile_task_block("hardware-validation");
     let hardware_validation_report_task = makefile_task_block("hardware-validation-report");
+    let hardware_validation_checklist_task = makefile_task_block("hardware-validation-checklist");
     let hardware_validation_template_task =
         makefile_task_block("hardware-validation-evidence-template");
     assert_task_prefers_sibling_zmk_checkout(
@@ -1818,13 +1869,19 @@ fn local_validation_entrypoints_match_ci_gates() {
         "Makefile.toml should expose a hardware validation markdown report"
     );
     assert!(
+        hardware_validation_checklist_task.contains("tools/hardware_validation.py")
+            && hardware_validation_checklist_task.contains("--checklist"),
+        "Makefile.toml should expose a hardware validation bench checklist"
+    );
+    assert!(
         hardware_validation_template_task.contains("tools/hardware_validation.py")
             && hardware_validation_template_task.contains("--evidence-template"),
         "Makefile.toml should expose a full hardware evidence template generator"
     );
     assert!(
-        include_str!("../.gitignore").contains("hardware-validation-evidence*.toml"),
-        "local generated hardware evidence overlays should be ignored by default"
+        include_str!("../.gitignore").contains("hardware-validation-evidence*.toml")
+            && include_str!("../.gitignore").contains("hardware-validation-checklist*.md"),
+        "local generated hardware evidence overlays and checklists should be ignored by default"
     );
     for required in [
         "--require-porting-complete",
@@ -1836,6 +1893,7 @@ fn local_validation_entrypoints_match_ci_gates() {
         "HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-final",
         "tools/hardware_validation.py --hardware-baseline tools/hardware_validation_baseline.toml --require-classified",
         "tools/hardware_validation.py --markdown",
+        "tools/hardware_validation.py --checklist",
         "tools/hardware_validation.py --evidence-template",
         "tools/hardware_validation.py --evidence-template --firmware-ref-template <tag-or-commit>",
         "tools/hardware_validation.py --evidence path/to/evidence.toml --markdown",

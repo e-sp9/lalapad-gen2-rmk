@@ -389,6 +389,7 @@ Run:
 python3 tools/hardware_validation.py --require-classified
 python3 tools/hardware_validation.py --hardware-baseline tools/hardware_validation_baseline.toml --require-classified
 python3 tools/hardware_validation.py --markdown
+python3 tools/hardware_validation.py --checklist
 python3 tools/hardware_validation.py --evidence-template
 python3 tools/hardware_validation.py --evidence-template --firmware-ref-template <tag-or-commit>
 python3 tools/hardware_validation.py --evidence path/to/evidence.toml --markdown
@@ -398,7 +399,10 @@ python3 tools/hardware_validation.py --evidence path/to/evidence.toml --require-
 The command prints the real-hardware validation rate and remaining evidence
 needed. JSON, text, and Markdown output include area-level and side-level
 progress plus each check's required observation terms so trackpad, split, Vial,
-status LED, battery, and storage gaps can be tracked independently. CI uses
+status LED, battery, and storage gaps can be tracked independently. The
+`--checklist` output turns the same manifest into a compact bench checklist for
+collecting `artifact_or_notes` observations before filling an evidence overlay.
+CI uses
 `--require-classified` only, which means every
 hardware-only item must have a valid status, evidence description, and `source`
 link to an existing Markdown heading. CI intentionally does not use

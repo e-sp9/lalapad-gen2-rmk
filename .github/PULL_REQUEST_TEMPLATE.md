@@ -25,6 +25,7 @@
 - [ ] `HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-final`, if claiming complete migration validation for a release
 - [ ] `python3 tools/hardware_validation.py --hardware-baseline tools/hardware_validation_baseline.toml --require-classified`
 - [ ] `python3 tools/hardware_validation.py --markdown`
+- [ ] `python3 tools/hardware_validation.py --checklist`
 - [ ] `python3 tools/hardware_validation.py --evidence-template`
 - [ ] `python3 tools/hardware_validation.py --evidence-template --firmware-ref-template <tag-or-commit>`, if preparing hardware evidence for a release
 - [ ] `python3 tools/hardware_validation.py --evidence path/to/evidence.toml --markdown`, if hardware evidence changed

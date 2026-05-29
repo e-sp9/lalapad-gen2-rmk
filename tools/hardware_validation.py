@@ -666,6 +666,37 @@ def as_markdown(manifest: dict[str, Any], summary: HardwareValidationSummary) ->
     return "\n".join(lines) + "\n"
 
 
+def as_checklist(manifest: dict[str, Any]) -> str:
+    lines = [
+        "# LaLaPad Gen2 RMK Hardware Validation Checklist",
+        "",
+        "Record the flashed firmware tag or commit before testing. After each item "
+        "passes, copy the check id into an evidence overlay generated with "
+        "`--evidence-template` and include the required observations in "
+        "`artifact_or_notes`.",
+        "",
+    ]
+    checks = manifest.get("checks", [])
+    current_area: str | None = None
+    if isinstance(checks, list):
+        for check in checks:
+            if not isinstance(check, dict):
+                continue
+            area = str(check.get("area", ""))
+            if area != current_area:
+                current_area = area
+                lines.extend([f"## {area or 'unknown area'}", ""])
+            check_id = str(check.get("id", ""))
+            side = str(check.get("side", ""))
+            lines.append(f"- [ ] `{check_id}` ({side})")
+            lines.append(f"  - Requirement: {check.get('requirement', '')}")
+            lines.append(f"  - How to verify: {check.get('evidence', '')}")
+            lines.append(f"  - Required observations: {evidence_needles_text(check)}")
+            lines.append(f"  - Evidence source: {check.get('source', '')}")
+            lines.append("")
+    return "\n".join(lines)
+
+
 def progress_markdown_row(label: str, value: str, progress: dict[str, Any]) -> str:
     rate = progress.get("rate")
     rate_text = "n/a" if rate is None else f"{rate:.2f}%"
@@ -746,6 +777,11 @@ def main() -> None:
         help="print an evidence overlay template containing every manifest check",
     )
     parser.add_argument(
+        "--checklist",
+        action="store_true",
+        help="print a human checklist for collecting real-hardware evidence",
+    )
+    parser.add_argument(
         "--firmware-ref-template",
         default="",
         metavar="REF",
@@ -768,9 +804,14 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    output_modes = sum(bool(mode) for mode in [args.json, args.markdown, args.evidence_template])
+    output_modes = sum(
+        bool(mode)
+        for mode in [args.json, args.markdown, args.evidence_template, args.checklist]
+    )
     if output_modes > 1:
-        parser.error("--json, --markdown, and --evidence-template are mutually exclusive")
+        parser.error(
+            "--json, --markdown, --evidence-template, and --checklist are mutually exclusive"
+        )
     if args.firmware_ref_template and not args.evidence_template:
         parser.error("--firmware-ref-template can only be used with --evidence-template")
 
@@ -799,6 +840,8 @@ def main() -> None:
         print(as_markdown(manifest, summary), end="")
     elif args.evidence_template:
         print(as_evidence_template(manifest, args.firmware_ref_template), end="")
+    elif args.checklist:
+        print(as_checklist(manifest), end="")
     else:
         print_text(summary)
 
