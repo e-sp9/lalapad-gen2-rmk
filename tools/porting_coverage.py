@@ -913,6 +913,23 @@ def parse_gpio_property(block: str, name: str) -> list[str]:
     ]
 
 
+def normalize_gpio_flags(flags: str) -> str:
+    flags = flags.strip()
+    if flags.startswith("(") and flags.endswith(")"):
+        flags = flags[1:-1]
+    return re.sub(r"\s*\|\s*", "|", " ".join(flags.split()))
+
+
+def parse_gpio_property_with_flags(block: str, name: str) -> list[str]:
+    body = f"<{extract_angle_property(block, name)}>"
+    entries: list[str] = []
+    for match in re.finditer(r"<&([A-Za-z0-9_]+)\s+([0-9]+)\s+([^>]+)>", body):
+        entries.append(
+            f"{match.group(1)}:{int(match.group(2))}:{normalize_gpio_flags(match.group(3))}"
+        )
+    return entries
+
+
 def parse_kconfig(path: Path) -> dict[str, str]:
     values: dict[str, str] = {}
     text = path.read_text()
@@ -1481,6 +1498,42 @@ def check_zmk_dts_property_inventory(manifest: dict[str, Any], zmk_config_dir: P
                 actual,
             )
         )
+    return results
+
+
+def check_zmk_gpio_property_inventory(manifest: dict[str, Any], zmk_config_dir: Path) -> list[Result]:
+    results: list[Result] = []
+    for check in manifest.get("source_inventory", {}).get("gpio_properties", []):
+        source_file = check["source_file"]
+        expected = list(check["expected"])
+        source_path = zmk_config_dir / source_file
+        result_id = f"zmk_source.gpio_properties.{source_file}.{check['source_block']}.{check['source_property']}"
+        if not source_path.exists():
+            results.append(
+                Result(
+                    result_id,
+                    "zmk_inventory",
+                    0,
+                    max(1, len(expected)),
+                    f"missing GPIO property source file {source_file!r}",
+                )
+            )
+            continue
+        try:
+            block = extract_block(source_path.read_text(), check["source_block"])
+            actual = parse_gpio_property_with_flags(block, check["source_property"])
+        except ValueError as e:
+            results.append(
+                Result(
+                    result_id,
+                    "zmk_inventory",
+                    0,
+                    max(1, len(expected)),
+                    f"invalid GPIO property source {source_file!r}: {e}",
+                )
+            )
+            continue
+        results.append(ordered_inventory_result(result_id, "zmk_inventory", expected, actual))
     return results
 
 
@@ -2095,6 +2148,7 @@ def check_zmk_source(
     results.extend(check_zmk_physical_layout_attr_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_input_behavior_binding_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_dts_property_inventory(manifest, zmk_config_dir))
+    results.extend(check_zmk_gpio_property_inventory(manifest, zmk_config_dir))
     results.extend(check_west_manifest_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_config_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_dts_status_inventory(manifest, zmk_config_dir))

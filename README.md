@@ -134,8 +134,9 @@ chain and physical key attributes, ZMK source-file inventory, ZMK keymap layer
 and behavior inventories, ZMK include inventory, Kconfig shield/default entries,
 west module inventory, ZMK trackpad virtual-position defines, RMK custom keycode
 order, ZMK `INPUT_BTN_*` to virtual-position bindings, selected ZMK DTS
-properties for split input and dynamic scaling, the ZMK DTS/overlay status-node
-inventory, exact RMK keymap array shape, and the exact RMK combo inventory. Use
+properties for split input and dynamic scaling, ZMK GPIO pin flags, the ZMK
+DTS/overlay status-node inventory, exact RMK keymap array shape, and the exact
+RMK combo inventory. Use
 `--zmk-keymap PATH --require-zmk-source` when the source-backed check must be
 mandatory in another checkout layout. The firmware CI checks out
 `e-sp9/zmk-config-LalaPadGen2` and runs this source-backed gate before building

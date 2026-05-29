@@ -289,6 +289,33 @@ fn porting_coverage_includes_exact_rmk_inventory_gates() {
             assert_eq!(property_inventory["ok"], true);
         }
 
+        for gpio_property in porting_coverage_manifest_toml()["source_inventory"]["gpio_properties"]
+            .as_array()
+            .unwrap()
+        {
+            let source_file = gpio_property["source_file"].as_str().unwrap();
+            let source_block = gpio_property["source_block"].as_str().unwrap();
+            let source_property = gpio_property["source_property"].as_str().unwrap();
+            let expected_entries = gpio_property["expected"].as_array().unwrap().len() as i64;
+            let gpio_inventory = results
+                .iter()
+                .find(|result| {
+                    result["id"]
+                        == format!(
+                            "zmk_source.gpio_properties.{source_file}.{source_block}.{source_property}"
+                        )
+                })
+                .unwrap_or_else(|| {
+                    panic!(
+                        "ZMK GPIO property inventory coverage result is missing for {source_file} {source_block}.{source_property}"
+                    )
+                });
+            assert_eq!(gpio_inventory["kind"], "zmk_inventory");
+            assert_eq!(gpio_inventory["passed"].as_i64(), Some(expected_entries));
+            assert_eq!(gpio_inventory["total"].as_i64(), Some(expected_entries));
+            assert_eq!(gpio_inventory["ok"], true);
+        }
+
         let west_inventory = results
             .iter()
             .find(|result| result["id"] == "zmk_source.west_manifest")
@@ -1391,6 +1418,127 @@ print(json.dumps({
             .as_str()
             .unwrap()
             .contains("missing DTS property source file")
+    );
+}
+
+#[test]
+fn porting_coverage_rejects_unclassified_zmk_gpio_properties() {
+    let output = run_python(
+        r#"
+import importlib.util
+import json
+import sys
+import tempfile
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("porting_coverage", "tools/porting_coverage.py")
+pc = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = pc
+spec.loader.exec_module(pc)
+
+manifest = {
+    "source_inventory": {
+        "gpio_properties": [{
+            "source_file": "lalapadgen2.dtsi",
+            "source_block": "kscan0",
+            "source_property": "row-gpios",
+            "expected": [
+                "xiao_d:10:GPIO_ACTIVE_HIGH|GPIO_PULL_DOWN",
+                "gpio1:1:GPIO_ACTIVE_HIGH|GPIO_PULL_DOWN",
+            ],
+        }],
+    },
+}
+
+def pack(results):
+    return [result.__dict__ | {"ok": result.ok} for result in results]
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    fixture = root / "lalapadgen2.dtsi"
+    fixture.write_text('''
+    kscan0: kscan {
+        row-gpios = <&xiao_d 10 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>,
+                    <&gpio1 1 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>;
+    };
+    ''')
+    ok = pack(pc.check_zmk_gpio_property_inventory(manifest, root))
+
+    fixture.write_text('''
+    kscan0: kscan {
+        row-gpios = <&xiao_d 10 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>,
+                    <&gpio1 1 GPIO_ACTIVE_LOW>,
+                    <&gpio0 2 GPIO_ACTIVE_HIGH>;
+    };
+    ''')
+    changed = pack(pc.check_zmk_gpio_property_inventory(manifest, root))
+
+    fixture.write_text('''
+    kscan0: kscan {
+        col-gpios = <&xiao_d 10 GPIO_ACTIVE_HIGH>;
+    };
+    ''')
+    missing_property = pack(pc.check_zmk_gpio_property_inventory(manifest, root))
+    fixture.unlink()
+    missing_file = pack(pc.check_zmk_gpio_property_inventory(manifest, root))
+
+print(json.dumps({
+    "ok": ok,
+    "changed": changed,
+    "missing_property": missing_property,
+    "missing_file": missing_file,
+}))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "GPIO property inventory parser check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let ok_inventory = &parsed["ok"][0];
+    assert_eq!(ok_inventory["kind"], "zmk_inventory");
+    assert_eq!(ok_inventory["passed"].as_i64(), Some(2));
+    assert_eq!(ok_inventory["total"].as_i64(), Some(2));
+    assert_eq!(ok_inventory["ok"], true);
+
+    let changed_inventory = &parsed["changed"][0];
+    assert_eq!(changed_inventory["kind"], "zmk_inventory");
+    assert_eq!(changed_inventory["passed"].as_i64(), Some(1));
+    assert_eq!(changed_inventory["total"].as_i64(), Some(3));
+    assert_eq!(changed_inventory["ok"], false);
+    assert!(
+        changed_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("gpio0:2:GPIO_ACTIVE_HIGH")
+    );
+
+    let missing_property_inventory = &parsed["missing_property"][0];
+    assert_eq!(missing_property_inventory["kind"], "zmk_inventory");
+    assert_eq!(missing_property_inventory["passed"].as_i64(), Some(0));
+    assert_eq!(missing_property_inventory["total"].as_i64(), Some(2));
+    assert_eq!(missing_property_inventory["ok"], false);
+    assert!(
+        missing_property_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("invalid GPIO property source")
+    );
+
+    let missing_file_inventory = &parsed["missing_file"][0];
+    assert_eq!(missing_file_inventory["kind"], "zmk_inventory");
+    assert_eq!(missing_file_inventory["passed"].as_i64(), Some(0));
+    assert_eq!(missing_file_inventory["total"].as_i64(), Some(2));
+    assert_eq!(missing_file_inventory["ok"], false);
+    assert!(
+        missing_file_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("missing GPIO property source file")
     );
 }
 
