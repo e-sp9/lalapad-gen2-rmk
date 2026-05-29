@@ -219,6 +219,29 @@ fn porting_coverage_includes_exact_rmk_inventory_gates() {
             assert_eq!(define_inventory["ok"], true);
         }
 
+        for layout_file in
+            porting_coverage_manifest_toml()["source_inventory"]["physical_layout_attrs"]
+                .as_array()
+                .unwrap()
+        {
+            let source_file = layout_file["source_file"].as_str().unwrap();
+            let expected_entries = layout_file["expected"].as_array().unwrap().len() as i64;
+            let layout_inventory = results
+                .iter()
+                .find(|result| {
+                    result["id"] == format!("zmk_source.physical_layout_attrs.{source_file}")
+                })
+                .unwrap_or_else(|| {
+                    panic!(
+                        "ZMK physical layout attr inventory coverage result is missing for {source_file}"
+                    )
+                });
+            assert_eq!(layout_inventory["kind"], "zmk_inventory");
+            assert_eq!(layout_inventory["passed"].as_i64(), Some(expected_entries));
+            assert_eq!(layout_inventory["total"].as_i64(), Some(expected_entries));
+            assert_eq!(layout_inventory["ok"], true);
+        }
+
         let west_inventory = results
             .iter()
             .find(|result| result["id"] == "zmk_source.west_manifest")
@@ -943,6 +966,134 @@ print(json.dumps({"ok": ok, "changed": changed, "missing_file": missing_file}))
             .as_str()
             .unwrap()
             .contains("missing define source file")
+    );
+}
+
+#[test]
+fn porting_coverage_rejects_unclassified_zmk_physical_layout_attrs() {
+    let output = run_python(
+        r#"
+import importlib.util
+import json
+import sys
+import tempfile
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("porting_coverage", "tools/porting_coverage.py")
+pc = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = pc
+spec.loader.exec_module(pc)
+
+manifest = {
+    "source_inventory": {
+        "physical_layout_attrs": [{
+            "source_file": "lalapadgen2-layouts.dtsi",
+            "source_block": "lalapadgen2_physical_layout",
+            "expected": ["100,100,0,0,0,0,0", "50,50,400,450,0,0,0"],
+        }],
+    },
+}
+
+def pack(results):
+    return [result.__dict__ | {"ok": result.ok} for result in results]
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    fixture = root / "lalapadgen2-layouts.dtsi"
+    fixture.write_text('''
+    / {
+        lalapadgen2_physical_layout: lalapadgen2_physical_layout {
+            keys = <&key_physical_attrs 100 100 0 0 0 0 0>,
+                   <&key_physical_attrs 50 50 400 450 0 0 0>;
+        };
+    };
+    ''')
+    ok = pack(pc.check_zmk_physical_layout_attr_inventory(manifest, root))
+
+    fixture.write_text('''
+    / {
+        lalapadgen2_physical_layout: lalapadgen2_physical_layout {
+            keys = <&key_physical_attrs 100 100 0 0 0 0 0>,
+                   <&key_physical_attrs 50 50 450 450 0 0 0>,
+                   <&key_physical_attrs 100 100 1000 600 0 0 0>;
+        };
+    };
+    ''')
+    changed = pack(pc.check_zmk_physical_layout_attr_inventory(manifest, root))
+    fixture.write_text('''
+    / {
+        other_physical_layout: other_physical_layout {
+            keys = <&key_physical_attrs 100 100 0 0 0 0 0>;
+        };
+    };
+    ''')
+    missing_block = pack(pc.check_zmk_physical_layout_attr_inventory(manifest, root))
+    fixture.unlink()
+    missing_file = pack(pc.check_zmk_physical_layout_attr_inventory(manifest, root))
+
+print(json.dumps({
+    "ok": ok,
+    "changed": changed,
+    "missing_block": missing_block,
+    "missing_file": missing_file,
+}))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "physical layout attr inventory parser check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let ok_inventory = &parsed["ok"][0];
+    assert_eq!(ok_inventory["kind"], "zmk_inventory");
+    assert_eq!(ok_inventory["passed"].as_i64(), Some(2));
+    assert_eq!(ok_inventory["total"].as_i64(), Some(2));
+    assert_eq!(ok_inventory["ok"], true);
+
+    let changed_inventory = &parsed["changed"][0];
+    assert_eq!(changed_inventory["kind"], "zmk_inventory");
+    assert_eq!(changed_inventory["passed"].as_i64(), Some(1));
+    assert_eq!(changed_inventory["total"].as_i64(), Some(3));
+    assert_eq!(changed_inventory["ok"], false);
+    assert!(
+        changed_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("100,100,1000,600,0,0,0")
+    );
+
+    let missing_block_inventory = &parsed["missing_block"][0];
+    assert_eq!(missing_block_inventory["kind"], "zmk_inventory");
+    assert_eq!(missing_block_inventory["passed"].as_i64(), Some(0));
+    assert_eq!(missing_block_inventory["total"].as_i64(), Some(2));
+    assert_eq!(missing_block_inventory["ok"], false);
+    assert!(
+        missing_block_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("invalid physical layout source")
+    );
+    assert!(
+        missing_block_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("block 'lalapadgen2_physical_layout' not found")
+    );
+
+    let missing_file_inventory = &parsed["missing_file"][0];
+    assert_eq!(missing_file_inventory["kind"], "zmk_inventory");
+    assert_eq!(missing_file_inventory["passed"].as_i64(), Some(0));
+    assert_eq!(missing_file_inventory["total"].as_i64(), Some(2));
+    assert_eq!(missing_file_inventory["ok"], false);
+    assert!(
+        missing_file_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("missing physical layout source file")
     );
 }
 
