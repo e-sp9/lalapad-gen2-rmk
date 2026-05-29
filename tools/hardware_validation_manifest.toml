@@ -1,0 +1,111 @@
+[metadata]
+target = "LaLaPad Gen2 RMK real-hardware validation"
+description = "Machine-readable tracker for checks that cannot be proven by the static ZMK-to-RMK porting coverage gate."
+
+[[checks]]
+id = "iqs9151_right_i2c_identity"
+area = "trackpad"
+side = "right"
+requirement = "Right IQS9151 answers at I2C address 0x56 and product-number register 0x1000 reads 0x09bc."
+evidence = "Probe the right-half I2C bus or run diagnostic firmware that reports the product-number read."
+source = "docs/TRACKPAD_HARDWARE_CHECK.md#electrical-checks"
+status = "requires_hardware"
+
+[[checks]]
+id = "iqs9151_left_i2c_identity"
+area = "trackpad"
+side = "left"
+requirement = "Left IQS9151 answers at I2C address 0x56 and product-number register 0x1000 reads 0x09bc."
+evidence = "Probe the left-half I2C bus or run diagnostic firmware that reports the product-number read."
+source = "docs/TRACKPAD_HARDWARE_CHECK.md#electrical-checks"
+status = "requires_hardware"
+
+[[checks]]
+id = "iqs9151_right_rdy_signal"
+area = "trackpad"
+side = "right"
+requirement = "Right RDY/IRQ on XIAO D6 / P1_11 idles high and pulses or drives low during sensor events."
+evidence = "Measure the right-half RDY pin while touching the trackpad."
+source = "docs/TRACKPAD_HARDWARE_CHECK.md#electrical-checks"
+status = "requires_hardware"
+
+[[checks]]
+id = "iqs9151_left_rdy_signal"
+area = "trackpad"
+side = "left"
+requirement = "Left RDY/IRQ on XIAO D6 / P1_11 idles high and pulses or drives low during sensor events."
+evidence = "Measure the left-half RDY pin while touching the trackpad."
+source = "docs/TRACKPAD_HARDWARE_CHECK.md#electrical-checks"
+status = "requires_hardware"
+
+[[checks]]
+id = "right_trackpad_cursor_tap_scroll"
+area = "trackpad"
+side = "right"
+requirement = "Right trackpad emits cursor motion, tap click, two-finger vertical scroll, and two-finger horizontal scroll without false cursor or click events during continuous scroll."
+evidence = "Flash current central firmware, pair over BLE, and run the trackpad firmware baseline checklist on the right half."
+source = "docs/TRACKPAD_HARDWARE_CHECK.md#firmware-baseline"
+status = "requires_hardware"
+
+[[checks]]
+id = "left_trackpad_split_cursor_tap_scroll"
+area = "trackpad"
+side = "left"
+requirement = "Left trackpad emits cursor motion, tap click, two-finger vertical scroll, and two-finger horizontal scroll through the split custom-event path."
+evidence = "Flash current central and peripheral firmware, pair over BLE, and run the trackpad firmware baseline checklist on the left half."
+source = "docs/TRACKPAD_HARDWARE_CHECK.md#firmware-baseline"
+status = "requires_hardware"
+
+[[checks]]
+id = "trackpad_drag_cross_side"
+area = "trackpad"
+side = "both"
+requirement = "Holding one trackpad for left-button hold while moving the other trackpad performs drag/select and releases when the held finger lifts."
+evidence = "Run the cross-side drag step from the trackpad firmware baseline checklist."
+source = "docs/TRACKPAD_HARDWARE_CHECK.md#firmware-baseline"
+status = "requires_hardware"
+
+[[checks]]
+id = "ble_split_pairing_reconnect"
+area = "ble_split"
+side = "both"
+requirement = "Right central and left peripheral pair, reconnect, and preserve ordinary key input from both halves after host BLE re-pairing."
+evidence = "Flash both halves, clear/re-pair the host BLE bond, reconnect right first, then left, and type keys from both halves."
+source = "docs/TRACKPAD_HARDWARE_CHECK.md#firmware-baseline"
+status = "requires_hardware"
+
+[[checks]]
+id = "vial_thumb_layer_taps"
+area = "vial"
+side = "both"
+requirement = "Vial shows the thumb Space and Enter layer-tap positions and the flashed firmware resolves their hold behavior as layer 1 and layer 2."
+evidence = "Open the flashed keyboard in Vial, inspect the thumb positions, then hold Space/Enter while pressing a layer-only key."
+source = "docs/PORTING.md#behavior-differences"
+status = "requires_hardware"
+
+[[checks]]
+id = "rgb_battery_connection_layer_indicators"
+area = "status_led"
+side = "right"
+requirement = "The XIAO BLE RGB LED polarity and colors match battery, BLE/split connection, and central layer-change indications."
+evidence = "Observe the right-half RGB LED through battery, connection, and layer-change states on real hardware."
+source = "docs/PORTING.md#current-rmk-port"
+status = "requires_hardware"
+
+[[checks]]
+id = "charge_indicator_pins"
+area = "battery"
+side = "right"
+requirement = "Charge-state input P0_17 active-low and charge LED output P0_10 active-low match the XIAO BLE board behavior."
+evidence = "Connect USB/battery charge states and observe the charge input and LED behavior."
+source = "docs/PORTING.md#current-rmk-port"
+status = "requires_hardware"
+
+[[checks]]
+id = "storage_reset_and_reflash"
+area = "storage"
+side = "both"
+requirement = "Storage clear/reset UF2 followed by normal firmware produces clean Vial/keymap behavior without stale host-side assumptions."
+evidence = "Flash reset/storage-clear UF2 when needed, flash normal UF2 files, re-pair BLE, and verify Vial/keymap behavior."
+source = "README.md#firmware-artifacts"
+status = "requires_hardware"

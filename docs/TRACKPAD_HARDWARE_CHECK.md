@@ -2,6 +2,11 @@
 
 Use this checklist when the IQS9151 trackpad does not move the cursor or when long continuous touches still stall.
 
+The machine-readable hardware validation tracker is
+`tools/hardware_validation_manifest.toml`. After running these checks, update
+the relevant check status and evidence there so the software porting coverage
+gate and real-device validation rate stay separate.
+
 ## Firmware Baseline
 
 1. Flash the newest UF2 artifacts to both halves:

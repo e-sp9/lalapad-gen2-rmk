@@ -112,10 +112,11 @@ Reset/storage-clear UF2 files, when generated for hardware testing, are kept und
 
 ```shell
 python3 -m json.tool vial.json >/tmp/lalapad-vial-check.json
-python3 -c 'import tomllib; [tomllib.load(open(path, "rb")) for path in ("keyboard.toml", "Cargo.toml", "tools/porting_coverage_manifest.toml")]; print("toml ok")'
+python3 -c 'import tomllib; [tomllib.load(open(path, "rb")) for path in ("keyboard.toml", "Cargo.toml", "tools/porting_coverage_manifest.toml", "tools/hardware_validation_manifest.toml")]; print("toml ok")'
 rmkit get-chip --keyboard-toml-path keyboard.toml
 rmkit get-project-name --keyboard-toml-path keyboard.toml
 python3 tools/porting_coverage.py --require-zmk-source --require-porting-complete
+python3 tools/hardware_validation.py --require-classified
 python3 tools/check_flash_layout.py --config-only
 cargo check --release --bin central
 cargo check --release --bin peripheral
@@ -166,6 +167,15 @@ mandatory in another checkout layout. The firmware CI checks out
 `e-sp9/zmk-config-LalaPadGen2`, parses `vial.json`, RMK/Cargo/manifest TOML,
 and flash layout, runs this source-backed complete-porting gate, and then runs
 the host-side parity test suite before building release binaries.
+
+`tools/hardware_validation.py` reads
+`tools/hardware_validation_manifest.toml` and tracks checks that cannot be
+proven by the static source-backed porting gate: IQS9151 electrical identity,
+RDY behavior, left/right trackpad runtime behavior, BLE split reconnection,
+Vial thumb layer-tap behavior, RGB/battery indicators, and reset/reflash
+behavior. CI runs it with `--require-classified` so every hardware-only item
+must stay explicitly tracked, but it does not use `--require-validated` because
+real hardware evidence cannot be created by GitHub Actions.
 
 Host-side parity tests can be run explicitly with:
 

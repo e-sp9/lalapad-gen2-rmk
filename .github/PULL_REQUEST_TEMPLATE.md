@@ -14,10 +14,11 @@
 ## Validation
 
 - [ ] `python3 -m json.tool vial.json >/tmp/lalapad-vial-check.json`
-- [ ] `python3 -c 'import tomllib; tomllib.load(open("keyboard.toml", "rb")); tomllib.load(open("Cargo.toml", "rb")); print("toml ok")'`
+- [ ] `python3 -c 'import tomllib; [tomllib.load(open(path, "rb")) for path in ("keyboard.toml", "Cargo.toml", "tools/porting_coverage_manifest.toml", "tools/hardware_validation_manifest.toml")]; print("toml ok")'`
 - [ ] `rmkit get-chip --keyboard-toml-path keyboard.toml`
 - [ ] `rmkit get-project-name --keyboard-toml-path keyboard.toml`
-- [ ] `python3 tools/porting_coverage.py --require-zmk-source`
+- [ ] `python3 tools/porting_coverage.py --require-zmk-source --require-porting-complete`
+- [ ] `python3 tools/hardware_validation.py --require-classified`
 - [ ] `cargo check --release --bin central`
 - [ ] `cargo check --release --bin peripheral`
 - [ ] `cargo build --release`

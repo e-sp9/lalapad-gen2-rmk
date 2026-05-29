@@ -4,8 +4,12 @@ use std::process::Command;
 
 const KEYBOARD_TOML: &str = include_str!("../keyboard.toml");
 const FIRMWARE_WORKFLOW_YAML: &str = include_str!("../.github/workflows/firmware.yml");
+const HARDWARE_VALIDATION_MANIFEST_TOML: &str =
+    include_str!("../tools/hardware_validation_manifest.toml");
+const MAKEFILE_TOML: &str = include_str!("../Makefile.toml");
 const PORTING_COVERAGE_MANIFEST_TOML: &str =
     include_str!("../tools/porting_coverage_manifest.toml");
+const PULL_REQUEST_TEMPLATE_MD: &str = include_str!("../.github/PULL_REQUEST_TEMPLATE.md");
 const VIAL_JSON: &str = include_str!("../vial.json");
 
 fn keyboard_toml() -> toml::Value {
@@ -16,6 +20,10 @@ fn porting_coverage_manifest_toml() -> toml::Value {
     toml::from_str(PORTING_COVERAGE_MANIFEST_TOML).unwrap()
 }
 
+fn hardware_validation_manifest_toml() -> toml::Value {
+    toml::from_str(HARDWARE_VALIDATION_MANIFEST_TOML).unwrap()
+}
+
 fn vial_json() -> serde_json::Value {
     serde_json::from_str(VIAL_JSON).unwrap()
 }
@@ -23,6 +31,15 @@ fn vial_json() -> serde_json::Value {
 fn run_porting_coverage(args: &[&str]) -> std::process::Output {
     Command::new("python3")
         .arg("tools/porting_coverage.py")
+        .args(args)
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .output()
+        .unwrap()
+}
+
+fn run_hardware_validation(args: &[&str]) -> std::process::Output {
+    Command::new("python3")
+        .arg("tools/hardware_validation.py")
         .args(args)
         .current_dir(env!("CARGO_MANIFEST_DIR"))
         .output()
@@ -119,6 +136,92 @@ fn firmware_ci_runs_complete_porting_gate_before_builds() {
         complete_required_index < release_build_index,
         "complete porting gate must run before release binaries are built"
     );
+}
+
+#[test]
+fn hardware_validation_manifest_is_classified_but_not_release_blocking() {
+    let output = run_hardware_validation(&["--json", "--require-classified"]);
+
+    assert!(
+        output.status.success(),
+        "hardware validation tracker failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let manifest = hardware_validation_manifest_toml();
+    let checks = manifest["checks"].as_array().unwrap();
+    let expected_total = checks.len() as i64;
+    assert_eq!(parsed["total"].as_i64(), Some(expected_total));
+    assert_eq!(parsed["classified"].as_bool(), Some(true));
+    assert_eq!(parsed["errors"].as_array().unwrap().len(), 0);
+    assert!(
+        parsed["by_status"]["requires_hardware"].as_i64().unwrap() > 0,
+        "real-hardware validation gaps should remain visible separately from source porting"
+    );
+    assert!(
+        FIRMWARE_WORKFLOW_YAML
+            .contains("python3 tools/hardware_validation.py --require-classified"),
+        "firmware CI should keep the real-hardware validation tracker classified"
+    );
+    assert!(
+        !FIRMWARE_WORKFLOW_YAML.contains("--require-validated"),
+        "release CI must not claim real-hardware validation without physical evidence"
+    );
+
+    let by_id: BTreeMap<_, _> = checks
+        .iter()
+        .map(|check| (check["id"].as_str().unwrap(), check))
+        .collect();
+    for (required_id, area, side) in [
+        ("iqs9151_right_i2c_identity", "trackpad", "right"),
+        ("iqs9151_left_i2c_identity", "trackpad", "left"),
+        ("iqs9151_right_rdy_signal", "trackpad", "right"),
+        ("iqs9151_left_rdy_signal", "trackpad", "left"),
+        ("right_trackpad_cursor_tap_scroll", "trackpad", "right"),
+        ("left_trackpad_split_cursor_tap_scroll", "trackpad", "left"),
+        ("trackpad_drag_cross_side", "trackpad", "both"),
+        ("ble_split_pairing_reconnect", "ble_split", "both"),
+        ("vial_thumb_layer_taps", "vial", "both"),
+        (
+            "rgb_battery_connection_layer_indicators",
+            "status_led",
+            "right",
+        ),
+        ("charge_indicator_pins", "battery", "right"),
+        ("storage_reset_and_reflash", "storage", "both"),
+    ] {
+        let check = by_id
+            .get(required_id)
+            .unwrap_or_else(|| panic!("hardware validation check {required_id} is missing"));
+        assert_eq!(check["area"].as_str(), Some(area));
+        assert_eq!(check["side"].as_str(), Some(side));
+    }
+}
+
+#[test]
+fn local_validation_entrypoints_match_ci_gates() {
+    assert!(
+        MAKEFILE_TOML.contains("--require-porting-complete"),
+        "cargo make porting-coverage should require complete implementation status"
+    );
+    assert!(
+        MAKEFILE_TOML.contains("[tasks.hardware-validation]")
+            && MAKEFILE_TOML.contains("tools/hardware_validation.py")
+            && MAKEFILE_TOML.contains("--require-classified"),
+        "Makefile.toml should expose the hardware validation classification gate"
+    );
+    for required in [
+        "--require-porting-complete",
+        "tools/hardware_validation.py --require-classified",
+        "tools/hardware_validation_manifest.toml",
+    ] {
+        assert!(
+            PULL_REQUEST_TEMPLATE_MD.contains(required),
+            "PR template is missing validation item {required:?}"
+        );
+    }
 }
 
 #[test]

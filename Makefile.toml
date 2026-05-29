@@ -15,7 +15,15 @@ args = ["tools/check_flash_layout.py", "--config-only"]
 
 [tasks.porting-coverage]
 command = "python3"
-args = ["tools/porting_coverage.py", "--require-zmk-source"]
+args = [
+    "tools/porting_coverage.py",
+    "--require-zmk-source",
+    "--require-porting-complete",
+]
+
+[tasks.hardware-validation]
+command = "python3"
+args = ["tools/hardware_validation.py", "--require-classified"]
 
 [tasks.firmware-dirs]
 command = "mkdir"

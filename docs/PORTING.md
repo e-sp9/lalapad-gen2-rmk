@@ -273,3 +273,24 @@ items to burn down toward a true 100% implementation status. CI uses
 blocker.
 It is intended to prevent regressions like a visible `LT(...)` binding whose
 tap-hold behavior is changed by RMK's global flow-tap setting.
+
+## Real-Hardware Validation Gate
+
+`tools/hardware_validation_manifest.toml` is the separate tracker for evidence
+that cannot be produced by source parsing or host-side tests. It covers the
+IQS9151 I2C identity and RDY signal on both halves, right and left trackpad
+runtime behavior, cross-side drag behavior, BLE split pairing/reconnect, Vial
+thumb layer-tap behavior, RGB/battery indicators, charge pins, and reset/reflash
+behavior.
+
+Run:
+
+```sh
+python3 tools/hardware_validation.py --require-classified
+```
+
+The command prints the real-hardware validation rate and remaining evidence
+needed. CI uses `--require-classified` only, which means every hardware-only
+item must have a valid status and evidence description. CI intentionally does
+not use `--require-validated`; changing a check to `validated` requires actual
+device evidence from the checklist, not just a green software build.

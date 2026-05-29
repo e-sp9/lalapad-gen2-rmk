@@ -18,6 +18,8 @@ on:
       - 'vial.json'
       - 'Makefile.toml'
       - 'tools/check_flash_layout.py'
+      - 'tools/hardware_validation.py'
+      - 'tools/hardware_validation_manifest.toml'
       - 'tools/porting_coverage.py'
       - 'tools/porting_coverage_manifest.toml'
       - 'docs/PORTING.md'
@@ -89,8 +91,9 @@ jobs:
       - name: Verify RMK config and flash layout
         run: |
           python3 -m json.tool vial.json >/tmp/lalapad-vial-check.json
-          python3 -c 'import tomllib; [tomllib.load(open(path, "rb")) for path in ("keyboard.toml", "Cargo.toml", "tools/porting_coverage_manifest.toml")]; print("toml ok")'
+          python3 -c 'import tomllib; [tomllib.load(open(path, "rb")) for path in ("keyboard.toml", "Cargo.toml", "tools/porting_coverage_manifest.toml", "tools/hardware_validation_manifest.toml")]; print("toml ok")'
           python3 tools/check_flash_layout.py --config-only
+          python3 tools/hardware_validation.py --require-classified
 
       - name: Verify ZMK-to-RMK porting coverage
         run: |
