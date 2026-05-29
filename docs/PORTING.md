@@ -231,7 +231,7 @@ selected ZMK DTS properties for split input, dynamic scaling, right-half column
 offset, overlay trackpad routing, matrix transform, physical-layout, RGB LED,
 I2C, and charge-indicator nodes, checks source GPIO pin flags,
 checks the ZMK `*.dtsi` / `*.overlay` status-node inventory, and checks the RMK
-custom keycode order used for the ZMK Bluetooth and trackpad scale actions.
+custom keycode order and labels used for the ZMK Bluetooth and trackpad scale actions.
 These high-risk ZMK source checks are represented as structured inventories
 rather than regex-only checks.
 The thumb tap/hold layer-resolution scenarios are also cross-checked against

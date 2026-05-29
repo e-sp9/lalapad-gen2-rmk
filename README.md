@@ -166,7 +166,7 @@ ZMK behavior-node and combo-node property inventories, ZMK include inventory,
 active and disabled Kconfig lines, Kconfig shield/default entries, DTS aliases
 and DTS root/overlay node inventories,
 west module inventory, ZMK trackpad virtual-position
-defines, RMK custom keycode order, ZMK `INPUT_BTN_*` to virtual-position
+defines, RMK custom keycode order and labels, ZMK `INPUT_BTN_*` to virtual-position
 bindings, ZMK trackpad-to-position behavior and input-processor properties, ZMK
 split-input container properties, ZMK trackpad listener device and
 normal/low-speed input-processor chains, selected
@@ -184,9 +184,9 @@ it cross-checks thumb tap/hold layer-resolution scenarios against the ZMK
 source keymap after documented RMK deltas are applied, including deriving each
 thumb hold's active layer from the `LT(...)`/`MO(...)` action instead of trusting
 the scenario metadata alone. It also checks that
-Vial's `customKeycodes` names match RMK's `User0..User13` BLE and dynamic-scale
-handler semantics, so host-side remapping cannot silently point at the wrong
-firmware action. The Vial position gate also compares `vial.json` against
+Vial's `customKeycodes` names, titles, and short labels match RMK's
+`User0..User13` BLE and dynamic-scale handler semantics, so host-side remapping
+cannot silently point at the wrong firmware action. The Vial position gate also compares `vial.json` against
 `keyboard.toml` bounds and all non-empty firmware key positions without needing
 the upstream ZMK checkout. It also resolves every
 position on layer 1, layer 2, and the system tri-layer against the ZMK source

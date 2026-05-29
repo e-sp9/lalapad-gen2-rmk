@@ -246,7 +246,7 @@ ported = 1
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("porting coverage baseline drift:"));
-    assert!(stderr.contains("coverage.total: expected baseline 1, got 2647"));
+    assert!(stderr.contains("coverage.total: expected baseline 1, got 2675"));
     assert!(stderr.contains("coverage.result_count: expected baseline 1, got 453"));
     assert!(stderr.contains("coverage.result_inventory_sha256: expected baseline bad"));
     assert!(
@@ -526,7 +526,7 @@ fn migration_status_combines_software_and_hardware_progress() {
     );
     let stdout = String::from_utf8_lossy(&markdown.stdout);
     assert!(stdout.contains("## RMK Migration Status"));
-    assert!(stdout.contains("| Software coverage | 2647 | 2647 | 100.00% |"));
+    assert!(stdout.contains("| Software coverage | 2675 | 2675 | 100.00% |"));
     assert!(stdout.contains("### Hardware Progress By Area"));
     assert!(stdout.contains("| trackpad | 0 | 7 | 0.00% |"));
     assert!(stdout.contains("### Hardware Progress By Side"));
@@ -539,7 +539,7 @@ fn migration_status_combines_software_and_hardware_progress() {
 fn migration_status_rejects_coverage_baseline_drift() {
     let bad_baseline = r#"
 [coverage]
-passed = 2647
+passed = 2675
 total = 1
 result_count = 1
 result_inventory_sha256 = "bad"
@@ -576,7 +576,7 @@ ported_by_config_image = 6
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("Software failures:"));
-    assert!(stdout.contains("coverage.total: expected baseline 1, got 2647"));
+    assert!(stdout.contains("coverage.total: expected baseline 1, got 2675"));
     assert!(stdout.contains("coverage.result_count: expected baseline 1, got 453"));
     assert!(stdout.contains("coverage.result_inventory_sha256: expected baseline bad"));
 }
@@ -2699,6 +2699,92 @@ print(json.dumps({
             .as_str()
             .unwrap()
             .contains("missing dynamic scale reset branch")
+    );
+}
+
+#[test]
+fn porting_coverage_rejects_vial_custom_key_label_drift() {
+    let output = run_python(
+        r#"
+import copy
+import importlib.util
+import json
+import sys
+import tempfile
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("porting_coverage", "tools/porting_coverage.py")
+pc = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = pc
+spec.loader.exec_module(pc)
+
+manifest = pc.load_toml(Path("tools/porting_coverage_manifest.toml"))
+vial = pc.load_json(Path("vial.json"))
+positions = pc.collect_vial_positions(vial["layouts"]["keymap"])
+zmk_json = {
+    "layouts": {
+        "default_layout": {
+            "layout": [{"row": row, "col": col} for row, col in positions],
+        },
+    },
+}
+
+with tempfile.TemporaryDirectory() as root_dir, tempfile.TemporaryDirectory() as zmk_dir:
+    Path(root_dir, "vial.json").write_text(json.dumps(vial), encoding="utf-8")
+    Path(zmk_dir, "lalapadgen2.json").write_text(json.dumps(zmk_json), encoding="utf-8")
+    ok = pc.check_vial_layout(manifest, Path(root_dir), Path(zmk_dir))
+
+bad_vial = copy.deepcopy(vial)
+bad_vial["customKeycodes"][9]["shortName"] = "XY plus"
+with tempfile.TemporaryDirectory() as root_dir, tempfile.TemporaryDirectory() as zmk_dir:
+    Path(root_dir, "vial.json").write_text(json.dumps(bad_vial), encoding="utf-8")
+    Path(zmk_dir, "lalapadgen2.json").write_text(json.dumps(zmk_json), encoding="utf-8")
+    bad = pc.check_vial_layout(manifest, Path(root_dir), Path(zmk_dir))
+
+def pack(results):
+    return [result.__dict__ | {"ok": result.ok} for result in results]
+
+print(json.dumps({
+    "ok": pack(ok),
+    "bad": pack(bad),
+}))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "Vial custom key label check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let ok_labels = parsed["ok"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "vial_custom_keycodes_match_user_key_labels")
+        .expect("Vial custom key label result is missing");
+    assert_eq!(ok_labels["kind"], "vial");
+    assert_eq!(ok_labels["passed"].as_i64(), Some(42));
+    assert_eq!(ok_labels["total"].as_i64(), Some(42));
+    assert_eq!(ok_labels["ok"], true);
+
+    let bad_labels = parsed["bad"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "vial_custom_keycodes_match_user_key_labels")
+        .expect("changed Vial custom key label result is missing");
+    assert_eq!(bad_labels["kind"], "vial");
+    assert_eq!(bad_labels["passed"].as_i64(), Some(41));
+    assert_eq!(bad_labels["total"].as_i64(), Some(42));
+    assert_eq!(bad_labels["ok"], false);
+    assert!(
+        bad_labels["message"]
+            .as_str()
+            .unwrap()
+            .contains("c9.shortName: expected 'XY\\n+', got 'XY plus'")
     );
 }
 

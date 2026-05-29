@@ -3527,26 +3527,48 @@ def check_vial_layout(manifest: dict[str, Any], project_root: Path, zmk_config_d
         )
     )
 
-    expected_names = list(
+    expected_items = list(
         manifest.get(
             "vial_custom_keycodes",
             manifest.get("layout", {}).get("vial_custom_keycodes", []),
         )
     )
-    actual_names = [item.get("name") for item in vial.get("customKeycodes", [])]
-    custom_total = max(len(expected_names), len(actual_names))
+    actual_items = list(vial.get("customKeycodes", []))
+    custom_total = max(len(expected_items), len(actual_items))
     custom_passed = 0
     custom_mismatches: list[str] = []
     for index in range(custom_total):
-        expected = expected_names[index] if index < len(expected_names) else None
-        actual = actual_names[index] if index < len(actual_names) else None
-        if actual == expected:
-            custom_passed += 1
-        else:
+        expected = expected_items[index] if index < len(expected_items) else None
+        actual = actual_items[index] if index < len(actual_items) else None
+        if isinstance(expected, str):
+            expected = {"name": expected}
+        if isinstance(actual, str):
+            actual = {"name": actual}
+        if not isinstance(expected, dict) or not isinstance(actual, dict):
             custom_mismatches.append(f"c{index}: expected {expected!r}, got {actual!r}")
+            continue
+        fields = [field for field in ("name", "title", "shortName") if field in expected]
+        passed_fields = sum(1 for field in fields if actual.get(field) == expected.get(field))
+        custom_passed += passed_fields
+        for field in fields:
+            if actual.get(field) != expected.get(field):
+                custom_mismatches.append(
+                    f"c{index}.{field}: expected {expected.get(field)!r}, got {actual.get(field)!r}"
+                )
+    custom_total = sum(
+        len([field for field in ("name", "title", "shortName") if isinstance(item, dict) and field in item])
+        if isinstance(item, dict)
+        else 1
+        for item in expected_items
+    )
+    if len(actual_items) != len(expected_items):
+        custom_mismatches.append(
+            f"custom key count expected {len(expected_items)}, got {len(actual_items)}"
+        )
+        custom_total += abs(len(actual_items) - len(expected_items))
     results.append(
         Result(
-            "vial_custom_keycodes_match_user_key_order",
+            "vial_custom_keycodes_match_user_key_labels",
             "vial",
             custom_passed,
             custom_total,
