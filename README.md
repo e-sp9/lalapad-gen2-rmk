@@ -131,14 +131,14 @@ ZMK trackpad listener routing shape, verifies that every active ZMK Kconfig key
 in the source files is classified by the migration contract, and checks Vial's
 matrix positions, ZMK `default_transform` order, the active ZMK physical-layout
 chain and physical key attributes, ZMK source-file inventory, ZMK keymap layer
-and behavior inventories, ZMK behavior-node property inventories, ZMK include
-inventory, Kconfig shield/default entries, west module inventory, ZMK trackpad
-virtual-position defines, RMK custom keycode order, ZMK `INPUT_BTN_*` to
-virtual-position bindings, ZMK trackpad listener device and normal/low-speed
-input-processor chains, selected ZMK DTS properties for split input, dynamic
-scaling, right-half column offset, and overlay trackpad routing overrides, ZMK
-GPIO pin flags, the ZMK DTS/overlay status-node inventory, exact RMK keymap
-array shape, and the exact RMK combo inventory. The
+and behavior inventories, ZMK behavior-node and combo-node property
+inventories, ZMK include inventory, Kconfig shield/default entries, west module
+inventory, ZMK trackpad virtual-position defines, RMK custom keycode order, ZMK
+`INPUT_BTN_*` to virtual-position bindings, ZMK trackpad listener device and
+normal/low-speed input-processor chains, selected ZMK DTS properties for split
+input, dynamic scaling, right-half column offset, and overlay trackpad routing
+overrides, ZMK GPIO pin flags, the ZMK DTS/overlay status-node inventory, exact
+RMK keymap array shape, and the exact RMK combo inventory. The
 source-backed gate uses structured inventories instead of regex-only ZMK source
 checks for these high-risk DTS, GPIO, trackpad, and split-routing details, and
 it cross-checks thumb tap/hold layer-resolution scenarios against the ZMK

@@ -22,6 +22,13 @@ behavior_properties = [
   { source_file = "lalapadgen2.keymap", source_block = "mt2", expected = ["compatible=\"zmk,behavior-hold-tap\"", "#binding-cells=<2>", "flavor=\"tap-preferred\"", "tapping-term-ms=<200>", "quick-tap-ms=<200>", "require-prior-idle-ms=<125>", "bindings=<&kp>, <&kp>"] },
   { source_file = "lalapadgen2.keymap", source_block = "tap_dance_layer_1and2", expected = ["compatible=\"zmk,behavior-tap-dance\"", "label=\"td_mo12\"", "#binding-cells=<0>", "bindings=<&mo 1>, <&mo 2>"] },
 ]
+combo_properties = [
+  { source_file = "lalapadgen2.keymap", source_block = "combos", expected = ["compatible=\"zmk,combos\""] },
+  { source_file = "lalapadgen2.keymap", source_block = "CONBO_ESC", expected = ["bindings=<&kp ESCAPE>", "key-positions=<0 1>"] },
+  { source_file = "lalapadgen2.keymap", source_block = "COMBO_TAB", expected = ["bindings=<&kp TAB>", "key-positions=<10 11>"] },
+  { source_file = "lalapadgen2.keymap", source_block = "COMBO_KANA", expected = ["bindings=<&kp LANGUAGE_1>", "key-positions=<16 17>"] },
+  { source_file = "lalapadgen2.keymap", source_block = "COMBO_EUSU", expected = ["bindings=<&kp LANGUAGE_2>", "key-positions=<12 13>"] },
+]
 source_files = [
   "boards/shields/lalapadgen2/Kconfig.defconfig",
   "boards/shields/lalapadgen2/Kconfig.shield",

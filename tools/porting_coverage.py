@@ -963,6 +963,43 @@ def check_zmk_behavior_property_inventory(
     return results
 
 
+def check_zmk_combo_property_inventory(
+    manifest: dict[str, Any], zmk_config_dir: Path
+) -> list[Result]:
+    results: list[Result] = []
+    for check in manifest.get("source_inventory", {}).get("combo_properties", []):
+        source_file = check["source_file"]
+        expected = list(check["expected"])
+        source_path = zmk_config_dir / source_file
+        result_id = f"zmk_source.combo_properties.{check['source_block']}"
+        if not source_path.exists():
+            results.append(
+                Result(
+                    result_id,
+                    "zmk_inventory",
+                    0,
+                    max(1, len(expected)),
+                    f"missing combo property source file {source_file!r}",
+                )
+            )
+            continue
+        try:
+            actual = dts_property_inventory(source_path.read_text(), check["source_block"])
+        except ValueError as e:
+            results.append(
+                Result(
+                    result_id,
+                    "zmk_inventory",
+                    0,
+                    max(1, len(expected)),
+                    f"invalid combo property source {source_file!r}: {e}",
+                )
+            )
+            continue
+        results.append(ordered_inventory_result(result_id, "zmk_inventory", expected, actual))
+    return results
+
+
 def zmk_combo_blocks(text: str) -> dict[str, tuple[list[int], str]]:
     combos_block = extract_block(strip_c_style_comments(text), "combos")
     combos: dict[str, tuple[list[int], str]] = {}
@@ -2419,6 +2456,7 @@ def check_zmk_source(
     results.extend(check_zmk_include_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_kconfig_entry_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_behavior_property_inventory(manifest, zmk_config_dir))
+    results.extend(check_zmk_combo_property_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_define_entry_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_physical_layout_attr_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_input_behavior_binding_inventory(manifest, zmk_config_dir))
