@@ -118,6 +118,7 @@ rmkit get-project-name --keyboard-toml-path keyboard.toml
 python3 tools/porting_coverage.py --coverage-baseline tools/porting_coverage_baseline.toml --require-zmk-source --require-porting-complete
 python3 tools/migration_status.py --coverage-baseline tools/porting_coverage_baseline.toml --hardware-baseline tools/hardware_validation_baseline.toml --require-zmk-source --require-software-complete --require-hardware-classified
 cargo make migration-status-report
+cargo make rmk-behavior-tests
 python3 tools/hardware_validation.py --hardware-baseline tools/hardware_validation_baseline.toml --require-classified
 python3 tools/hardware_validation.py --markdown
 python3 tools/hardware_validation.py --evidence-template
@@ -296,6 +297,7 @@ Host-side parity tests can be run explicitly with:
 
 ```shell
 cargo test --lib --target x86_64-unknown-linux-gnu
+cargo make rmk-behavior-tests
 ```
 
 Run `cargo make uf2 --release` when changing release artifacts or flashing behavior.

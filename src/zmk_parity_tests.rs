@@ -197,7 +197,7 @@ fn porting_coverage_complete_gate_accepts_explicit_status_completion() {
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("Porting coverage by kind:"));
-    assert!(stdout.contains("- build_task: 29/29 = 100.00%"));
+    assert!(stdout.contains("- build_task: 31/31 = 100.00%"));
     assert!(stdout.contains("- code_topology: 28/28 = 100.00%"));
     assert!(stdout.contains("- dependency: 21/21 = 100.00%"));
     assert!(stdout.contains("- gpio_flag_mirror: 36/36 = 100.00%"));
@@ -294,8 +294,8 @@ ported = 1
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("porting coverage baseline drift:"));
-    assert!(stderr.contains("coverage.total: expected baseline 1, got 3053"));
-    assert!(stderr.contains("coverage.result_count: expected baseline 1, got 501"));
+    assert!(stderr.contains("coverage.total: expected baseline 1, got 3055"));
+    assert!(stderr.contains("coverage.result_count: expected baseline 1, got 502"));
     assert!(stderr.contains("coverage.result_inventory_sha256: expected baseline bad"));
     assert!(
         stderr.contains("coverage.by_kind.behavior: actual report kind is missing from baseline")
@@ -583,7 +583,7 @@ fn migration_status_combines_software_and_hardware_progress() {
     );
     let stdout = String::from_utf8_lossy(&markdown.stdout);
     assert!(stdout.contains("## RMK Migration Status"));
-    assert!(stdout.contains("| Software coverage | 3053 | 3053 | 100.00% |"));
+    assert!(stdout.contains("| Software coverage | 3055 | 3055 | 100.00% |"));
     assert!(stdout.contains("### Hardware Progress By Area"));
     assert!(stdout.contains("| trackpad | 0 | 7 | 0.00% |"));
     assert!(stdout.contains("### Hardware Progress By Side"));
@@ -642,7 +642,7 @@ print(migration_status.markdown_table([
 fn migration_status_rejects_coverage_baseline_drift() {
     let bad_baseline = r#"
 [coverage]
-passed = 3053
+passed = 3055
 total = 1
 result_count = 1
 result_inventory_sha256 = "bad"
@@ -679,8 +679,8 @@ ported_by_config_image = 6
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("Software failures:"));
-    assert!(stdout.contains("coverage.total: expected baseline 1, got 3053"));
-    assert!(stdout.contains("coverage.result_count: expected baseline 1, got 501"));
+    assert!(stdout.contains("coverage.total: expected baseline 1, got 3055"));
+    assert!(stdout.contains("coverage.result_count: expected baseline 1, got 502"));
     assert!(stdout.contains("coverage.result_inventory_sha256: expected baseline bad"));
 }
 
@@ -1735,6 +1735,7 @@ artifact_or_notes = "duplicate"
 
 #[test]
 fn local_validation_entrypoints_match_ci_gates() {
+    let rmk_behavior_tests_task = makefile_task_block("rmk-behavior-tests");
     let migration_status_task = makefile_task_block("migration-status");
     let migration_status_report_task = makefile_task_block("migration-status-report");
     let migration_status_final_task = makefile_task_block("migration-status-final");
@@ -1753,6 +1754,14 @@ fn local_validation_entrypoints_match_ci_gates() {
             && MAKEFILE_TOML.contains("tools/porting_coverage_baseline.toml")
             && MAKEFILE_TOML.contains("--require-porting-complete"),
         "cargo make porting-coverage should require complete implementation status and a stable denominator baseline"
+    );
+    assert!(
+        rmk_behavior_tests_task.contains("KEYBOARD_TOML_PATH=\"$rmk_host_keyboard\"")
+            && rmk_behavior_tests_task.contains("vendor/rmk-0.8.2/Cargo.toml")
+            && rmk_behavior_tests_task.contains("--target x86_64-unknown-linux-gnu")
+            && rmk_behavior_tests_task.contains("--test keyboard_morse_hold_on_other_press_test")
+            && rmk_behavior_tests_task.contains("--features \"std host log\""),
+        "cargo make rmk-behavior-tests should run the vendored RMK hold-on-other-press suite on the host target"
     );
     assert!(
         migration_status_task.contains("tools/migration_status.py")
@@ -1831,6 +1840,7 @@ fn local_validation_entrypoints_match_ci_gates() {
         "tools/hardware_validation.py --evidence-template --firmware-ref-template <tag-or-commit>",
         "tools/hardware_validation.py --evidence path/to/evidence.toml --markdown",
         "tools/hardware_validation.py --evidence path/to/evidence.toml --require-validated --require-firmware-ref <tag-or-commit>",
+        "cargo make rmk-behavior-tests",
         "tools/porting_coverage_baseline.toml",
         "tools/hardware_validation_manifest.toml",
         "tools/hardware_validation_baseline.toml",
@@ -1862,10 +1872,17 @@ fn local_validation_entrypoints_match_ci_gates() {
         "firmware CI should publish the combined migration status dashboard"
     );
     assert!(
+        FIRMWARE_WORKFLOW_YAML.contains("Run RMK behavior regression tests")
+            && FIRMWARE_WORKFLOW_YAML.contains("cargo make rmk-behavior-tests"),
+        "firmware CI should run the vendored RMK tap/hold behavior regression suite"
+    );
+    assert!(
         README_MD.contains("cargo make migration-status-report")
+            && README_MD.contains("cargo make rmk-behavior-tests")
             && README_MD.contains("HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-report")
-            && PORTING_MD.contains("cargo make migration-status-report"),
-        "README and porting notes should document the local Markdown migration dashboard"
+            && PORTING_MD.contains("cargo make migration-status-report")
+            && PORTING_MD.contains("cargo make rmk-behavior-tests"),
+        "README and porting notes should document the local Markdown migration dashboard and RMK behavior regression suite"
     );
     assert!(
         PORTING_MD.contains("HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-report"),
@@ -4544,6 +4561,14 @@ with tempfile.TemporaryDirectory() as tempdir:
     )
     bad_uf2_gate = pc.check_makefile_task_invariants(manifest, root)
 
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    (root / "Makefile.toml").write_text(
+        Path("Makefile.toml").read_text().replace("keyboard_morse_hold_on_other_press_test", "keyboard_morse_test", 1),
+        encoding="utf-8",
+    )
+    bad_rmk_behavior_task = pc.check_makefile_task_invariants(manifest, root)
+
 def pack(results):
     return [result.__dict__ | {"ok": result.ok} for result in results]
 
@@ -4551,6 +4576,7 @@ print(json.dumps({
     "ok": pack(ok),
     "bad_family": pack(bad_family),
     "bad_uf2_gate": pack(bad_uf2_gate),
+    "bad_rmk_behavior_task": pack(bad_rmk_behavior_task),
 }))
 "#,
     );
@@ -4564,19 +4590,19 @@ print(json.dumps({
 
     let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     let ok = parsed["ok"].as_array().unwrap();
-    assert_eq!(ok.len(), 8);
+    assert_eq!(ok.len(), 9);
     assert!(ok.iter().all(|result| result["kind"] == "build_task"));
     assert_eq!(
         ok.iter()
             .map(|result| result["passed"].as_i64().unwrap())
             .sum::<i64>(),
-        29
+        31
     );
     assert_eq!(
         ok.iter()
             .map(|result| result["total"].as_i64().unwrap())
             .sum::<i64>(),
-        29
+        31
     );
 
     let bad_family = parsed["bad_family"]
@@ -4607,6 +4633,21 @@ print(json.dumps({
             .as_str()
             .unwrap()
             .contains("tasks.uf2.dependencies missing required values ['flash-layout']")
+    );
+
+    let bad_rmk_behavior_task = parsed["bad_rmk_behavior_task"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "makefile_rmk_behavior_tests_run_hold_on_other_press_suite")
+        .expect("changed RMK behavior test task result is missing");
+    assert_eq!(bad_rmk_behavior_task["kind"], "build_task");
+    assert_eq!(bad_rmk_behavior_task["ok"], false);
+    assert!(
+        bad_rmk_behavior_task["message"]
+            .as_str()
+            .unwrap()
+            .contains("tasks.rmk-behavior-tests.script missing required values ['--test keyboard_morse_hold_on_other_press_test']")
     );
 }
 

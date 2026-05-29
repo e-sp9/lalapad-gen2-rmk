@@ -3281,6 +3281,16 @@ def check_makefile_task_invariants(manifest: dict[str, Any], project_root: Path)
             else:
                 messages.append(f"tasks.{task_name}.{actual_field} missing required values {missing!r}")
 
+        if "script_contains" in check:
+            total += 1
+            expected_values = list(check["script_contains"])
+            actual_script = str(task.get("script", ""))
+            missing = [value for value in expected_values if value not in actual_script]
+            if not missing:
+                passed += 1
+            else:
+                messages.append(f"tasks.{task_name}.script missing required values {missing!r}")
+
         results.append(
             Result(
                 check["id"],

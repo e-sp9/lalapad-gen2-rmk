@@ -263,7 +263,8 @@ python3 tools/migration_status.py --coverage-baseline tools/porting_coverage_bas
 The firmware GitHub Actions workflow checks out `e-sp9/zmk-config-LalaPadGen2`,
 parses `vial.json`, RMK/Cargo/manifest TOML, and flash layout, runs this
 source-backed complete-porting gate, and runs the host-side parity test suite
-before building release binaries. The gate
+plus the vendored RMK hold-on-other-press behavior regression suite before
+building release binaries. The gate
 must report `100.00%` coverage and `100.00%` implementation status against the
 committed upstream checkout used by CI. The
 denominator can grow when upstream source files add classified behavior, so the
@@ -358,6 +359,12 @@ run:
 
 ```sh
 cargo make migration-status-report
+```
+
+To re-run the RMK engine-level tap/hold behavior regression suite locally, run:
+
+```sh
+cargo make rmk-behavior-tests
 ```
 
 When reviewing partial hardware evidence before the final all-validated gate,

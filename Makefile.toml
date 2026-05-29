@@ -23,6 +23,21 @@ args = [
     "--require-porting-complete",
 ]
 
+[tasks.rmk-behavior-tests]
+script = '''
+rmk_host_keyboard="$(mktemp "${TMPDIR:-/tmp}/lalapad-rmk-host-test.XXXXXX.toml")"
+trap 'rm -f "$rmk_host_keyboard"' EXIT
+printf '[rmk]\ncombo_max_num = 8\n' > "$rmk_host_keyboard"
+
+KEYBOARD_TOML_PATH="$rmk_host_keyboard" \
+cargo test \
+  --manifest-path vendor/rmk-0.8.2/Cargo.toml \
+  --target x86_64-unknown-linux-gnu \
+  --test keyboard_morse_hold_on_other_press_test \
+  --no-default-features \
+  --features "std host log"
+'''
+
 [tasks.hardware-validation]
 command = "python3"
 args = [
