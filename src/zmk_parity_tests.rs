@@ -37,9 +37,16 @@ fn run_python(script: &str) -> std::process::Output {
 }
 
 fn default_zmk_config_dir() -> Option<std::path::PathBuf> {
-    let path =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../zmk-config-LalaPadGen2/config");
-    path.join("lalapadgen2.keymap").exists().then_some(path)
+    for relative in [
+        "../zmk-config-LalaPadGen2/config",
+        "zmk-config-LalaPadGen2/config",
+    ] {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(relative);
+        if path.join("lalapadgen2.keymap").exists() {
+            return Some(path);
+        }
+    }
+    None
 }
 
 #[test]

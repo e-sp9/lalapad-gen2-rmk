@@ -3323,8 +3323,15 @@ def combo_id(combo: tuple[tuple[str, ...], str, int]) -> str:
 
 def default_zmk_keymap_path(manifest: dict[str, Any]) -> Path:
     hint = manifest.get("metadata", {}).get("source_repo_hint")
+    candidates: list[Path] = []
     if hint:
-        return Path(hint) / "config" / "lalapadgen2.keymap"
+        candidates.append(Path(hint) / "config" / "lalapadgen2.keymap")
+        candidates.append(Path(Path(hint).name) / "config" / "lalapadgen2.keymap")
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    if candidates:
+        return candidates[0]
     return Path("/nonexistent/zmk-keymap")
 
 
