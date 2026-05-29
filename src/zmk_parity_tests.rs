@@ -160,6 +160,7 @@ fn porting_coverage_complete_gate_accepts_explicit_status_completion() {
     assert!(stdout.contains("- code_topology: 28/28 = 100.00%"));
     assert!(stdout.contains("- dependency: 21/21 = 100.00%"));
     assert!(stdout.contains("- gpio_flag_mirror: 36/36 = 100.00%"));
+    assert!(stdout.contains("- release_workflow: 27/27 = 100.00%"));
     assert!(stdout.contains("- rmk_patch: 59/59 = 100.00%"));
     assert!(stdout.contains("- scenario:"));
     assert!(stdout.contains("- split: 100/100 = 100.00%"));
@@ -251,8 +252,8 @@ ported = 1
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("porting coverage baseline drift:"));
-    assert!(stderr.contains("coverage.total: expected baseline 1, got 3016"));
-    assert!(stderr.contains("coverage.result_count: expected baseline 1, got 496"));
+    assert!(stderr.contains("coverage.total: expected baseline 1, got 3043"));
+    assert!(stderr.contains("coverage.result_count: expected baseline 1, got 499"));
     assert!(stderr.contains("coverage.result_inventory_sha256: expected baseline bad"));
     assert!(
         stderr.contains("coverage.by_kind.behavior: actual report kind is missing from baseline")
@@ -531,7 +532,7 @@ fn migration_status_combines_software_and_hardware_progress() {
     );
     let stdout = String::from_utf8_lossy(&markdown.stdout);
     assert!(stdout.contains("## RMK Migration Status"));
-    assert!(stdout.contains("| Software coverage | 3016 | 3016 | 100.00% |"));
+    assert!(stdout.contains("| Software coverage | 3043 | 3043 | 100.00% |"));
     assert!(stdout.contains("### Hardware Progress By Area"));
     assert!(stdout.contains("| trackpad | 0 | 7 | 0.00% |"));
     assert!(stdout.contains("### Hardware Progress By Side"));
@@ -544,7 +545,7 @@ fn migration_status_combines_software_and_hardware_progress() {
 fn migration_status_rejects_coverage_baseline_drift() {
     let bad_baseline = r#"
 [coverage]
-passed = 3016
+passed = 3043
 total = 1
 result_count = 1
 result_inventory_sha256 = "bad"
@@ -581,8 +582,8 @@ ported_by_config_image = 6
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("Software failures:"));
-    assert!(stdout.contains("coverage.total: expected baseline 1, got 3016"));
-    assert!(stdout.contains("coverage.result_count: expected baseline 1, got 496"));
+    assert!(stdout.contains("coverage.total: expected baseline 1, got 3043"));
+    assert!(stdout.contains("coverage.result_count: expected baseline 1, got 499"));
     assert!(stdout.contains("coverage.result_inventory_sha256: expected baseline bad"));
 }
 
@@ -2714,6 +2715,7 @@ fn porting_coverage_rejects_vial_custom_key_label_drift() {
 import copy
 import importlib.util
 import json
+import shutil
 import sys
 import tempfile
 from pathlib import Path
@@ -3013,7 +3015,6 @@ fn porting_coverage_rejects_trackpad_virtual_button_drift() {
 import copy
 import importlib.util
 import json
-import shutil
 import sys
 import tempfile
 from pathlib import Path
@@ -4013,6 +4014,150 @@ print(json.dumps({
             .as_str()
             .unwrap()
             .contains("tasks.uf2.dependencies missing required values ['flash-layout']")
+    );
+}
+
+#[test]
+fn porting_coverage_rejects_release_workflow_artifact_drift() {
+    let output = run_python(
+        r#"
+import importlib.util
+import json
+import shutil
+import sys
+import tempfile
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("porting_coverage", "tools/porting_coverage.py")
+pc = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = pc
+spec.loader.exec_module(pc)
+
+manifest = pc.load_toml(Path("tools/porting_coverage_manifest.toml"))
+ok = pc.check_file_contains_invariants(manifest, Path("."))
+
+def write_release_files(root, firmware_text=None, pages_text=None, app_text=None):
+    (root / ".github/workflows").mkdir(parents=True)
+    (root / "tools/web-flasher").mkdir(parents=True)
+    (root / ".github/workflows/firmware.yml").write_text(
+        firmware_text if firmware_text is not None else Path(".github/workflows/firmware.yml").read_text(),
+        encoding="utf-8",
+    )
+    (root / ".github/workflows/pages.yml").write_text(
+        pages_text if pages_text is not None else Path(".github/workflows/pages.yml").read_text(),
+        encoding="utf-8",
+    )
+    (root / "tools/web-flasher/app.js").write_text(
+        app_text if app_text is not None else Path("tools/web-flasher/app.js").read_text(),
+        encoding="utf-8",
+    )
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    firmware = Path(".github/workflows/firmware.yml").read_text().replace(
+        "firmware/lalapad-gen2-rmk-central-dfu.zip",
+        "firmware/lalapad-gen2-rmk-right-dfu.zip",
+    )
+    write_release_files(root, firmware_text=firmware)
+    bad_firmware = pc.check_file_contains_invariants(manifest, root)
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    pages = Path(".github/workflows/pages.yml").read_text().replace(
+        "--pattern 'lalapad-gen2-rmk-peripheral-dfu.zip'",
+        "--pattern 'lalapad-gen2-rmk-left-dfu.zip'",
+    )
+    write_release_files(root, pages_text=pages)
+    bad_pages = pc.check_file_contains_invariants(manifest, root)
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    app = Path("tools/web-flasher/app.js").read_text().replace(
+        "peripheral: './firmware/lalapad-gen2-rmk-peripheral-dfu.zip'",
+        "peripheral: './firmware/lalapad-gen2-rmk-left-dfu.zip'",
+    )
+    write_release_files(root, app_text=app)
+    bad_app = pc.check_file_contains_invariants(manifest, root)
+
+def pack(results):
+    return [result.__dict__ | {"ok": result.ok} for result in results]
+
+print(json.dumps({
+    "ok": pack(ok),
+    "bad_firmware": pack(bad_firmware),
+    "bad_pages": pack(bad_pages),
+    "bad_app": pack(bad_app),
+}))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "Release workflow invariant check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let ok = parsed["ok"].as_array().unwrap();
+    assert_eq!(ok.len(), 3);
+    assert!(ok.iter().all(|result| result["kind"] == "release_workflow"));
+    assert_eq!(
+        ok.iter()
+            .map(|result| result["passed"].as_i64().unwrap())
+            .sum::<i64>(),
+        27
+    );
+    assert_eq!(
+        ok.iter()
+            .map(|result| result["total"].as_i64().unwrap())
+            .sum::<i64>(),
+        27
+    );
+
+    let bad_firmware = parsed["bad_firmware"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "firmware_workflow_dfu_and_release_artifacts")
+        .expect("changed firmware workflow result is missing");
+    assert_eq!(bad_firmware["kind"], "release_workflow");
+    assert_eq!(bad_firmware["ok"], false);
+    assert!(
+        bad_firmware["message"]
+            .as_str()
+            .unwrap()
+            .contains("firmware/lalapad-gen2-rmk-central-dfu.zip")
+    );
+
+    let bad_pages = parsed["bad_pages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "pages_workflow_bundles_latest_dfu_zips")
+        .expect("changed Pages workflow result is missing");
+    assert_eq!(bad_pages["kind"], "release_workflow");
+    assert_eq!(bad_pages["ok"], false);
+    assert!(
+        bad_pages["message"]
+            .as_str()
+            .unwrap()
+            .contains("lalapad-gen2-rmk-peripheral-dfu.zip")
+    );
+
+    let bad_app = parsed["bad_app"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "web_flasher_uses_bundled_dfu_zip_names")
+        .expect("changed web flasher result is missing");
+    assert_eq!(bad_app["kind"], "release_workflow");
+    assert_eq!(bad_app["ok"], false);
+    assert!(
+        bad_app["message"]
+            .as_str()
+            .unwrap()
+            .contains("peripheral: './firmware/lalapad-gen2-rmk-peripheral-dfu.zip'")
     );
 }
 

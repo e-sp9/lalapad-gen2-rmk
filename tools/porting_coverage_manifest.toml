@@ -2686,6 +2686,51 @@ id = "makefile_uf2_target_runs_flash_layout"
 task = "uf2"
 dependencies_include = ["flash-layout"]
 
+[[file_contains_invariants]]
+id = "firmware_workflow_dfu_and_release_artifacts"
+file = ".github/workflows/firmware.yml"
+needles = [
+  "cargo make uf2",
+  "adafruit-nrfutil dfu genpkg",
+  "--dev-type 0x0052",
+  "--application firmware/hex/lalapad-gen2-rmk-central.hex",
+  "firmware/lalapad-gen2-rmk-central-dfu.zip",
+  "--application firmware/hex/lalapad-gen2-rmk-peripheral.hex",
+  "firmware/lalapad-gen2-rmk-peripheral-dfu.zip",
+  "actions/upload-artifact@v4",
+  "name: lalapad-gen2-rmk-firmware",
+  "softprops/action-gh-release@v2",
+  "fail_on_unmatched_files: true",
+  "gh workflow run pages.yml --ref main",
+]
+
+[[file_contains_invariants]]
+id = "pages_workflow_bundles_latest_dfu_zips"
+file = ".github/workflows/pages.yml"
+needles = [
+  "gh release download \"$tag\"",
+  "--pattern 'lalapad-gen2-rmk-central-dfu.zip'",
+  "--pattern 'lalapad-gen2-rmk-peripheral-dfu.zip'",
+  "--dir tools/web-flasher/firmware",
+  "tools/web-flasher/firmware/version.json",
+  "\"central\":    { \"size\": $central_size,    \"file\": \"lalapad-gen2-rmk-central-dfu.zip\" }",
+  "\"peripheral\": { \"size\": $peripheral_size, \"file\": \"lalapad-gen2-rmk-peripheral-dfu.zip\" }",
+  "actions/upload-pages-artifact@v3",
+  "path: tools/web-flasher",
+  "actions/deploy-pages@v4",
+]
+
+[[file_contains_invariants]]
+id = "web_flasher_uses_bundled_dfu_zip_names"
+file = "tools/web-flasher/app.js"
+needles = [
+  "const BUNDLED_VERSION_URL = './firmware/version.json';",
+  "central: './firmware/lalapad-gen2-rmk-central-dfu.zip'",
+  "peripheral: './firmware/lalapad-gen2-rmk-peripheral-dfu.zip'",
+  "const HALVES = ['central', 'peripheral'];",
+  "parseDfuPackage(blob)",
+]
+
 [[code_contains]]
 id = "central_iqs9151_pins_and_side"
 file = "src/central.rs"
