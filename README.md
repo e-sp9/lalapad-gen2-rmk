@@ -115,7 +115,7 @@ python3 -m json.tool vial.json >/tmp/lalapad-vial-check.json
 python3 -c 'import tomllib; [tomllib.load(open(path, "rb")) for path in ("keyboard.toml", "Cargo.toml", "tools/porting_coverage_manifest.toml")]; print("toml ok")'
 rmkit get-chip --keyboard-toml-path keyboard.toml
 rmkit get-project-name --keyboard-toml-path keyboard.toml
-python3 tools/porting_coverage.py --require-zmk-source
+python3 tools/porting_coverage.py --require-zmk-source --require-porting-complete
 python3 tools/check_flash_layout.py --config-only
 cargo check --release --bin central
 cargo check --release --bin peripheral
@@ -127,11 +127,10 @@ when the upstream ZMK checkout from the manifest is present, also parses
 `config/lalapadgen2.keymap`, shield overlays, ZMK Kconfig values, and selected
 RMK Rust constants to verify that the migration contract still matches the
 source firmware. It reports both migration-contract coverage and an explicit
-IQS9151 symbol implementation status summary, so documented `not_ported`
-items remain visible even when every source item is classified; add
-`--require-porting-complete` when that status summary should fail on any
-remaining non-implemented item. The Rust checks cover the RMK-side
-IQS9151 register-address
+IQS9151 symbol implementation status summary. `--require-porting-complete`
+makes both metrics hard gates, so release builds fail if any source item is
+unclassified or any explicit implementation status is non-implemented. The
+Rust checks cover the RMK-side IQS9151 register-address
 inventory, upstream IQS9151 register and bit-flag porting classifications,
 product/register address values, reset/gesture bits, IQS9151 feature-enable
 flags, dynamic-scale bounds, timing values, and initialization byte-array
@@ -165,8 +164,8 @@ are also mirrored against the RMK Morse timing settings. Use
 `--zmk-keymap PATH --require-zmk-source` when the source-backed check must be
 mandatory in another checkout layout. The firmware CI checks out
 `e-sp9/zmk-config-LalaPadGen2`, parses `vial.json`, RMK/Cargo/manifest TOML,
-and flash layout, runs this source-backed gate, and then runs the host-side
-parity test suite before building release binaries.
+and flash layout, runs this source-backed complete-porting gate, and then runs
+the host-side parity test suite before building release binaries.
 
 Host-side parity tests can be run explicitly with:
 

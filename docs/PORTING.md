@@ -251,14 +251,15 @@ mandatory in a different checkout layout.
 Run:
 
 ```sh
-python3 tools/porting_coverage.py --require-zmk-source
+python3 tools/porting_coverage.py --require-zmk-source --require-porting-complete
 ```
 
 The firmware GitHub Actions workflow checks out `e-sp9/zmk-config-LalaPadGen2`,
 parses `vial.json`, RMK/Cargo/manifest TOML, and flash layout, runs this
-source-backed gate, and runs the host-side parity test suite before building
-release binaries. The gate
-must report `100.00%` against the committed upstream checkout used by CI. The
+source-backed complete-porting gate, and runs the host-side parity test suite
+before building release binaries. The gate
+must report `100.00%` coverage and `100.00%` implementation status against the
+committed upstream checkout used by CI. The
 denominator can grow when upstream source files add classified behavior, so the
 exact count should be read from the command output. This is a static,
 source-backed, and scenario-level RMK
@@ -267,7 +268,8 @@ storage, or Vial runtime paths have been exhaustively exercised on real devices.
 The same command also prints an explicit IQS9151 symbol porting status summary:
 `ported`, `ported_by_behavior`, and `ported_by_config_image` count as
 implemented, while `not_ported` entries are the remaining software-porting
-items to burn down toward a true 100% implementation status. Use
-`--require-porting-complete` when that remaining list must become a hard gate.
+items to burn down toward a true 100% implementation status. CI uses
+`--require-porting-complete`, so any future non-implemented status is a release
+blocker.
 It is intended to prevent regressions like a visible `LT(...)` binding whose
 tap-hold behavior is changed by RMK's global flow-tap setting.
