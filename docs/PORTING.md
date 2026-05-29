@@ -338,7 +338,9 @@ The full release-validation command is:
 ```sh
 python3 tools/migration_status.py --coverage-baseline tools/porting_coverage_baseline.toml \
   --hardware-baseline tools/hardware_validation_baseline.toml \
+  --zmk-keymap zmk-config-LalaPadGen2/config/lalapadgen2.keymap \
   --evidence path/to/evidence.toml \
+  --require-zmk-source \
   --require-software-complete \
   --require-hardware-classified \
   --require-hardware-validated \

@@ -21,7 +21,7 @@
 - [ ] `python3 tools/migration_status.py --coverage-baseline tools/porting_coverage_baseline.toml --hardware-baseline tools/hardware_validation_baseline.toml --require-zmk-source --require-software-complete --require-hardware-classified`
 - [ ] `cargo make migration-status-report`
 - [ ] `HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-report`, if reviewing partial hardware evidence
-- [ ] `python3 tools/migration_status.py --coverage-baseline tools/porting_coverage_baseline.toml --hardware-baseline tools/hardware_validation_baseline.toml --evidence path/to/evidence.toml --require-software-complete --require-hardware-classified --require-hardware-validated --require-firmware-ref <tag-or-commit>`, if claiming complete migration validation for a release
+- [ ] `python3 tools/migration_status.py --coverage-baseline tools/porting_coverage_baseline.toml --hardware-baseline tools/hardware_validation_baseline.toml --zmk-keymap zmk-config-LalaPadGen2/config/lalapadgen2.keymap --evidence path/to/evidence.toml --require-zmk-source --require-software-complete --require-hardware-classified --require-hardware-validated --require-firmware-ref <tag-or-commit>`, if claiming complete migration validation for a release
 - [ ] `HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-final`, if claiming complete migration validation for a release
 - [ ] `python3 tools/hardware_validation.py --hardware-baseline tools/hardware_validation_baseline.toml --require-classified`
 - [ ] `python3 tools/hardware_validation.py --markdown`

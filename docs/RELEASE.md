@@ -45,12 +45,15 @@ announced, then run:
 HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-final
 ```
 
-This wraps:
+This wraps the same final migration status gate, resolving `ZMK_KEYMAP` first
+when it is set and otherwise using the standard upstream checkout path:
 
 ```sh
 python3 tools/migration_status.py --evidence path/to/evidence.toml \
   --coverage-baseline tools/porting_coverage_baseline.toml \
   --hardware-baseline tools/hardware_validation_baseline.toml \
+  --zmk-keymap zmk-config-LalaPadGen2/config/lalapadgen2.keymap \
+  --require-zmk-source \
   --require-software-complete \
   --require-hardware-classified \
   --require-hardware-validated \
