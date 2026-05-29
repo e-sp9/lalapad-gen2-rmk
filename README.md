@@ -135,11 +135,12 @@ and behavior inventories, ZMK behavior-node and combo-node property
 inventories, upstream ZMK build-matrix files, ZMK include inventory, Kconfig
 shield/default entries, west module inventory, ZMK trackpad virtual-position
 defines, RMK custom keycode order, ZMK `INPUT_BTN_*` to virtual-position
-bindings, ZMK trackpad listener device and normal/low-speed input-processor
-chains, selected ZMK DTS properties for split input, dynamic scaling, right-half
-column offset, and overlay trackpad routing overrides, ZMK GPIO pin flags, the
-ZMK DTS/overlay status-node inventory, exact RMK keymap array shape, and the
-exact RMK combo inventory. The
+bindings, ZMK trackpad-to-position behavior and input-processor properties, ZMK
+trackpad listener device and normal/low-speed input-processor chains, selected
+ZMK DTS properties for split input, dynamic scaling, right-half column offset,
+and overlay trackpad routing overrides, ZMK GPIO pin flags, the ZMK DTS/overlay
+status-node inventory, exact RMK keymap array shape, and the exact RMK combo
+inventory. The
 source-backed gate uses structured inventories instead of regex-only ZMK source
 checks for these high-risk DTS, GPIO, trackpad, and split-routing details, and
 it cross-checks thumb tap/hold layer-resolution scenarios against the ZMK
