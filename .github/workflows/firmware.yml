@@ -86,6 +86,9 @@ jobs:
             --zmk-keymap zmk-config-LalaPadGen2/config/lalapadgen2.keymap \
             --require-zmk-source
 
+      - name: Run host parity tests
+        run: cargo test --lib --target x86_64-unknown-linux-gnu
+
       - name: Build release binaries (central + peripheral)
         run: cargo make build
 

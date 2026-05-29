@@ -159,8 +159,8 @@ keymap to catch transparent-key fallthrough drift. ZMK hold-tap timing values
 are also mirrored against the RMK Morse timing settings. Use
 `--zmk-keymap PATH --require-zmk-source` when the source-backed check must be
 mandatory in another checkout layout. The firmware CI checks out
-`e-sp9/zmk-config-LalaPadGen2` and runs this source-backed gate before building
-release binaries.
+`e-sp9/zmk-config-LalaPadGen2`, runs this source-backed gate, and then runs the
+host-side parity test suite before building release binaries.
 
 Host-side parity tests can be run explicitly with:
 
