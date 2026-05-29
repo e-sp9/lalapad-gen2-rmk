@@ -722,8 +722,10 @@ fn hardware_validation_markdown_report_lists_required_evidence() {
     assert!(stdout.contains("| right | 0 | 5 | 0.00% | `requires_hardware`=5 |"));
     assert!(stdout.contains("### Checks"));
     assert!(stdout.contains(
-        "| ID | Area | Side | Status | Requirement | Required evidence | Validated at | Tester | Firmware ref | Artifact/notes |"
+        "| ID | Area | Side | Status | Requirement | Required evidence | Required observations | Validated at | Tester | Firmware ref | Artifact/notes |"
     ));
+    assert!(stdout.contains("right, cursor, tap, vertical scroll, horizontal scroll"));
+    assert!(stdout.contains("Vial, Space, Enter, layer 1, layer 2"));
     for required in [
         "iqs9151_right_i2c_identity",
         "left_trackpad_split_cursor_tap_scroll",
@@ -769,9 +771,50 @@ artifact_or_notes = "photo | serial log"
     assert!(stdout.contains("Hardware validation: 1/1 = 100.00% validated"));
     assert!(stdout.contains("A \\| B C"));
     assert!(stdout.contains("Scope \\| log"));
+    assert!(stdout.contains("photo, serial log"));
     assert!(stdout.contains("bench \\| tester"));
     assert!(stdout.contains("v0.2.65 \\| 35b3f1f"));
     assert!(stdout.contains("photo \\| serial log"));
+}
+
+#[test]
+fn hardware_validation_reports_required_observations_in_json_and_text() {
+    let json = run_hardware_validation(&["--json"]);
+    let text = run_hardware_validation(&[]);
+
+    assert!(
+        json.status.success(),
+        "hardware validation json report failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&json.stdout),
+        String::from_utf8_lossy(&json.stderr)
+    );
+    assert!(
+        text.status.success(),
+        "hardware validation text report failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&text.stdout),
+        String::from_utf8_lossy(&text.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&json.stdout).unwrap();
+    let right_trackpad = parsed["remaining"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["id"] == "right_trackpad_cursor_tap_scroll")
+        .expect("right trackpad remaining item is missing");
+    assert_eq!(
+        right_trackpad["evidence_needles"].as_str(),
+        Some("right, cursor, tap, vertical scroll, horizontal scroll")
+    );
+
+    let text_stdout = String::from_utf8_lossy(&text.stdout);
+    assert!(
+        text_stdout
+            .contains("right_trackpad_cursor_tap_scroll (trackpad/right): requires_hardware")
+    );
+    assert!(
+        text_stdout.contains("[needs: right, cursor, tap, vertical scroll, horizontal scroll]")
+    );
 }
 
 #[test]

@@ -233,7 +233,8 @@ be created by GitHub Actions. The CI job also writes
 `python3 tools/hardware_validation.py --markdown` to the GitHub Actions step
 summary so remaining real-device evidence is visible next to each release
 build. Reports include overall, area-level, and side-level validation progress
-so trackpad, split, Vial, status LED, battery, and storage gaps remain visible.
+so trackpad, split, Vial, status LED, battery, and storage gaps remain visible,
+and they list each check's required observations next to the evidence request.
 Real hardware results can be kept in a separate overlay file using the format
 shown in `tools/hardware_validation_evidence.example.toml` and passed with
 `--evidence path/to/evidence.toml`; this lets the manifest remain the stable

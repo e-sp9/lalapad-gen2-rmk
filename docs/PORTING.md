@@ -373,8 +373,9 @@ python3 tools/hardware_validation.py --evidence path/to/evidence.toml --require-
 
 The command prints the real-hardware validation rate and remaining evidence
 needed. JSON, text, and Markdown output include area-level and side-level
-progress so trackpad, split, Vial, status LED, battery, and storage gaps can be
-tracked independently. CI uses `--require-classified` only, which means every
+progress plus each check's required observation terms so trackpad, split, Vial,
+status LED, battery, and storage gaps can be tracked independently. CI uses
+`--require-classified` only, which means every
 hardware-only item must have a valid status, evidence description, and `source`
 link to an existing Markdown heading. CI intentionally does not use
 `--require-validated`; changing a check to `validated` requires actual device

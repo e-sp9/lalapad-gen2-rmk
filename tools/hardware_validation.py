@@ -501,6 +501,9 @@ def summarize(
                         "side": side,
                         "status": status,
                         "evidence": str(check.get("evidence", "")),
+                        "evidence_needles": ", ".join(
+                            str(needle) for needle in check.get("evidence_needles", [])
+                        ),
                     }
                 )
             if counts_as_validated:
@@ -542,6 +545,10 @@ def as_json(summary: HardwareValidationSummary) -> dict[str, Any]:
 
 def markdown_escape(value: Any) -> str:
     return str(value).replace("|", "\\|").replace("\n", " ")
+
+
+def evidence_needles_text(check: dict[str, Any]) -> str:
+    return ", ".join(str(needle) for needle in check.get("evidence_needles", []))
 
 
 def toml_string(value: Any) -> str:
@@ -631,21 +638,22 @@ def as_markdown(manifest: dict[str, Any], summary: HardwareValidationSummary) ->
             "",
             "### Checks",
             "",
-            "| ID | Area | Side | Status | Requirement | Required evidence | Validated at | Tester | Firmware ref | Artifact/notes |",
-            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+            "| ID | Area | Side | Status | Requirement | Required evidence | Required observations | Validated at | Tester | Firmware ref | Artifact/notes |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
         ]
     )
     for check in manifest.get("checks", []):
         if not isinstance(check, dict):
             continue
         lines.append(
-            "| {id} | {area} | {side} | `{status}` | {requirement} | {evidence} | {validated_at} | {tester} | {firmware_ref} | {artifact_or_notes} |".format(
+            "| {id} | {area} | {side} | `{status}` | {requirement} | {evidence} | {evidence_needles} | {validated_at} | {tester} | {firmware_ref} | {artifact_or_notes} |".format(
                 id=markdown_escape(check.get("id", "")),
                 area=markdown_escape(check.get("area", "")),
                 side=markdown_escape(check.get("side", "")),
                 status=markdown_escape(check.get("status", "")),
                 requirement=markdown_escape(check.get("requirement", "")),
                 evidence=markdown_escape(check.get("evidence", "")),
+                evidence_needles=markdown_escape(evidence_needles_text(check)),
                 validated_at=markdown_escape(check.get("validated_at", "")),
                 tester=markdown_escape(check.get("tester", "")),
                 firmware_ref=markdown_escape(check.get("firmware_ref", "")),
@@ -701,7 +709,8 @@ def print_text(summary: HardwareValidationSummary) -> None:
         for item in summary.remaining:
             print(
                 f"- {item['id']} ({item['area']}/{item['side']}): "
-                f"{item['status']} - {item['evidence']}"
+                f"{item['status']} - {item['evidence']} "
+                f"[needs: {item.get('evidence_needles', '')}]"
             )
     if summary.errors:
         print("Hardware validation manifest errors:", file=sys.stderr)
