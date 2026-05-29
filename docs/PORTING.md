@@ -212,7 +212,8 @@ coordinates, checks the ZMK keymap layer and behavior inventories, checks ZMK
 behavior-node and combo-node
 property inventories, checks ZMK `#include` dependencies, checks the ZMK
 active and disabled Kconfig line order and values, checks the ZMK `Kconfig.*`
-shield/default entries, checks DTS aliases, checks the `west.yml` ZMK module inventory,
+shield/default entries, checks DTS aliases and DTS root/overlay node inventories,
+checks the `west.yml` ZMK module inventory,
 checks the ZMK trackpad virtual-position `#define` inventory, checks the ZMK
 `INPUT_BTN_*` to virtual-position binding inventory, checks the ZMK
 trackpad-to-position behavior and input-processor properties, checks the ZMK

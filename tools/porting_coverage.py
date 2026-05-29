@@ -1610,6 +1610,63 @@ def dts_alias_inventory(text: str, block_name: str) -> list[str]:
     ]
 
 
+def extract_dts_inventory_block(text: str, block_name: str) -> str:
+    text = strip_c_style_comments(text)
+    if block_name == "__top__":
+        return text
+    if block_name == "/":
+        match = re.search(r"(?:^|[;\n])\s*/\s*\{", text)
+        if not match:
+            raise ValueError("root block '/' not found")
+        start = match.end() - 1
+        end = matching_block_end(text, start)
+        return text[start + 1 : end]
+    return extract_block(text, block_name)
+
+
+def dts_node_inventory(text: str, block_name: str) -> list[str]:
+    return [
+        label or name
+        for label, name, _ in dts_child_blocks(extract_dts_inventory_block(text, block_name))
+    ]
+
+
+def check_zmk_dts_node_inventory(manifest: dict[str, Any], zmk_config_dir: Path) -> list[Result]:
+    results: list[Result] = []
+    for check in manifest.get("source_inventory", {}).get("dts_node_inventories", []):
+        source_file = check["source_file"]
+        source_block = check["source_block"]
+        expected = list(check["expected"])
+        source_path = zmk_config_dir / source_file
+        result_id = f"zmk_source.dts_nodes.{source_file}.{source_block}"
+        if not source_path.exists():
+            results.append(
+                Result(
+                    result_id,
+                    "zmk_inventory",
+                    0,
+                    max(1, len(expected)),
+                    f"missing DTS node source file {source_file!r}",
+                )
+            )
+            continue
+        try:
+            actual = dts_node_inventory(source_path.read_text(), source_block)
+        except ValueError as e:
+            results.append(
+                Result(
+                    result_id,
+                    "zmk_inventory",
+                    0,
+                    max(1, len(expected)),
+                    f"invalid DTS node source {source_file!r}: {e}",
+                )
+            )
+            continue
+        results.append(ordered_inventory_result(result_id, "zmk_inventory", expected, actual))
+    return results
+
+
 def check_zmk_dts_alias_inventory(manifest: dict[str, Any], zmk_config_dir: Path) -> list[Result]:
     results: list[Result] = []
     for check in manifest.get("source_inventory", {}).get("dts_aliases", []):
@@ -2980,6 +3037,7 @@ def check_zmk_source(
     results.extend(check_zmk_kconfig_entry_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_kconfig_line_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_disabled_kconfig_line_inventory(manifest, zmk_config_dir))
+    results.extend(check_zmk_dts_node_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_dts_alias_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_behavior_property_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_combo_property_inventory(manifest, zmk_config_dir))

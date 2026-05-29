@@ -289,6 +289,12 @@ define_entries = [
 dts_aliases = [
   { source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi", source_block = "aliases", expected = ["led-red=&led0", "led-green=&led1", "led-blue=&led2"] },
 ]
+dts_node_inventories = [
+  { source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi", source_block = "/", expected = ["chosen", "default_transform", "kscan0", "split_inputs_R", "split_inputs_L", "behaviors", "trackpad_key_behaviors_R", "trackpad_key_behaviors_L", "zip_dynamic_xy_scaler", "zip_dynamic_scroll_scaler", "trackpad_listener_R", "trackpad_listener_L", "aliases", "leds", "easy_charge_indicator"] },
+  { source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi", source_block = "&xiao_i2c", expected = ["iqs9151"] },
+  { source_file = "boards/shields/lalapadgen2/lalapadgen2_right.overlay", source_block = "__top__", expected = ["&default_transform", "&kscan0", "&trackpad_listener_R", "&trackpad_listener_L"] },
+  { source_file = "boards/shields/lalapadgen2/lalapadgen2_left.overlay", source_block = "__top__", expected = ["&kscan0", "&trackpad_split_L", "&trackpad_split_R"] },
+]
 physical_layout_attrs = [
   { source_file = "boards/shields/lalapadgen2/lalapadgen2-layouts.dtsi", source_block = "lalapadgen2_physical_layout", expected = [
     "100,100,0,0,0,0,0",

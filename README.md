@@ -134,7 +134,8 @@ chain and physical key attributes, ZMK repo-level and config source-file
 inventories, upstream ZMK workflow and build-matrix files, ZMK layout JSON
 metadata and per-key coordinates, ZMK keymap layer and behavior inventories,
 ZMK behavior-node and combo-node property inventories, ZMK include inventory,
-active and disabled Kconfig lines, Kconfig shield/default entries, DTS aliases,
+active and disabled Kconfig lines, Kconfig shield/default entries, DTS aliases
+and DTS root/overlay node inventories,
 west module inventory, ZMK trackpad virtual-position
 defines, RMK custom keycode order, ZMK `INPUT_BTN_*` to virtual-position
 bindings, ZMK trackpad-to-position behavior and input-processor properties, ZMK

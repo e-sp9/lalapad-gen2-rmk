@@ -440,6 +440,30 @@ fn porting_coverage_includes_exact_rmk_inventory_gates() {
             assert_eq!(alias_inventory["ok"], true);
         }
 
+        for node_inventory in
+            porting_coverage_manifest_toml()["source_inventory"]["dts_node_inventories"]
+                .as_array()
+                .unwrap()
+        {
+            let source_file = node_inventory["source_file"].as_str().unwrap();
+            let source_block = node_inventory["source_block"].as_str().unwrap();
+            let expected_entries = node_inventory["expected"].as_array().unwrap().len() as i64;
+            let inventory = results
+                .iter()
+                .find(|result| {
+                    result["id"] == format!("zmk_source.dts_nodes.{source_file}.{source_block}")
+                })
+                .unwrap_or_else(|| {
+                    panic!(
+                        "ZMK DTS node inventory coverage result is missing for {source_file} {source_block}"
+                    )
+                });
+            assert_eq!(inventory["kind"], "zmk_inventory");
+            assert_eq!(inventory["passed"].as_i64(), Some(expected_entries));
+            assert_eq!(inventory["total"].as_i64(), Some(expected_entries));
+            assert_eq!(inventory["ok"], true);
+        }
+
         for layout_file in
             porting_coverage_manifest_toml()["source_inventory"]["physical_layout_attrs"]
                 .as_array()
@@ -2384,6 +2408,185 @@ print(json.dumps({
             .as_str()
             .unwrap()
             .contains("missing DTS alias source file")
+    );
+}
+
+#[test]
+fn porting_coverage_rejects_unclassified_zmk_dts_nodes() {
+    let output = run_python(
+        r#"
+import importlib.util
+import json
+import sys
+import tempfile
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("porting_coverage", "tools/porting_coverage.py")
+pc = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = pc
+spec.loader.exec_module(pc)
+
+root_manifest = {
+    "source_inventory": {
+        "dts_node_inventories": [{
+            "source_file": "lalapadgen2.dtsi",
+            "source_block": "/",
+            "expected": ["chosen", "kscan0"],
+        }],
+    },
+}
+overlay_manifest = {
+    "source_inventory": {
+        "dts_node_inventories": [{
+            "source_file": "right.overlay",
+            "source_block": "__top__",
+            "expected": ["&default_transform", "&kscan0"],
+        }],
+    },
+}
+
+def pack(results):
+    return [result.__dict__ | {"ok": result.ok} for result in results]
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    fixture = root / "lalapadgen2.dtsi"
+    overlay = root / "right.overlay"
+    fixture.write_text('''
+    / {
+        chosen {
+            zmk,physical-layout = &layout;
+        };
+        kscan0: kscan {
+            nested_child {
+                status = "okay";
+            };
+        };
+    };
+    &xiao_i2c {
+        iqs9151: iqs9151@56 {
+            status = "okay";
+        };
+    };
+    ''')
+    ok = pack(pc.check_zmk_dts_node_inventory(root_manifest, root))
+
+    fixture.write_text('''
+    / {
+        chosen {};
+        new_node {};
+        kscan0: kscan {};
+    };
+    ''')
+    changed = pack(pc.check_zmk_dts_node_inventory(root_manifest, root))
+
+    overlay.write_text('''
+    &default_transform {
+        col-offset = <6>;
+    };
+    &kscan0 {
+        nested_child {};
+    };
+    ''')
+    overlay_ok = pack(pc.check_zmk_dts_node_inventory(overlay_manifest, root))
+
+    overlay.write_text('''
+    &default_transform {};
+    &trackpad_listener_R {};
+    &kscan0 {};
+    ''')
+    overlay_changed = pack(pc.check_zmk_dts_node_inventory(overlay_manifest, root))
+
+    fixture.write_text('&kscan0 {};')
+    missing_root = pack(pc.check_zmk_dts_node_inventory(root_manifest, root))
+    fixture.unlink()
+    missing_file = pack(pc.check_zmk_dts_node_inventory(root_manifest, root))
+
+print(json.dumps({
+    "ok": ok,
+    "changed": changed,
+    "overlay_ok": overlay_ok,
+    "overlay_changed": overlay_changed,
+    "missing_root": missing_root,
+    "missing_file": missing_file,
+}))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "DTS node inventory parser check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let ok_inventory = &parsed["ok"][0];
+    assert_eq!(
+        ok_inventory["id"],
+        "zmk_source.dts_nodes.lalapadgen2.dtsi./"
+    );
+    assert_eq!(ok_inventory["kind"], "zmk_inventory");
+    assert_eq!(ok_inventory["passed"].as_i64(), Some(2));
+    assert_eq!(ok_inventory["total"].as_i64(), Some(2));
+    assert_eq!(ok_inventory["ok"], true);
+
+    let changed_inventory = &parsed["changed"][0];
+    assert_eq!(changed_inventory["kind"], "zmk_inventory");
+    assert_eq!(changed_inventory["passed"].as_i64(), Some(1));
+    assert_eq!(changed_inventory["total"].as_i64(), Some(3));
+    assert_eq!(changed_inventory["ok"], false);
+    assert!(
+        changed_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("new_node")
+    );
+
+    let overlay_inventory = &parsed["overlay_ok"][0];
+    assert_eq!(
+        overlay_inventory["id"],
+        "zmk_source.dts_nodes.right.overlay.__top__"
+    );
+    assert_eq!(overlay_inventory["kind"], "zmk_inventory");
+    assert_eq!(overlay_inventory["passed"].as_i64(), Some(2));
+    assert_eq!(overlay_inventory["total"].as_i64(), Some(2));
+    assert_eq!(overlay_inventory["ok"], true);
+
+    let overlay_changed_inventory = &parsed["overlay_changed"][0];
+    assert_eq!(overlay_changed_inventory["kind"], "zmk_inventory");
+    assert_eq!(overlay_changed_inventory["passed"].as_i64(), Some(1));
+    assert_eq!(overlay_changed_inventory["total"].as_i64(), Some(3));
+    assert_eq!(overlay_changed_inventory["ok"], false);
+    assert!(
+        overlay_changed_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("&trackpad_listener_R")
+    );
+
+    let missing_root_inventory = &parsed["missing_root"][0];
+    assert_eq!(missing_root_inventory["kind"], "zmk_inventory");
+    assert_eq!(missing_root_inventory["passed"].as_i64(), Some(0));
+    assert_eq!(missing_root_inventory["total"].as_i64(), Some(2));
+    assert_eq!(missing_root_inventory["ok"], false);
+    assert!(
+        missing_root_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("root block '/' not found")
+    );
+
+    let missing_file_inventory = &parsed["missing_file"][0];
+    assert_eq!(missing_file_inventory["kind"], "zmk_inventory");
+    assert_eq!(missing_file_inventory["passed"].as_i64(), Some(0));
+    assert_eq!(missing_file_inventory["total"].as_i64(), Some(2));
+    assert_eq!(missing_file_inventory["ok"], false);
+    assert!(
+        missing_file_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("missing DTS node source file")
     );
 }
 
