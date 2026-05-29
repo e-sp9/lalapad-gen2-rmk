@@ -186,7 +186,9 @@ thumb hold's active layer from the `LT(...)`/`MO(...)` action instead of trustin
 the scenario metadata alone. It also checks that
 Vial's `customKeycodes` names match RMK's `User0..User13` BLE and dynamic-scale
 handler semantics, so host-side remapping cannot silently point at the wrong
-firmware action. It also resolves every
+firmware action. The Vial position gate also compares `vial.json` against
+`keyboard.toml` bounds and all non-empty firmware key positions without needing
+the upstream ZMK checkout. It also resolves every
 position on layer 1, layer 2, and the system tri-layer against the ZMK source
 keymap to catch transparent-key fallthrough drift. ZMK hold-tap timing values
 are also mirrored against the RMK Morse timing settings. Use

@@ -3256,6 +3256,23 @@ def collect_vial_positions(value: Any) -> list[tuple[int, int]]:
     return positions
 
 
+def keyboard_toml_vial_positions(config: dict[str, Any]) -> list[tuple[int, int]]:
+    layers = keymap(config)
+    rows = int(config["layout"]["rows"])
+    cols = int(config["layout"]["cols"])
+    positions: list[tuple[int, int]] = []
+    for row in range(rows):
+        for col in range(cols):
+            actions = [
+                layers[layer][row][col]
+                for layer in range(len(layers))
+                if row < len(layers[layer]) and col < len(layers[layer][row])
+            ]
+            if any(action not in (NO_KEY, TRANSPARENT) for action in actions):
+                positions.append((row, col))
+    return positions
+
+
 def zmk_json_positions(value: dict[str, Any]) -> list[tuple[int, int]]:
     layout = value["layouts"]["default_layout"]["layout"]
     return [(int(item["row"]), int(item["col"])) for item in layout]
@@ -3388,6 +3405,77 @@ def check_zmk_matrix_transform(manifest: dict[str, Any], zmk_config_dir: Path) -
         )
     )
     results.extend(check_zmk_physical_layout_chain(zmk_config_dir))
+    return results
+
+
+def check_vial_keyboard_toml_layout(
+    manifest: dict[str, Any], config: dict[str, Any], project_root: Path
+) -> list[Result]:
+    vial = load_json(project_root / "vial.json")
+    expected_layout = manifest["layout"]
+    results: list[Result] = []
+
+    matrix_checks = [
+        ("rows", vial["matrix"].get("rows"), expected_layout["rows"]),
+        ("cols", vial["matrix"].get("cols"), expected_layout["cols"]),
+    ]
+    matrix_passed = sum(1 for _, actual, expected in matrix_checks if actual == expected)
+    matrix_messages = [
+        f"{name} expected {expected!r}, got {actual!r}"
+        for name, actual, expected in matrix_checks
+        if actual != expected
+    ]
+    results.append(
+        Result(
+            "vial_keyboard_toml_matrix_shape",
+            "vial",
+            matrix_passed,
+            len(matrix_checks),
+            "ok" if not matrix_messages else "; ".join(matrix_messages),
+        )
+    )
+
+    required_positions = keyboard_toml_vial_positions(config)
+    actual_positions = collect_vial_positions(vial["layouts"]["keymap"])
+    rows = int(config["layout"]["rows"])
+    cols = int(config["layout"]["cols"])
+    bound_messages: list[str] = []
+    in_bounds = 0
+    for index, actual in enumerate(actual_positions):
+        if 0 <= actual[0] < rows and 0 <= actual[1] < cols:
+            in_bounds += 1
+        else:
+            bound_messages.append(f"p{index}: {actual!r} is outside keyboard.toml bounds {rows}x{cols}")
+    duplicate_positions = sorted(
+        position for position in set(actual_positions) if actual_positions.count(position) > 1
+    )
+    unique_passed = not duplicate_positions
+    if duplicate_positions:
+        bound_messages.append(f"duplicate Vial positions {duplicate_positions!r}")
+    results.append(
+        Result(
+            "vial_positions_within_keyboard_toml_bounds",
+            "vial",
+            in_bounds + (1 if unique_passed else 0),
+            len(actual_positions) + 1,
+            "ok" if not bound_messages else "; ".join(bound_messages[:8]),
+        )
+    )
+
+    actual_set = set(actual_positions)
+    missing_required = [position for position in required_positions if position not in actual_set]
+    required_passed = len(required_positions) - len(missing_required)
+    results.append(
+        Result(
+            "vial_positions_cover_keyboard_toml_actions",
+            "vial",
+            required_passed,
+            len(required_positions),
+            "ok"
+            if not missing_required
+            else f"missing keyboard.toml action positions {missing_required[:8]!r}",
+        )
+    )
     return results
 
 
@@ -3868,6 +3956,7 @@ def run(
     results.extend(check_combos(manifest, keyboard))
     results.extend(check_scenarios(manifest, keyboard))
     results.extend(check_code_contains(manifest, project_root))
+    results.extend(check_vial_keyboard_toml_layout(manifest, keyboard, project_root))
     results.extend(
         check_zmk_source(
             manifest,

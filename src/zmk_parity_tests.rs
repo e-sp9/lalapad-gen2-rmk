@@ -246,8 +246,8 @@ ported = 1
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("porting coverage baseline drift:"));
-    assert!(stderr.contains("coverage.total: expected baseline 1, got 2510"));
-    assert!(stderr.contains("coverage.result_count: expected baseline 1, got 450"));
+    assert!(stderr.contains("coverage.total: expected baseline 1, got 2647"));
+    assert!(stderr.contains("coverage.result_count: expected baseline 1, got 453"));
     assert!(stderr.contains("coverage.result_inventory_sha256: expected baseline bad"));
     assert!(
         stderr.contains("coverage.by_kind.behavior: actual report kind is missing from baseline")
@@ -526,7 +526,7 @@ fn migration_status_combines_software_and_hardware_progress() {
     );
     let stdout = String::from_utf8_lossy(&markdown.stdout);
     assert!(stdout.contains("## RMK Migration Status"));
-    assert!(stdout.contains("| Software coverage | 2510 | 2510 | 100.00% |"));
+    assert!(stdout.contains("| Software coverage | 2647 | 2647 | 100.00% |"));
     assert!(stdout.contains("### Hardware Progress By Area"));
     assert!(stdout.contains("| trackpad | 0 | 7 | 0.00% |"));
     assert!(stdout.contains("### Hardware Progress By Side"));
@@ -539,7 +539,7 @@ fn migration_status_combines_software_and_hardware_progress() {
 fn migration_status_rejects_coverage_baseline_drift() {
     let bad_baseline = r#"
 [coverage]
-passed = 2510
+passed = 2647
 total = 1
 result_count = 1
 result_inventory_sha256 = "bad"
@@ -576,8 +576,8 @@ ported_by_config_image = 6
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("Software failures:"));
-    assert!(stdout.contains("coverage.total: expected baseline 1, got 2510"));
-    assert!(stdout.contains("coverage.result_count: expected baseline 1, got 450"));
+    assert!(stdout.contains("coverage.total: expected baseline 1, got 2647"));
+    assert!(stdout.contains("coverage.result_count: expected baseline 1, got 453"));
     assert!(stdout.contains("coverage.result_inventory_sha256: expected baseline bad"));
 }
 
@@ -2699,6 +2699,116 @@ print(json.dumps({
             .as_str()
             .unwrap()
             .contains("missing dynamic scale reset branch")
+    );
+}
+
+#[test]
+fn porting_coverage_rejects_vial_keyboard_toml_position_drift() {
+    let output = run_python(
+        r#"
+import copy
+import importlib.util
+import json
+import sys
+import tempfile
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("porting_coverage", "tools/porting_coverage.py")
+pc = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = pc
+spec.loader.exec_module(pc)
+
+manifest = pc.load_toml(Path("tools/porting_coverage_manifest.toml"))
+keyboard = pc.load_toml(Path("keyboard.toml"))
+vial = pc.load_json(Path("vial.json"))
+
+with tempfile.TemporaryDirectory() as ok_dir:
+    Path(ok_dir, "vial.json").write_text(json.dumps(vial), encoding="utf-8")
+    ok = pc.check_vial_keyboard_toml_layout(manifest, keyboard, Path(ok_dir))
+
+bad_vial = copy.deepcopy(vial)
+bad_vial["layouts"]["keymap"][0][0] = "0,1"
+with tempfile.TemporaryDirectory() as bad_dir:
+    Path(bad_dir, "vial.json").write_text(json.dumps(bad_vial), encoding="utf-8")
+    bad = pc.check_vial_keyboard_toml_layout(manifest, keyboard, Path(bad_dir))
+
+def pack(results):
+    return [result.__dict__ | {"ok": result.ok} for result in results]
+
+print(json.dumps({
+    "ok": pack(ok),
+    "bad": pack(bad),
+    "keyboard_positions": pc.keyboard_toml_vial_positions(keyboard),
+    "vial_positions": pc.collect_vial_positions(vial["layouts"]["keymap"]),
+}))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "Vial keyboard.toml position check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(parsed["keyboard_positions"].as_array().unwrap().len(), 66);
+    assert_eq!(parsed["vial_positions"].as_array().unwrap().len(), 68);
+
+    let ok_bounds = parsed["ok"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "vial_positions_within_keyboard_toml_bounds")
+        .expect("Vial keyboard.toml bounds result is missing");
+    assert_eq!(ok_bounds["kind"], "vial");
+    assert_eq!(ok_bounds["passed"].as_i64(), Some(69));
+    assert_eq!(ok_bounds["total"].as_i64(), Some(69));
+    assert_eq!(ok_bounds["ok"], true);
+
+    let ok_coverage = parsed["ok"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "vial_positions_cover_keyboard_toml_actions")
+        .expect("Vial keyboard.toml action coverage result is missing");
+    assert_eq!(ok_coverage["kind"], "vial");
+    assert_eq!(ok_coverage["passed"].as_i64(), Some(66));
+    assert_eq!(ok_coverage["total"].as_i64(), Some(66));
+    assert_eq!(ok_coverage["ok"], true);
+
+    let bad_bounds = parsed["bad"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "vial_positions_within_keyboard_toml_bounds")
+        .expect("changed Vial keyboard.toml bounds result is missing");
+    assert_eq!(bad_bounds["kind"], "vial");
+    assert_eq!(bad_bounds["passed"].as_i64(), Some(68));
+    assert_eq!(bad_bounds["total"].as_i64(), Some(69));
+    assert_eq!(bad_bounds["ok"], false);
+    assert!(
+        bad_bounds["message"]
+            .as_str()
+            .unwrap()
+            .contains("duplicate Vial positions [(0, 1)]")
+    );
+
+    let bad_coverage = parsed["bad"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "vial_positions_cover_keyboard_toml_actions")
+        .expect("changed Vial keyboard.toml action coverage result is missing");
+    assert_eq!(bad_coverage["kind"], "vial");
+    assert_eq!(bad_coverage["passed"].as_i64(), Some(65));
+    assert_eq!(bad_coverage["total"].as_i64(), Some(66));
+    assert_eq!(bad_coverage["ok"], false);
+    assert!(
+        bad_coverage["message"]
+            .as_str()
+            .unwrap()
+            .contains("missing keyboard.toml action positions [(0, 0)]")
     );
 }
 

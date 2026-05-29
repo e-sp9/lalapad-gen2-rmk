@@ -197,7 +197,9 @@ cells, the exact RMK combo inventory, tri-layer and tap-hold behavior settings,
 and golden thumb-layer scenarios for Space, Enter, and the system tri-layer. It
 derives each scenario hold layer from the `LT(...)`/`MO(...)` action and checks
 that it matches the manifest's `activates_layer`, so the scenario metadata
-cannot drift together with the expected output. It also covers source-backed split matrix pins,
+cannot drift together with the expected output. The Vial position checks also
+run against `keyboard.toml` bounds and all non-empty firmware key positions
+before any ZMK source checkout is required. It also covers source-backed split matrix pins,
 right-central/left-peripheral orientation, BLE TX power, charge pins, RGB pins,
 IQS9151 I2C/IRQ pins, trackpad scaling constants, the RMK-side IQS9151
 register-address inventory, upstream IQS9151 register and bit-flag porting
