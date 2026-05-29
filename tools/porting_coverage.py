@@ -535,6 +535,46 @@ def check_zmk_source_scenarios(
     return results
 
 
+def check_zmk_source_layer_resolution(
+    config: dict[str, Any],
+    source_layers: list[list[list[str]]],
+) -> list[Result]:
+    layer_sets = [
+        ("layer1_resolution", [1]),
+        ("layer2_resolution", [2]),
+        ("tri_layer_resolution", [1, 2, 3]),
+    ]
+    rows = int(config["layout"]["rows"])
+    cols = int(config["layout"]["cols"])
+    results: list[Result] = []
+
+    for name, active_layers in layer_sets:
+        passed = 0
+        total = rows * cols
+        messages: list[str] = []
+        for row in range(rows):
+            for col in range(cols):
+                expected = resolve_key_from_layers(source_layers, row, col, active_layers)
+                actual = resolve_key(config, row, col, active_layers)
+                if actual == expected:
+                    passed += 1
+                else:
+                    messages.append(
+                        f"r{row}c{col}: source expected {expected!r}, RMK got {actual!r}"
+                    )
+        results.append(
+            Result(
+                f"zmk_source.{name}",
+                "zmk_source_layer_resolution",
+                passed,
+                total,
+                "ok" if not messages else "; ".join(messages[:8]),
+            )
+        )
+
+    return results
+
+
 def extract_block(text: str, name: str) -> str:
     match = re.search(
         rf"(?<![A-Za-z0-9_]){re.escape(name)}(?![A-Za-z0-9_])(?:\s*:[^{{]+)?\s*\{{",
@@ -2245,6 +2285,7 @@ def check_zmk_source(
     results.extend(check_zmk_source_deltas(manifest, raw_source_layers))
     source_layers = apply_documented_rmk_deltas(manifest, raw_source_layers)
     results.extend(check_zmk_source_scenarios(manifest, keyboard, source_layers))
+    results.extend(check_zmk_source_layer_resolution(keyboard, source_layers))
     expected_layers = manifest_keymap_rows(manifest)
     for layer, (expected_layer, source_layer) in enumerate(zip(expected_layers, source_layers, strict=True)):
         for row, (expected, source) in enumerate(zip(expected_layer, source_layer, strict=True)):

@@ -146,6 +146,31 @@ fn porting_coverage_includes_exact_rmk_inventory_gates() {
             assert_eq!(source_scenario["ok"], true);
         }
 
+        let expected_layer_resolution_total =
+            rows * keyboard["layout"]["cols"].as_integer().unwrap();
+        for resolution_id in [
+            "zmk_source.layer1_resolution",
+            "zmk_source.layer2_resolution",
+            "zmk_source.tri_layer_resolution",
+        ] {
+            let layer_resolution = results
+                .iter()
+                .find(|result| result["id"] == resolution_id)
+                .unwrap_or_else(|| {
+                    panic!("ZMK source layer resolution result is missing for {resolution_id}")
+                });
+            assert_eq!(layer_resolution["kind"], "zmk_source_layer_resolution");
+            assert_eq!(
+                layer_resolution["passed"].as_i64(),
+                Some(expected_layer_resolution_total)
+            );
+            assert_eq!(
+                layer_resolution["total"].as_i64(),
+                Some(expected_layer_resolution_total)
+            );
+            assert_eq!(layer_resolution["ok"], true);
+        }
+
         let layer_inventory = results
             .iter()
             .find(|result| result["id"] == "zmk_source.keymap_layer_inventory")
@@ -413,6 +438,88 @@ fn porting_coverage_includes_exact_rmk_inventory_gates() {
         assert_eq!(west_inventory["total"].as_i64(), Some(expected_west_items));
         assert_eq!(west_inventory["ok"], true);
     }
+}
+
+#[test]
+fn porting_coverage_rejects_source_layer_resolution_drift() {
+    let output = run_python(
+        r#"
+import importlib.util
+import json
+import sys
+
+spec = importlib.util.spec_from_file_location("porting_coverage", "tools/porting_coverage.py")
+pc = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = pc
+spec.loader.exec_module(pc)
+
+source_layers = [
+    [["A", "B"], ["C", "D"]],
+    [["_", "Kp7"], ["_", "Kp0"]],
+    [["Home", "_"], ["PageDown", "_"]],
+    [["_", "User0"], ["_", "_"]],
+]
+ok_keyboard = {
+    "layout": {
+        "rows": 2,
+        "cols": 2,
+        "keymap": source_layers,
+    },
+}
+changed_keyboard = {
+    "layout": {
+        "rows": 2,
+        "cols": 2,
+        "keymap": [
+            [["A", "B"], ["C", "D"]],
+            [["_", "Kp8"], ["_", "Kp0"]],
+            [["Home", "_"], ["PageDown", "_"]],
+            [["_", "User0"], ["_", "_"]],
+        ],
+    },
+}
+
+def pack(results):
+    return [result.__dict__ | {"ok": result.ok} for result in results]
+
+print(json.dumps({
+    "ok": pack(pc.check_zmk_source_layer_resolution(ok_keyboard, source_layers)),
+    "changed": pack(pc.check_zmk_source_layer_resolution(changed_keyboard, source_layers)),
+}))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "source layer resolution parser check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    for result in parsed["ok"].as_array().unwrap() {
+        assert_eq!(result["kind"], "zmk_source_layer_resolution");
+        assert_eq!(result["passed"].as_i64(), Some(4));
+        assert_eq!(result["total"].as_i64(), Some(4));
+        assert_eq!(result["ok"], true);
+    }
+
+    let changed = parsed["changed"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "zmk_source.layer1_resolution")
+        .expect("layer 1 resolution result is missing");
+    assert_eq!(changed["kind"], "zmk_source_layer_resolution");
+    assert_eq!(changed["passed"].as_i64(), Some(3));
+    assert_eq!(changed["total"].as_i64(), Some(4));
+    assert_eq!(changed["ok"], false);
+    assert!(
+        changed["message"]
+            .as_str()
+            .unwrap()
+            .contains("r0c1: source expected 'Kp7', RMK got 'Kp8'")
+    );
 }
 
 #[test]

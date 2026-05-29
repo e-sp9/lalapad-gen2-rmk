@@ -220,6 +220,9 @@ checks are represented as structured inventories rather than regex-only checks.
 The thumb tap/hold layer-resolution scenarios are also cross-checked against
 the ZMK source keymap after documented RMK deltas are applied, so scenario
 expectations must stay source-backed instead of becoming RMK-only assertions.
+The gate additionally resolves every position on layer 1, layer 2, and the
+system tri-layer against the ZMK source keymap to catch transparent-key
+fallthrough drift beyond the hand-written representative scenarios.
 ZMK `mt2` hold-tap timing values are mirrored against the RMK Morse timing
 settings to catch timing drift on either side of the migration contract.
 
