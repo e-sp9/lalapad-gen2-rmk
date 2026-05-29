@@ -289,6 +289,10 @@ become malformed or untracked. The Markdown report includes hardware progress
 by area, by side, and by remaining check so the path from 0/12 to 12/12 stays
 visible in GitHub Actions summaries. A true final hardware claim should add
 `--require-hardware-validated --require-firmware-ref <tag-or-commit>`.
+The full release-validation command is
+`python3 tools/migration_status.py --evidence path/to/evidence.toml
+--require-software-complete --require-hardware-classified
+--require-hardware-validated --require-firmware-ref <tag-or-commit>`.
 
 ## Real-Hardware Validation Gate
 

@@ -218,6 +218,12 @@ command generates a complete local overlay file containing every current
 hardware check; pass `--firmware-ref-template <tag-or-commit>` with it to
 pre-fill the flashed firmware reference in every entry. Generated
 `hardware-validation-evidence*.toml` files are ignored by default.
+For the combined final gate, run
+`python3 tools/migration_status.py --evidence path/to/evidence.toml
+--require-software-complete --require-hardware-classified
+--require-hardware-validated --require-firmware-ref <tag-or-commit>`; it must
+report `Full validation: pass` before claiming source-backed and real-device
+validation are both complete for that firmware.
 
 Host-side parity tests can be run explicitly with:
 
