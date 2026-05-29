@@ -538,6 +538,28 @@ vial_user_key_semantics = [
   { key = "User13", name = "TP_SCALE_RST", handler_needles = ["id == NUM_BLE_PROFILE as u8 + 9", "LALAPAD_ZDS_ALL, LALAPAD_ZDS_RST"] },
 ]
 
+[split_footprint]
+connection = "ble"
+virtual_rows = [5, 6]
+
+[split_footprint.central]
+row_offset = 0
+col_offset = 6
+rows = 5
+cols = 6
+matrix_type = "normal"
+row_pins = ["P1_15", "P1_14", "P1_13", "P1_12", "P1_01"]
+col_pins = ["P0_02", "P0_03", "P0_28", "P0_29", "P0_15", "P0_19"]
+
+[[split_footprint.peripherals]]
+row_offset = 0
+col_offset = 0
+rows = 5
+cols = 6
+matrix_type = "normal"
+row_pins = ["P1_15", "P1_14", "P1_13", "P1_12", "P1_01"]
+col_pins = ["P0_19", "P0_15", "P0_29", "P0_28", "P0_03", "P0_02"]
+
 [[source_deltas]]
 id = "delta_base_mo1_to_left_ctrl"
 layer = 0
@@ -2453,6 +2475,50 @@ needles = ["p.P1_03", "p.P1_05", "p.P1_07", "RgbLedWidget::new(red, green, blue,
 id = "rmk_low_speed_includes_tri_layer_delta"
 file = "src/iqs9151.rs"
 needles = ["matches!(layer, 1 | 2 | 3)"]
+
+[[code_topology]]
+id = "central_controller_topology"
+file = "src/central.rs"
+required = [
+  "#[rmk_central]",
+  "fn split_trackpad_events()",
+  "Iqs9151SplitEventController::new()",
+  "fn right_trackpad()",
+  "TrackpadSide::Right",
+  "Iqs9151MotionOutput::HidReport",
+  "Iqs9151KeyboardController::new_central(device)",
+  "RgbLedWidget::new(red, green, blue, true, true)",
+]
+forbidden = [
+  "#[rmk_peripheral",
+  "fn left_trackpad()",
+  "TrackpadSide::Left",
+  "Iqs9151MotionOutput::SplitEvent",
+  "Iqs9151KeyboardController::new_peripheral",
+  "RgbLedWidget::new(red, green, blue, true, false)",
+]
+
+[[code_topology]]
+id = "peripheral_controller_topology"
+file = "src/peripheral.rs"
+required = [
+  "#[rmk_peripheral(id = 0)]",
+  "fn left_trackpad()",
+  "TrackpadSide::Left",
+  "Iqs9151MotionOutput::SplitEvent",
+  "Iqs9151KeyboardController::new_peripheral(device)",
+  "RgbLedWidget::new(red, green, blue, true, false)",
+]
+forbidden = [
+  "#[rmk_central]",
+  "fn split_trackpad_events()",
+  "Iqs9151SplitEventController::new()",
+  "fn right_trackpad()",
+  "TrackpadSide::Right",
+  "Iqs9151MotionOutput::HidReport",
+  "Iqs9151KeyboardController::new_central",
+  "RgbLedWidget::new(red, green, blue, true, true)",
+]
 
 [[combos]]
 id = "combo_escape"

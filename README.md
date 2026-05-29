@@ -169,7 +169,8 @@ west module inventory, ZMK trackpad virtual-position
 defines, RMK custom keycode order and labels, Vial name/VID/PID identity and
 Vial serial-number prefix, ZMK `INPUT_BTN_*` to virtual-position bindings, ZMK
 trackpad-to-position behavior and input-processor properties, ZMK split-input
-container properties, ZMK trackpad listener device and normal/low-speed
+container properties, RMK split central/peripheral matrix footprint, pin order,
+top-level matrix/serial absence, and controller topology, ZMK trackpad listener device and normal/low-speed
 input-processor chains, selected
 ZMK DTS properties for split input, dynamic scaling, right-half column offset,
 overlay trackpad routing overrides, matrix transform, physical-layout, I2C,

@@ -470,6 +470,177 @@ def check_config_values(manifest: dict[str, Any], config: dict[str, Any]) -> lis
     return results
 
 
+def split_rect_positions(rect: dict[str, Any]) -> set[tuple[int, int]]:
+    row_offset = int(rect["row_offset"])
+    col_offset = int(rect["col_offset"])
+    rows = int(rect["rows"])
+    cols = int(rect["cols"])
+    return {
+        (row, col)
+        for row in range(row_offset, row_offset + rows)
+        for col in range(col_offset, col_offset + cols)
+    }
+
+
+def split_rect_checks(prefix: str, actual: dict[str, Any], expected: dict[str, Any]) -> tuple[int, int, list[str]]:
+    checks = [
+        ("row_offset", actual.get("row_offset"), expected.get("row_offset")),
+        ("col_offset", actual.get("col_offset"), expected.get("col_offset")),
+        ("rows", actual.get("rows"), expected.get("rows")),
+        ("cols", actual.get("cols"), expected.get("cols")),
+        ("matrix_type", actual.get("matrix", {}).get("matrix_type"), expected.get("matrix_type")),
+        ("row_pins", len(actual.get("matrix", {}).get("row_pins", [])), expected.get("rows")),
+        ("col_pins", len(actual.get("matrix", {}).get("col_pins", [])), expected.get("cols")),
+    ]
+    if "row_pins" in expected:
+        checks.append(("row_pins_order", actual.get("matrix", {}).get("row_pins", []), expected["row_pins"]))
+    if "col_pins" in expected:
+        checks.append(("col_pins_order", actual.get("matrix", {}).get("col_pins", []), expected["col_pins"]))
+    passed = sum(1 for _, actual_value, expected_value in checks if actual_value == expected_value)
+    messages = [
+        f"{prefix}.{name} expected {expected_value!r}, got {actual_value!r}"
+        for name, actual_value, expected_value in checks
+        if actual_value != expected_value
+    ]
+    return passed, len(checks), messages
+
+
+def check_split_footprint(manifest: dict[str, Any], config: dict[str, Any]) -> list[Result]:
+    expected = manifest.get("split_footprint", {})
+    if not expected:
+        return []
+
+    split = config.get("split", {})
+    rmk = config.get("rmk", {})
+    expected_peripherals = list(expected.get("peripherals", []))
+    actual_peripherals = list(split.get("peripheral", []))
+    results: list[Result] = []
+
+    connection_checks = [
+        ("split.connection", split.get("connection"), expected.get("connection")),
+        ("peripheral count", len(actual_peripherals), len(expected_peripherals)),
+        ("rmk.split_peripherals_num", rmk.get("split_peripherals_num"), len(expected_peripherals)),
+        ("top-level matrix absent", "matrix" not in config, True),
+        ("split.central.serial absent", "serial" not in split.get("central", {}), True),
+    ]
+    connection_checks.extend(
+        (
+            f"split.peripheral.{index}.serial absent",
+            "serial" not in peripheral,
+            True,
+        )
+        for index, peripheral in enumerate(actual_peripherals)
+    )
+    connection_passed = sum(1 for _, actual, want in connection_checks if actual == want)
+    connection_messages = [
+        f"{name} expected {want!r}, got {actual!r}"
+        for name, actual, want in connection_checks
+        if actual != want
+    ]
+    results.append(
+        Result(
+            "split_connection_and_count",
+            "split",
+            connection_passed,
+            len(connection_checks),
+            "ok" if not connection_messages else "; ".join(connection_messages),
+        )
+    )
+
+    central_passed, central_total, central_messages = split_rect_checks(
+        "central", split.get("central", {}), expected.get("central", {})
+    )
+    results.append(
+        Result(
+            "split_central_matrix_footprint",
+            "split",
+            central_passed,
+            central_total,
+            "ok" if not central_messages else "; ".join(central_messages),
+        )
+    )
+
+    for index, expected_peripheral in enumerate(expected_peripherals):
+        actual_peripheral = actual_peripherals[index] if index < len(actual_peripherals) else {}
+        passed, total, messages = split_rect_checks(
+            f"peripheral{index}", actual_peripheral, expected_peripheral
+        )
+        results.append(
+            Result(
+                f"split_peripheral{index}_matrix_footprint",
+                "split",
+                passed,
+                total,
+                "ok" if not messages else "; ".join(messages),
+            )
+        )
+
+    actual_scan_parts = [split.get("central", {})] + actual_peripherals
+    actual_scanned_positions: set[tuple[int, int]] = set()
+    overlapping_positions: set[tuple[int, int]] = set()
+    for part in actual_scan_parts:
+        if not all(field in part for field in ("row_offset", "col_offset", "rows", "cols")):
+            continue
+        positions = split_rect_positions(part)
+        overlapping_positions |= actual_scanned_positions & positions
+        actual_scanned_positions |= positions
+
+    expected_scanned_positions = set()
+    for part in [expected.get("central", {})] + expected_peripherals:
+        expected_scanned_positions |= split_rect_positions(part)
+
+    expected_rows = int(config["layout"]["rows"])
+    expected_cols = int(config["layout"]["cols"])
+    out_of_bounds = sorted(
+        (row, col)
+        for row, col in actual_scanned_positions
+        if not (0 <= row < expected_rows and 0 <= col < expected_cols)
+    )
+    missing_scanned = sorted(expected_scanned_positions - actual_scanned_positions)
+    extra_scanned = sorted(actual_scanned_positions - expected_scanned_positions)
+    scanned_total = len(expected_scanned_positions | actual_scanned_positions) + len(overlapping_positions)
+    scanned_passed = len(expected_scanned_positions & actual_scanned_positions)
+    messages: list[str] = []
+    if missing_scanned:
+        messages.append(f"missing scan positions {missing_scanned[:8]!r}")
+    if extra_scanned:
+        messages.append(f"unexpected scan positions {extra_scanned[:8]!r}")
+    if overlapping_positions:
+        messages.append(f"overlapping scan positions {sorted(overlapping_positions)[:8]!r}")
+    if out_of_bounds:
+        messages.append(f"out-of-bounds scan positions {out_of_bounds[:8]!r}")
+    results.append(
+        Result(
+            "split_scanned_positions_match_expected_footprint",
+            "split",
+            scanned_passed,
+            scanned_total,
+            "ok" if not messages else "; ".join(messages),
+        )
+    )
+
+    virtual_rows = {int(row) for row in expected.get("virtual_rows", [])}
+    action_positions = set(keyboard_toml_vial_positions(config))
+    virtual_action_positions = action_positions - actual_scanned_positions
+    unexpected_virtual_actions = sorted(
+        position for position in virtual_action_positions if position[0] not in virtual_rows
+    )
+    virtual_total = len(virtual_action_positions)
+    virtual_passed = virtual_total - len(unexpected_virtual_actions)
+    results.append(
+        Result(
+            "split_non_scanned_actions_are_virtual_rows",
+            "split",
+            virtual_passed,
+            virtual_total,
+            "ok"
+            if not unexpected_virtual_actions
+            else f"non-scanned action positions outside virtual rows {unexpected_virtual_actions[:8]!r}",
+        )
+    )
+    return results
+
+
 def check_combos(manifest: dict[str, Any], config: dict[str, Any]) -> list[Result]:
     results: list[Result] = []
     actual_list = combo_list(config)
@@ -3242,6 +3413,28 @@ def check_code_contains(manifest: dict[str, Any], project_root: Path) -> list[Re
     return results
 
 
+def check_code_topology(manifest: dict[str, Any], project_root: Path) -> list[Result]:
+    results: list[Result] = []
+    for check in manifest.get("code_topology", []):
+        text = (project_root / check["file"]).read_text()
+        required = list(check.get("required", []))
+        forbidden = list(check.get("forbidden", []))
+        passed_required = sum(1 for needle in required if needle in text)
+        passed_forbidden = sum(1 for needle in forbidden if needle not in text)
+        messages = [f"missing {needle!r}" for needle in required if needle not in text]
+        messages.extend(f"forbidden {needle!r} is present" for needle in forbidden if needle in text)
+        results.append(
+            Result(
+                check["id"],
+                "code_topology",
+                passed_required + passed_forbidden,
+                len(required) + len(forbidden),
+                "ok" if not messages else "; ".join(messages),
+            )
+        )
+    return results
+
+
 def collect_vial_positions(value: Any) -> list[tuple[int, int]]:
     positions: list[tuple[int, int]] = []
     if isinstance(value, str):
@@ -4050,10 +4243,12 @@ def run(
     results.extend(check_keymap_shape(manifest, keyboard))
     results.extend(check_keymap_rows(manifest, keyboard))
     results.extend(check_config_values(manifest, keyboard))
+    results.extend(check_split_footprint(manifest, keyboard))
     results.extend(check_behavior_values(manifest, keyboard))
     results.extend(check_combos(manifest, keyboard))
     results.extend(check_scenarios(manifest, keyboard))
     results.extend(check_code_contains(manifest, project_root))
+    results.extend(check_code_topology(manifest, project_root))
     results.extend(check_vial_keyboard_toml_layout(manifest, keyboard, project_root))
     results.extend(
         check_zmk_source(

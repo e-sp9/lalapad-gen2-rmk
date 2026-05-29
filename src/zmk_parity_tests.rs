@@ -156,9 +156,11 @@ fn porting_coverage_complete_gate_accepts_explicit_status_completion() {
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("Porting coverage by kind:"));
+    assert!(stdout.contains("- code_topology: 28/28 = 100.00%"));
     assert!(stdout.contains("- dependency: 11/11 = 100.00%"));
     assert!(stdout.contains("- rmk_patch: 59/59 = 100.00%"));
     assert!(stdout.contains("- scenario:"));
+    assert!(stdout.contains("- split: 100/100 = 100.00%"));
     assert!(stdout.contains("- vial_user_key_semantics: 57/57 = 100.00%"));
     assert!(stdout.contains("- zmk_source_cell:"));
     assert!(stdout.contains("Porting status: 69/69 = 100.00% implemented"));
@@ -246,8 +248,8 @@ ported = 1
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("porting coverage baseline drift:"));
-    assert!(stderr.contains("coverage.total: expected baseline 1, got 2747"));
-    assert!(stderr.contains("coverage.result_count: expected baseline 1, got 456"));
+    assert!(stderr.contains("coverage.total: expected baseline 1, got 2875"));
+    assert!(stderr.contains("coverage.result_count: expected baseline 1, got 463"));
     assert!(stderr.contains("coverage.result_inventory_sha256: expected baseline bad"));
     assert!(
         stderr.contains("coverage.by_kind.behavior: actual report kind is missing from baseline")
@@ -526,7 +528,7 @@ fn migration_status_combines_software_and_hardware_progress() {
     );
     let stdout = String::from_utf8_lossy(&markdown.stdout);
     assert!(stdout.contains("## RMK Migration Status"));
-    assert!(stdout.contains("| Software coverage | 2747 | 2747 | 100.00% |"));
+    assert!(stdout.contains("| Software coverage | 2875 | 2875 | 100.00% |"));
     assert!(stdout.contains("### Hardware Progress By Area"));
     assert!(stdout.contains("| trackpad | 0 | 7 | 0.00% |"));
     assert!(stdout.contains("### Hardware Progress By Side"));
@@ -539,7 +541,7 @@ fn migration_status_combines_software_and_hardware_progress() {
 fn migration_status_rejects_coverage_baseline_drift() {
     let bad_baseline = r#"
 [coverage]
-passed = 2747
+passed = 2875
 total = 1
 result_count = 1
 result_inventory_sha256 = "bad"
@@ -576,8 +578,8 @@ ported_by_config_image = 6
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("Software failures:"));
-    assert!(stdout.contains("coverage.total: expected baseline 1, got 2747"));
-    assert!(stdout.contains("coverage.result_count: expected baseline 1, got 456"));
+    assert!(stdout.contains("coverage.total: expected baseline 1, got 2875"));
+    assert!(stdout.contains("coverage.result_count: expected baseline 1, got 463"));
     assert!(stdout.contains("coverage.result_inventory_sha256: expected baseline bad"));
 }
 
@@ -2786,6 +2788,219 @@ print(json.dumps({
             .unwrap()
             .contains("c9.shortName: expected 'XY\\n+', got 'XY plus'")
     );
+}
+
+#[test]
+fn porting_coverage_rejects_split_footprint_drift() {
+    let output = run_python(
+        r#"
+import copy
+import importlib.util
+import json
+import sys
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("porting_coverage", "tools/porting_coverage.py")
+pc = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = pc
+spec.loader.exec_module(pc)
+
+manifest = pc.load_toml(Path("tools/porting_coverage_manifest.toml"))
+keyboard = pc.load_toml(Path("keyboard.toml"))
+ok = pc.check_split_footprint(manifest, keyboard)
+
+overlap = copy.deepcopy(keyboard)
+overlap["split"]["peripheral"][0]["col_offset"] = 5
+overlap_result = pc.check_split_footprint(manifest, overlap)
+
+virtual_leak = copy.deepcopy(keyboard)
+virtual_leak["split"]["central"]["rows"] = 4
+virtual_leak_result = pc.check_split_footprint(manifest, virtual_leak)
+
+shape_drift = copy.deepcopy(keyboard)
+shape_drift["matrix"] = {"matrix_type": "normal"}
+shape_drift["split"]["central"]["serial"] = [{"instance": "UART0"}]
+shape_drift["split"]["central"]["matrix"]["col_pins"] = list(reversed(
+    shape_drift["split"]["central"]["matrix"]["col_pins"]
+))
+shape_drift_result = pc.check_split_footprint(manifest, shape_drift)
+
+def pack(results):
+    return [result.__dict__ | {"ok": result.ok} for result in results]
+
+print(json.dumps({
+    "ok": pack(ok),
+    "overlap": pack(overlap_result),
+    "virtual_leak": pack(virtual_leak_result),
+    "shape_drift": pack(shape_drift_result),
+}))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "split footprint check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let ok_scanned = parsed["ok"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "split_scanned_positions_match_expected_footprint")
+        .expect("split scanned footprint result is missing");
+    assert_eq!(ok_scanned["kind"], "split");
+    assert_eq!(ok_scanned["passed"].as_i64(), Some(60));
+    assert_eq!(ok_scanned["total"].as_i64(), Some(60));
+    assert_eq!(ok_scanned["ok"], true);
+
+    let ok_virtual = parsed["ok"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "split_non_scanned_actions_are_virtual_rows")
+        .expect("split virtual-row result is missing");
+    assert_eq!(ok_virtual["kind"], "split");
+    assert_eq!(ok_virtual["passed"].as_i64(), Some(16));
+    assert_eq!(ok_virtual["total"].as_i64(), Some(16));
+    assert_eq!(ok_virtual["ok"], true);
+
+    let overlap_scanned = parsed["overlap"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "split_scanned_positions_match_expected_footprint")
+        .expect("overlapping split scanned footprint result is missing");
+    assert_eq!(overlap_scanned["kind"], "split");
+    assert_eq!(overlap_scanned["ok"], false);
+    let overlap_message = overlap_scanned["message"].as_str().unwrap();
+    assert!(overlap_message.contains("missing scan positions"));
+    assert!(overlap_message.contains("overlapping scan positions"));
+
+    let virtual_leak = parsed["virtual_leak"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "split_non_scanned_actions_are_virtual_rows")
+        .expect("changed split virtual-row result is missing");
+    assert_eq!(virtual_leak["kind"], "split");
+    assert_eq!(virtual_leak["ok"], false);
+    assert!(
+        virtual_leak["message"]
+            .as_str()
+            .unwrap()
+            .contains("non-scanned action positions outside virtual rows")
+    );
+
+    let shape_connection = parsed["shape_drift"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "split_connection_and_count")
+        .expect("changed split connection/count result is missing");
+    assert_eq!(shape_connection["kind"], "split");
+    assert_eq!(shape_connection["passed"].as_i64(), Some(4));
+    assert_eq!(shape_connection["total"].as_i64(), Some(6));
+    assert_eq!(shape_connection["ok"], false);
+    let shape_message = shape_connection["message"].as_str().unwrap();
+    assert!(shape_message.contains("top-level matrix absent expected True, got False"));
+    assert!(shape_message.contains("split.central.serial absent expected True, got False"));
+
+    let shape_central = parsed["shape_drift"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "split_central_matrix_footprint")
+        .expect("changed central matrix footprint result is missing");
+    assert_eq!(shape_central["kind"], "split");
+    assert_eq!(shape_central["passed"].as_i64(), Some(8));
+    assert_eq!(shape_central["total"].as_i64(), Some(9));
+    assert_eq!(shape_central["ok"], false);
+    assert!(
+        shape_central["message"]
+            .as_str()
+            .unwrap()
+            .contains("central.col_pins_order expected")
+    );
+}
+
+#[test]
+fn porting_coverage_rejects_controller_topology_drift() {
+    let output = run_python(
+        r#"
+import importlib.util
+import json
+import shutil
+import sys
+import tempfile
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("porting_coverage", "tools/porting_coverage.py")
+pc = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = pc
+spec.loader.exec_module(pc)
+
+manifest = pc.load_toml(Path("tools/porting_coverage_manifest.toml"))
+ok = pc.check_code_topology(manifest, Path("."))
+
+with tempfile.TemporaryDirectory() as root_dir:
+    root = Path(root_dir)
+    (root / "src").mkdir()
+    shutil.copy(Path("src/central.rs"), root / "src/central.rs")
+    shutil.copy(Path("src/peripheral.rs"), root / "src/peripheral.rs")
+    bad_central = (root / "src/central.rs").read_text(encoding="utf-8")
+    bad_central = bad_central.replace("TrackpadSide::Right", "TrackpadSide::Left")
+    bad_central = bad_central.replace(
+        "Iqs9151MotionOutput::HidReport",
+        "Iqs9151MotionOutput::SplitEvent",
+    )
+    (root / "src/central.rs").write_text(bad_central, encoding="utf-8")
+    bad = pc.check_code_topology(manifest, root)
+
+def pack(results):
+    return [result.__dict__ | {"ok": result.ok} for result in results]
+
+print(json.dumps({
+    "ok": pack(ok),
+    "bad": pack(bad),
+}))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "controller topology check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let ok_central = parsed["ok"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "central_controller_topology")
+        .expect("central topology result is missing");
+    assert_eq!(ok_central["kind"], "code_topology");
+    assert_eq!(ok_central["passed"].as_i64(), Some(14));
+    assert_eq!(ok_central["total"].as_i64(), Some(14));
+    assert_eq!(ok_central["ok"], true);
+
+    let bad_central = parsed["bad"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "central_controller_topology")
+        .expect("changed central topology result is missing");
+    assert_eq!(bad_central["kind"], "code_topology");
+    assert_eq!(bad_central["ok"], false);
+    let message = bad_central["message"].as_str().unwrap();
+    assert!(message.contains("missing 'TrackpadSide::Right'"));
+    assert!(message.contains("forbidden 'TrackpadSide::Left' is present"));
+    assert!(message.contains("missing 'Iqs9151MotionOutput::HidReport'"));
+    assert!(message.contains("forbidden 'Iqs9151MotionOutput::SplitEvent' is present"));
 }
 
 #[test]
