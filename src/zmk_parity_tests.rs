@@ -581,6 +581,57 @@ fn hardware_validation_can_generate_complete_evidence_template() {
 }
 
 #[test]
+fn hardware_validation_evidence_template_can_prefill_firmware_ref() {
+    let output =
+        run_hardware_validation(&["--evidence-template", "--firmware-ref-template", "v0.2.66"]);
+
+    assert!(
+        output.status.success(),
+        "hardware validation evidence template with firmware ref failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let generated: toml::Value = toml::from_str(&stdout).unwrap();
+    let template_entries = generated["evidence"].as_array().unwrap();
+    let manifest = hardware_validation_manifest_toml();
+    assert_eq!(
+        template_entries.len(),
+        manifest["checks"].as_array().unwrap().len()
+    );
+    assert!(
+        template_entries
+            .iter()
+            .all(|entry| entry["firmware_ref"].as_str() == Some("v0.2.66")),
+        "all template entries should prefill the requested firmware_ref"
+    );
+}
+
+#[test]
+fn hardware_validation_rejects_template_firmware_ref_without_template_output() {
+    let output = run_hardware_validation(&[
+        "--manifest",
+        "/tmp/lalapad-missing-hardware-validation.toml",
+        "--firmware-ref-template",
+        "v0.2.66",
+    ]);
+
+    assert!(
+        !output.status.success(),
+        "--firmware-ref-template without --evidence-template unexpectedly passed"
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("--firmware-ref-template can only be used with --evidence-template"),
+        "invalid firmware_ref template usage should explain the required output mode"
+    );
+    assert!(
+        !String::from_utf8_lossy(&output.stderr).contains("No such file"),
+        "invalid firmware_ref template usage should fail before reading manifest files"
+    );
+}
+
+#[test]
 fn hardware_validation_does_not_count_incomplete_validated_evidence() {
     let evidence = r#"
 [[evidence]]
@@ -691,6 +742,7 @@ fn local_validation_entrypoints_match_ci_gates() {
         "tools/hardware_validation.py --require-classified",
         "tools/hardware_validation.py --markdown",
         "tools/hardware_validation.py --evidence-template",
+        "tools/hardware_validation.py --evidence-template --firmware-ref-template <tag-or-commit>",
         "tools/hardware_validation.py --evidence path/to/evidence.toml --markdown",
         "tools/hardware_validation.py --evidence path/to/evidence.toml --require-validated --require-firmware-ref <tag-or-commit>",
         "tools/hardware_validation_manifest.toml",
@@ -709,6 +761,11 @@ fn local_validation_entrypoints_match_ci_gates() {
         HARDWARE_VALIDATION_EVIDENCE_EXAMPLE_TOML
             .contains("tools/hardware_validation.py --evidence path/to/evidence.toml --require-firmware-ref <tag-or-commit>"),
         "hardware evidence example should document overlay report usage"
+    );
+    assert!(
+        HARDWARE_VALIDATION_EVIDENCE_EXAMPLE_TOML
+            .contains("tools/hardware_validation.py --evidence-template --firmware-ref-template <tag-or-commit>"),
+        "hardware evidence example should document firmware_ref-prefilled template generation"
     );
 
     let manifest = hardware_validation_manifest_toml();

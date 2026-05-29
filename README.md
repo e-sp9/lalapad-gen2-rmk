@@ -199,8 +199,9 @@ during the test. Use `--require-firmware-ref <tag-or-commit>` to reject stale
 validated evidence; combine it with `--require-validated` when a release needs
 all hardware checks proven for that exact firmware. The `--evidence-template`
 command generates a complete local overlay file containing every current
-hardware check; generated `hardware-validation-evidence*.toml` files are
-ignored by default.
+hardware check; pass `--firmware-ref-template <tag-or-commit>` with it to
+pre-fill the flashed firmware reference in every entry. Generated
+`hardware-validation-evidence*.toml` files are ignored by default.
 
 Host-side parity tests can be run explicitly with:
 

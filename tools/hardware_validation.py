@@ -263,7 +263,7 @@ def toml_comment(value: Any) -> list[str]:
     return [f"# {line}" if line else "#" for line in lines]
 
 
-def as_evidence_template(manifest: dict[str, Any]) -> str:
+def as_evidence_template(manifest: dict[str, Any], firmware_ref: str = "") -> str:
     lines = [
         "# Hardware validation evidence overlay.",
         "# Fill this file after testing real hardware, then run:",
@@ -286,7 +286,7 @@ def as_evidence_template(manifest: dict[str, Any]) -> str:
             lines.append('status = "requires_hardware"')
             lines.append('validated_at = ""')
             lines.append('tester = ""')
-            lines.append('firmware_ref = ""')
+            lines.append(f"firmware_ref = {toml_string(firmware_ref)}")
             lines.append('artifact_or_notes = ""')
             lines.append("# Requirement:")
             lines.extend(toml_comment(check.get("requirement", "")))
@@ -387,6 +387,12 @@ def main() -> None:
         help="print an evidence overlay template containing every manifest check",
     )
     parser.add_argument(
+        "--firmware-ref-template",
+        default="",
+        metavar="REF",
+        help="pre-fill firmware_ref in --evidence-template output",
+    )
+    parser.add_argument(
         "--require-classified",
         action="store_true",
         help="fail if any hardware validation check is malformed or unclassified",
@@ -398,23 +404,27 @@ def main() -> None:
     )
     parser.add_argument(
         "--require-firmware-ref",
+        metavar="REF",
         help="fail if any validated hardware evidence was captured against a different firmware tag or commit",
     )
     args = parser.parse_args()
+
+    output_modes = sum(bool(mode) for mode in [args.json, args.markdown, args.evidence_template])
+    if output_modes > 1:
+        parser.error("--json, --markdown, and --evidence-template are mutually exclusive")
+    if args.firmware_ref_template and not args.evidence_template:
+        parser.error("--firmware-ref-template can only be used with --evidence-template")
 
     manifest, evidence_errors = merge_evidence(
         load_toml(args.manifest), [load_toml(path) for path in args.evidence]
     )
     summary = summarize(manifest, evidence_errors, Path("."), args.require_firmware_ref)
-    output_modes = sum(bool(mode) for mode in [args.json, args.markdown, args.evidence_template])
-    if output_modes > 1:
-        parser.error("--json, --markdown, and --evidence-template are mutually exclusive")
     if args.json:
         print(json.dumps(as_json(summary), indent=2, sort_keys=True))
     elif args.markdown:
         print(as_markdown(manifest, summary), end="")
     elif args.evidence_template:
-        print(as_evidence_template(manifest), end="")
+        print(as_evidence_template(manifest, args.firmware_ref_template), end="")
     else:
         print_text(summary)
 
