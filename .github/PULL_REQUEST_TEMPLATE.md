@@ -20,6 +20,7 @@
 - [ ] `python3 tools/porting_coverage.py --require-zmk-source --require-porting-complete`
 - [ ] `python3 tools/hardware_validation.py --require-classified`
 - [ ] `python3 tools/hardware_validation.py --markdown`
+- [ ] `python3 tools/hardware_validation.py --evidence-template`
 - [ ] `python3 tools/hardware_validation.py --evidence path/to/evidence.toml --markdown`, if hardware evidence changed
 - [ ] `cargo check --release --bin central`
 - [ ] `cargo check --release --bin peripheral`

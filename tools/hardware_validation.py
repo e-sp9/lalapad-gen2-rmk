@@ -179,6 +179,46 @@ def markdown_escape(value: Any) -> str:
     return str(value).replace("|", "\\|").replace("\n", " ")
 
 
+def toml_string(value: Any) -> str:
+    return json.dumps(str(value))
+
+
+def toml_comment(value: Any) -> list[str]:
+    lines = str(value).splitlines() or [""]
+    return [f"# {line}" if line else "#" for line in lines]
+
+
+def as_evidence_template(manifest: dict[str, Any]) -> str:
+    lines = [
+        "# Hardware validation evidence overlay.",
+        "# Fill this file after testing real hardware, then run:",
+        "#",
+        "#   python3 tools/hardware_validation.py --evidence path/to/evidence.toml --markdown",
+        "#   python3 tools/hardware_validation.py --evidence path/to/evidence.toml --require-validated",
+        "#",
+        "# Entries are keyed by id from tools/hardware_validation_manifest.toml.",
+        "# Change status to \"validated\" only when validated_at, tester, and artifact_or_notes are filled.",
+        "",
+    ]
+    checks = manifest.get("checks", [])
+    if isinstance(checks, list):
+        for check in checks:
+            if not isinstance(check, dict):
+                continue
+            lines.append("[[evidence]]")
+            lines.append(f"id = {toml_string(check.get('id', ''))}")
+            lines.append('status = "requires_hardware"')
+            lines.append('validated_at = ""')
+            lines.append('tester = ""')
+            lines.append('artifact_or_notes = ""')
+            lines.append("# Requirement:")
+            lines.extend(toml_comment(check.get("requirement", "")))
+            lines.append("# Required evidence:")
+            lines.extend(toml_comment(check.get("evidence", "")))
+            lines.append("")
+    return "\n".join(lines)
+
+
 def as_markdown(manifest: dict[str, Any], summary: HardwareValidationSummary) -> str:
     if summary.rate is None:
         headline = "Hardware validation: 0/0 = n/a"
@@ -264,6 +304,11 @@ def main() -> None:
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--markdown", action="store_true")
     parser.add_argument(
+        "--evidence-template",
+        action="store_true",
+        help="print an evidence overlay template containing every manifest check",
+    )
+    parser.add_argument(
         "--require-classified",
         action="store_true",
         help="fail if any hardware validation check is malformed or unclassified",
@@ -279,12 +324,15 @@ def main() -> None:
         load_toml(args.manifest), [load_toml(path) for path in args.evidence]
     )
     summary = summarize(manifest, evidence_errors)
-    if args.json and args.markdown:
-        parser.error("--json and --markdown are mutually exclusive")
+    output_modes = sum(bool(mode) for mode in [args.json, args.markdown, args.evidence_template])
+    if output_modes > 1:
+        parser.error("--json, --markdown, and --evidence-template are mutually exclusive")
     if args.json:
         print(json.dumps(as_json(summary), indent=2, sort_keys=True))
     elif args.markdown:
         print(as_markdown(manifest, summary), end="")
+    elif args.evidence_template:
+        print(as_evidence_template(manifest), end="")
     else:
         print_text(summary)
 

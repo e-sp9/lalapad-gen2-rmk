@@ -288,6 +288,7 @@ Run:
 ```sh
 python3 tools/hardware_validation.py --require-classified
 python3 tools/hardware_validation.py --markdown
+python3 tools/hardware_validation.py --evidence-template
 python3 tools/hardware_validation.py --evidence path/to/evidence.toml --markdown
 ```
 
@@ -301,4 +302,6 @@ and the GitHub Actions step summary. Hardware evidence can also be recorded in
 a separate overlay file using the format in
 `tools/hardware_validation_evidence.example.toml`; each evidence entry updates
 one manifest check by id and must provide `validated_at`, `tester`, and
-`artifact_or_notes` before it can count as `validated`.
+`artifact_or_notes` before it can count as `validated`. Use
+`--evidence-template > hardware-validation-evidence.local.toml` to generate a
+complete local overlay for all current hardware checks.

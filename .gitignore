@@ -2,6 +2,7 @@ target
 .venv-libclang
 .bindgen-headers
 .codex
+hardware-validation-evidence*.toml
 
 *.bin
 *.elf

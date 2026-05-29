@@ -333,6 +333,52 @@ artifact_or_notes = "I2C scan found 0x56 and product register 0x1000 read 0x09bc
 }
 
 #[test]
+fn hardware_validation_can_generate_complete_evidence_template() {
+    let output = run_hardware_validation(&["--evidence-template"]);
+
+    assert!(
+        output.status.success(),
+        "hardware validation evidence template generation failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let generated: toml::Value = toml::from_str(&stdout).unwrap();
+    let template_entries = generated["evidence"].as_array().unwrap();
+    let manifest = hardware_validation_manifest_toml();
+    let checks = manifest["checks"].as_array().unwrap();
+    assert_eq!(template_entries.len(), checks.len());
+    for check in checks {
+        let check_id = check["id"].as_str().unwrap();
+        let entry = template_entries
+            .iter()
+            .find(|entry| entry["id"].as_str() == Some(check_id))
+            .unwrap_or_else(|| panic!("evidence template missing {check_id}"));
+        assert_eq!(entry["status"].as_str(), Some("requires_hardware"));
+        assert_eq!(entry["validated_at"].as_str(), Some(""));
+        assert_eq!(entry["tester"].as_str(), Some(""));
+        assert_eq!(entry["artifact_or_notes"].as_str(), Some(""));
+        assert!(
+            stdout.contains(check["requirement"].as_str().unwrap()),
+            "evidence template should include requirement comments for {check_id}"
+        );
+    }
+
+    let path = write_temp_file("hardware-validation-template", &stdout);
+    let overlay_output = run_hardware_validation(&["--evidence", path.to_str().unwrap(), "--json"]);
+    let _ = std::fs::remove_file(&path);
+    assert!(
+        overlay_output.status.success(),
+        "generated evidence template should be a valid non-progress overlay\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&overlay_output.stdout),
+        String::from_utf8_lossy(&overlay_output.stderr)
+    );
+    let parsed: serde_json::Value = serde_json::from_slice(&overlay_output.stdout).unwrap();
+    assert_eq!(parsed["validated"].as_i64(), Some(0));
+    assert_eq!(parsed["classified"].as_bool(), Some(true));
+}
+
+#[test]
 fn hardware_validation_does_not_count_incomplete_validated_evidence() {
     let evidence = r#"
 [[evidence]]
@@ -426,10 +472,20 @@ fn local_validation_entrypoints_match_ci_gates() {
             && MAKEFILE_TOML.contains("--markdown"),
         "Makefile.toml should expose a hardware validation markdown report"
     );
+    assert!(
+        MAKEFILE_TOML.contains("[tasks.hardware-validation-evidence-template]")
+            && MAKEFILE_TOML.contains("--evidence-template"),
+        "Makefile.toml should expose a full hardware evidence template generator"
+    );
+    assert!(
+        include_str!("../.gitignore").contains("hardware-validation-evidence*.toml"),
+        "local generated hardware evidence overlays should be ignored by default"
+    );
     for required in [
         "--require-porting-complete",
         "tools/hardware_validation.py --require-classified",
         "tools/hardware_validation.py --markdown",
+        "tools/hardware_validation.py --evidence-template",
         "tools/hardware_validation.py --evidence path/to/evidence.toml --markdown",
         "tools/hardware_validation_manifest.toml",
         "tools/hardware_validation_evidence.example.toml",

@@ -29,6 +29,10 @@ args = ["tools/hardware_validation.py", "--require-classified"]
 command = "python3"
 args = ["tools/hardware_validation.py", "--markdown"]
 
+[tasks.hardware-validation-evidence-template]
+command = "python3"
+args = ["tools/hardware_validation.py", "--evidence-template"]
+
 [tasks.firmware-dirs]
 command = "mkdir"
 args = ["-p", "firmware/normal", "firmware/reset", "firmware/hex"]

@@ -118,6 +118,7 @@ rmkit get-project-name --keyboard-toml-path keyboard.toml
 python3 tools/porting_coverage.py --require-zmk-source --require-porting-complete
 python3 tools/hardware_validation.py --require-classified
 python3 tools/hardware_validation.py --markdown
+python3 tools/hardware_validation.py --evidence-template
 python3 tools/check_flash_layout.py --config-only
 cargo check --release --bin central
 cargo check --release --bin peripheral
@@ -127,7 +128,8 @@ cargo build --release
 When real hardware evidence changed, also run:
 
 ```shell
-python3 tools/hardware_validation.py --evidence path/to/evidence.toml --markdown
+python3 tools/hardware_validation.py --evidence-template > hardware-validation-evidence.local.toml
+python3 tools/hardware_validation.py --evidence hardware-validation-evidence.local.toml --markdown
 ```
 
 `tools/porting_coverage.py` reads `tools/porting_coverage_manifest.toml` and,
@@ -188,7 +190,10 @@ step summary so remaining real-device evidence is visible next to each release
 build. Real hardware results can be kept in a separate overlay file using the
 format shown in `tools/hardware_validation_evidence.example.toml` and passed
 with `--evidence path/to/evidence.toml`; this lets the manifest remain the
-stable requirement list while measured evidence drives the validation rate.
+stable requirement list while measured evidence drives the validation rate. The
+`--evidence-template` command generates a complete local overlay file containing
+every current hardware check; generated `hardware-validation-evidence*.toml`
+files are ignored by default.
 
 Host-side parity tests can be run explicitly with:
 
