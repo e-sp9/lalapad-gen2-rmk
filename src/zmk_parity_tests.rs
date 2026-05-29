@@ -1489,6 +1489,7 @@ manifest = {
                 "codes=<INPUT_REL_X INPUT_REL_Y>",
                 "scale-group=<ZDS_XY>",
                 "track-remainders",
+                "device=<&iqs9151>",
             ],
         }],
     },
@@ -1507,6 +1508,7 @@ with tempfile.TemporaryDirectory() as tempdir:
         codes = <INPUT_REL_X INPUT_REL_Y>;
         scale-group = <ZDS_XY>;
         track-remainders;
+        device = <&iqs9151>;
         child { type = <SHOULD_NOT_BE_COLLECTED>; };
     };
     ''')
@@ -1520,6 +1522,7 @@ with tempfile.TemporaryDirectory() as tempdir:
         scale-group = <ZDS_SC>;
         track-remainders;
         extra-prop;
+        device = <&trackpad_split_R>;
     };
     ''')
     changed = pack(pc.check_zmk_dts_property_inventory(manifest, root))
@@ -1552,14 +1555,14 @@ print(json.dumps({
     let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     let ok_inventory = &parsed["ok"][0];
     assert_eq!(ok_inventory["kind"], "zmk_inventory");
-    assert_eq!(ok_inventory["passed"].as_i64(), Some(5));
-    assert_eq!(ok_inventory["total"].as_i64(), Some(5));
+    assert_eq!(ok_inventory["passed"].as_i64(), Some(6));
+    assert_eq!(ok_inventory["total"].as_i64(), Some(6));
     assert_eq!(ok_inventory["ok"], true);
 
     let changed_inventory = &parsed["changed"][0];
     assert_eq!(changed_inventory["kind"], "zmk_inventory");
     assert_eq!(changed_inventory["passed"].as_i64(), Some(3));
-    assert_eq!(changed_inventory["total"].as_i64(), Some(6));
+    assert_eq!(changed_inventory["total"].as_i64(), Some(7));
     assert_eq!(changed_inventory["ok"], false);
     assert!(
         changed_inventory["message"]
@@ -1571,7 +1574,7 @@ print(json.dumps({
     let missing_block_inventory = &parsed["missing_block"][0];
     assert_eq!(missing_block_inventory["kind"], "zmk_inventory");
     assert_eq!(missing_block_inventory["passed"].as_i64(), Some(0));
-    assert_eq!(missing_block_inventory["total"].as_i64(), Some(5));
+    assert_eq!(missing_block_inventory["total"].as_i64(), Some(6));
     assert_eq!(missing_block_inventory["ok"], false);
     assert!(
         missing_block_inventory["message"]
@@ -1583,7 +1586,7 @@ print(json.dumps({
     let missing_file_inventory = &parsed["missing_file"][0];
     assert_eq!(missing_file_inventory["kind"], "zmk_inventory");
     assert_eq!(missing_file_inventory["passed"].as_i64(), Some(0));
-    assert_eq!(missing_file_inventory["total"].as_i64(), Some(5));
+    assert_eq!(missing_file_inventory["total"].as_i64(), Some(6));
     assert_eq!(missing_file_inventory["ok"], false);
     assert!(
         missing_file_inventory["message"]

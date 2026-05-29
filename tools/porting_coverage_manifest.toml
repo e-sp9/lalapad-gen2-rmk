@@ -139,6 +139,11 @@ dts_properties = [
   { source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi", source_block = "trackpad_split_L", expected = ["compatible=\"zmk,input-split\"", "reg=<1>"] },
   { source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi", source_block = "zip_dynamic_xy_scaler", expected = ["compatible=\"zmk,input-processor-dynamic-scaler\"", "#input-processor-cells=<0>", "type=<INPUT_EV_REL>", "codes=<INPUT_REL_X INPUT_REL_Y>", "scale-group=<ZDS_XY>", "track-remainders"] },
   { source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi", source_block = "zip_dynamic_scroll_scaler", expected = ["compatible=\"zmk,input-processor-dynamic-scaler\"", "#input-processor-cells=<0>", "type=<INPUT_EV_REL>", "codes=<INPUT_REL_WHEEL INPUT_REL_HWHEEL>", "scale-group=<ZDS_SC>", "track-remainders"] },
+  { source_file = "boards/shields/lalapadgen2/lalapadgen2_right.overlay", source_block = "&default_transform", expected = ["col-offset=<6>"] },
+  { source_file = "boards/shields/lalapadgen2/lalapadgen2_right.overlay", source_block = "&trackpad_listener_R", expected = ["status=\"okay\"", "device=<&iqs9151>"] },
+  { source_file = "boards/shields/lalapadgen2/lalapadgen2_right.overlay", source_block = "&trackpad_listener_L", expected = ["status=\"okay\""] },
+  { source_file = "boards/shields/lalapadgen2/lalapadgen2_left.overlay", source_block = "&trackpad_split_L", expected = ["status=\"okay\"", "device=<&iqs9151>"] },
+  { source_file = "boards/shields/lalapadgen2/lalapadgen2_left.overlay", source_block = "&trackpad_split_R", expected = ["status=\"disabled\"", "device=<&iqs9151>"] },
 ]
 gpio_properties = [
   { source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi", source_block = "kscan0", source_property = "row-gpios", expected = ["xiao_d:10:GPIO_ACTIVE_HIGH|GPIO_PULL_DOWN", "xiao_d:9:GPIO_ACTIVE_HIGH|GPIO_PULL_DOWN", "xiao_d:8:GPIO_ACTIVE_HIGH|GPIO_PULL_DOWN", "xiao_d:7:GPIO_ACTIVE_HIGH|GPIO_PULL_DOWN", "gpio1:1:GPIO_ACTIVE_HIGH|GPIO_PULL_DOWN"] },
