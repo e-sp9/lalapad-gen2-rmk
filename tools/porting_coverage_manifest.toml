@@ -371,6 +371,8 @@ input_listeners = [
 ]
 dts_properties = [
   { source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi", source_block = "kscan0", expected = ["compatible=\"zmk,kscan-gpio-matrix\"", "wakeup-source", "diode-direction=\"col2row\"", "row-gpios=<&xiao_d 10 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)> , <&xiao_d 9 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)> , <&xiao_d 8 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)> , <&xiao_d 7 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)> , <&gpio1 1 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>"] },
+  { source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi", source_block = "split_inputs_R", expected = ["#address-cells=<1>", "#size-cells=<0>"] },
+  { source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi", source_block = "split_inputs_L", expected = ["#address-cells=<1>", "#size-cells=<0>"] },
   { source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi", source_block = "trackpad_split_R", expected = ["compatible=\"zmk,input-split\"", "reg=<0>"] },
   { source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi", source_block = "trackpad_split_L", expected = ["compatible=\"zmk,input-split\"", "reg=<1>"] },
   { source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi", source_block = "tp_to_pos", expected = ["compatible=\"zmk,behavior-trackpad-to-pos\"", "#binding-cells=<1>"] },

@@ -138,7 +138,8 @@ active and disabled Kconfig lines, Kconfig shield/default entries, DTS aliases,
 west module inventory, ZMK trackpad virtual-position
 defines, RMK custom keycode order, ZMK `INPUT_BTN_*` to virtual-position
 bindings, ZMK trackpad-to-position behavior and input-processor properties, ZMK
-trackpad listener device and normal/low-speed input-processor chains, selected
+split-input container properties, ZMK trackpad listener device and
+normal/low-speed input-processor chains, selected
 ZMK DTS properties for split input, dynamic scaling, right-half column offset,
 and overlay trackpad routing overrides, ZMK GPIO pin flags, the ZMK DTS/overlay
 status-node inventory, exact RMK keymap array shape, and the exact RMK combo
