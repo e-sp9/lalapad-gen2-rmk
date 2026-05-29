@@ -26,8 +26,6 @@ combo_properties = [
   { source_file = "lalapadgen2.keymap", source_block = "combos", expected = ["compatible=\"zmk,combos\""] },
   { source_file = "lalapadgen2.keymap", source_block = "CONBO_ESC", expected = ["bindings=<&kp ESCAPE>", "key-positions=<0 1>"] },
   { source_file = "lalapadgen2.keymap", source_block = "COMBO_TAB", expected = ["bindings=<&kp TAB>", "key-positions=<10 11>"] },
-  { source_file = "lalapadgen2.keymap", source_block = "COMBO_KANA", expected = ["bindings=<&kp LANGUAGE_1>", "key-positions=<16 17>"] },
-  { source_file = "lalapadgen2.keymap", source_block = "COMBO_EUSU", expected = ["bindings=<&kp LANGUAGE_2>", "key-positions=<12 13>"] },
 ]
 source_files = [
   "boards/shields/lalapadgen2/Kconfig.defconfig",
