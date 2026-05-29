@@ -521,6 +521,10 @@ vial_allowed_no_action_positions = [
   { row = 4, col = 1 },
   { row = 4, col = 10 },
 ]
+vial_thumb_layer_taps = [
+  { id = "space", row = 3, col = 4, expected_action = "LT(1, Space, FAST_LAYER)", tap = "Space", activates_layer = 1, profile = "FAST_LAYER" },
+  { id = "enter", row = 3, col = 7, expected_action = "LT(2, Enter, FAST_LAYER)", tap = "Enter", activates_layer = 2, profile = "FAST_LAYER" },
+]
 vial_user_key_semantics = [
   { key = "User0", name = "BT0", handler_needles = ["id < NUM_BLE_PROFILE as u8", "SwitchProfile(id)"] },
   { key = "User1", name = "BT1", handler_needles = ["id < NUM_BLE_PROFILE as u8", "SwitchProfile(id)"] },

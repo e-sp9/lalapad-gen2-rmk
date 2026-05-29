@@ -316,6 +316,11 @@ hardware-only requirements cannot be removed, renamed, or reclassified to
 manufacture a smaller final-validation denominator.
 It is intended to prevent regressions like a visible `LT(...)` binding whose
 tap-hold behavior is changed by RMK's global flow-tap setting.
+The Vial/RMK layout gate also pins the Space and Enter thumb positions as
+visible Vial keys whose compiled default actions are `LT(1, Space, FAST_LAYER)`
+and `LT(2, Enter, FAST_LAYER)`, including the tap key, hold layer, and Morse
+profile name. This makes a later move back to `LCtrl`, `MO(...)`, or a hidden
+Vial position visible as a software migration failure before flashing.
 
 `tools/migration_status.py` is the combined dashboard for release review. It
 runs the same source-backed software checks, the coverage-denominator baseline,

@@ -286,6 +286,17 @@ def hold_action_layer(action: str) -> int | None:
     return None
 
 
+def layer_tap_parts(action: str) -> tuple[int | None, str | None, str | None]:
+    if not action.startswith("LT("):
+        return None, None, None
+    inside = action.removeprefix("LT(").removesuffix(")")
+    pieces = [piece.strip() for piece in inside.split(",")]
+    layer = int(pieces[0]) if pieces and pieces[0].isdigit() else None
+    tap = pieces[1] if len(pieces) >= 2 else None
+    profile = pieces[2] if len(pieces) >= 3 else None
+    return layer, tap, profile
+
+
 def check_hold_declared_layer(
     hold: dict[str, Any],
     action: str,
@@ -4147,6 +4158,70 @@ def check_vial_keyboard_toml_layout(
             "ok" if not exact_mismatches else "; ".join(exact_mismatches[:8]),
         )
     )
+    results.extend(check_vial_thumb_layer_taps(manifest, config, actual_positions))
+    return results
+
+
+def check_vial_thumb_layer_taps(
+    manifest: dict[str, Any],
+    config: dict[str, Any],
+    vial_positions: list[tuple[int, int]],
+) -> list[Result]:
+    results: list[Result] = []
+    km = keymap(config)
+    actual_position_set = set(vial_positions)
+    for entry in manifest.get("layout", {}).get("vial_thumb_layer_taps", []):
+        row = int(entry["row"])
+        col = int(entry["col"])
+        expected_action = str(entry["expected_action"])
+        expected_layer = int(entry["activates_layer"])
+        expected_tap = str(entry["tap"])
+        expected_profile = str(entry["profile"])
+        actual_action = (
+            km[0][row][col]
+            if 0 <= row < len(km[0]) and 0 <= col < len(km[0][row])
+            else None
+        )
+        actual_layer, actual_tap, actual_profile = (
+            layer_tap_parts(actual_action) if isinstance(actual_action, str) else (None, None, None)
+        )
+        checks = [
+            (
+                "Vial position",
+                (row, col) in actual_position_set,
+                f"Vial layout missing {(row, col)!r}",
+            ),
+            (
+                "action",
+                actual_action == expected_action,
+                f"action expected {expected_action!r}, got {actual_action!r}",
+            ),
+            (
+                "tap",
+                actual_tap == expected_tap,
+                f"tap expected {expected_tap!r}, got {actual_tap!r}",
+            ),
+            (
+                "layer",
+                actual_layer == expected_layer,
+                f"hold layer expected {expected_layer}, got {actual_layer!r}",
+            ),
+            (
+                "profile",
+                actual_profile == expected_profile,
+                f"profile expected {expected_profile!r}, got {actual_profile!r}",
+            ),
+        ]
+        messages = [message for _, ok, message in checks if not ok]
+        results.append(
+            Result(
+                f"vial_thumb_layer_tap.{entry['id']}",
+                "vial",
+                len(checks) - len(messages),
+                len(checks),
+                "ok" if not messages else "; ".join(messages),
+            )
+        )
     return results
 
 

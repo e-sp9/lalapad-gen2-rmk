@@ -165,6 +165,7 @@ fn porting_coverage_complete_gate_accepts_explicit_status_completion() {
     assert!(stdout.contains("- scenario:"));
     assert!(stdout.contains("- split: 100/100 = 100.00%"));
     assert!(stdout.contains("- trackpad_virtual: 66/66 = 100.00%"));
+    assert!(stdout.contains("- vial: 331/331 = 100.00%"));
     assert!(stdout.contains("- vial_user_key_semantics: 57/57 = 100.00%"));
     assert!(stdout.contains("- zmk_source_cell:"));
     assert!(stdout.contains("Porting status: 69/69 = 100.00% implemented"));
@@ -252,8 +253,8 @@ ported = 1
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("porting coverage baseline drift:"));
-    assert!(stderr.contains("coverage.total: expected baseline 1, got 3043"));
-    assert!(stderr.contains("coverage.result_count: expected baseline 1, got 499"));
+    assert!(stderr.contains("coverage.total: expected baseline 1, got 3053"));
+    assert!(stderr.contains("coverage.result_count: expected baseline 1, got 501"));
     assert!(stderr.contains("coverage.result_inventory_sha256: expected baseline bad"));
     assert!(
         stderr.contains("coverage.by_kind.behavior: actual report kind is missing from baseline")
@@ -532,7 +533,7 @@ fn migration_status_combines_software_and_hardware_progress() {
     );
     let stdout = String::from_utf8_lossy(&markdown.stdout);
     assert!(stdout.contains("## RMK Migration Status"));
-    assert!(stdout.contains("| Software coverage | 3043 | 3043 | 100.00% |"));
+    assert!(stdout.contains("| Software coverage | 3053 | 3053 | 100.00% |"));
     assert!(stdout.contains("### Hardware Progress By Area"));
     assert!(stdout.contains("| trackpad | 0 | 7 | 0.00% |"));
     assert!(stdout.contains("### Hardware Progress By Side"));
@@ -545,7 +546,7 @@ fn migration_status_combines_software_and_hardware_progress() {
 fn migration_status_rejects_coverage_baseline_drift() {
     let bad_baseline = r#"
 [coverage]
-passed = 3043
+passed = 3053
 total = 1
 result_count = 1
 result_inventory_sha256 = "bad"
@@ -582,8 +583,8 @@ ported_by_config_image = 6
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("Software failures:"));
-    assert!(stdout.contains("coverage.total: expected baseline 1, got 3043"));
-    assert!(stdout.contains("coverage.result_count: expected baseline 1, got 499"));
+    assert!(stdout.contains("coverage.total: expected baseline 1, got 3053"));
+    assert!(stdout.contains("coverage.result_count: expected baseline 1, got 501"));
     assert!(stdout.contains("coverage.result_inventory_sha256: expected baseline bad"));
 }
 
@@ -3632,6 +3633,114 @@ print(json.dumps({
             .as_str()
             .unwrap()
             .contains("unexpected Vial positions [(0, 5)]")
+    );
+}
+
+#[test]
+fn porting_coverage_rejects_vial_thumb_layer_tap_semantic_drift() {
+    let output = run_python(
+        r#"
+import copy
+import importlib.util
+import json
+import sys
+import tempfile
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("porting_coverage", "tools/porting_coverage.py")
+pc = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = pc
+spec.loader.exec_module(pc)
+
+manifest = pc.load_toml(Path("tools/porting_coverage_manifest.toml"))
+keyboard = pc.load_toml(Path("keyboard.toml"))
+vial = pc.load_json(Path("vial.json"))
+
+with tempfile.TemporaryDirectory() as ok_dir:
+    Path(ok_dir, "vial.json").write_text(json.dumps(vial), encoding="utf-8")
+    ok = pc.check_vial_keyboard_toml_layout(manifest, keyboard, Path(ok_dir))
+
+bad_space_keyboard = copy.deepcopy(keyboard)
+bad_space_keyboard["layout"]["keymap"][0][3][4] = "LCtrl"
+with tempfile.TemporaryDirectory() as bad_space_dir:
+    Path(bad_space_dir, "vial.json").write_text(json.dumps(vial), encoding="utf-8")
+    bad_space = pc.check_vial_keyboard_toml_layout(manifest, bad_space_keyboard, Path(bad_space_dir))
+
+bad_enter_vial = copy.deepcopy(vial)
+bad_enter_vial["layouts"]["keymap"][3][7] = "3,6"
+with tempfile.TemporaryDirectory() as bad_enter_dir:
+    Path(bad_enter_dir, "vial.json").write_text(json.dumps(bad_enter_vial), encoding="utf-8")
+    bad_enter = pc.check_vial_keyboard_toml_layout(manifest, keyboard, Path(bad_enter_dir))
+
+def pack(results):
+    return [result.__dict__ | {"ok": result.ok} for result in results]
+
+print(json.dumps({
+    "ok": pack(ok),
+    "bad_space": pack(bad_space),
+    "bad_enter": pack(bad_enter),
+}))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "Vial thumb layer-tap semantic check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let ok_space = parsed["ok"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "vial_thumb_layer_tap.space")
+        .expect("Space thumb layer-tap result is missing");
+    assert_eq!(ok_space["kind"], "vial");
+    assert_eq!(ok_space["passed"].as_i64(), Some(5));
+    assert_eq!(ok_space["total"].as_i64(), Some(5));
+    assert_eq!(ok_space["ok"], true);
+
+    let ok_enter = parsed["ok"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "vial_thumb_layer_tap.enter")
+        .expect("Enter thumb layer-tap result is missing");
+    assert_eq!(ok_enter["passed"].as_i64(), Some(5));
+    assert_eq!(ok_enter["total"].as_i64(), Some(5));
+    assert_eq!(ok_enter["ok"], true);
+
+    let bad_space = parsed["bad_space"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "vial_thumb_layer_tap.space")
+        .expect("changed Space thumb layer-tap result is missing");
+    assert_eq!(bad_space["kind"], "vial");
+    assert_eq!(bad_space["passed"].as_i64(), Some(1));
+    assert_eq!(bad_space["total"].as_i64(), Some(5));
+    assert_eq!(bad_space["ok"], false);
+    let bad_space_message = bad_space["message"].as_str().unwrap();
+    assert!(bad_space_message.contains("action expected 'LT(1, Space, FAST_LAYER)', got 'LCtrl'"));
+    assert!(bad_space_message.contains("hold layer expected 1, got None"));
+
+    let bad_enter = parsed["bad_enter"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "vial_thumb_layer_tap.enter")
+        .expect("changed Enter thumb layer-tap result is missing");
+    assert_eq!(bad_enter["kind"], "vial");
+    assert_eq!(bad_enter["passed"].as_i64(), Some(4));
+    assert_eq!(bad_enter["total"].as_i64(), Some(5));
+    assert_eq!(bad_enter["ok"], false);
+    assert!(
+        bad_enter["message"]
+            .as_str()
+            .unwrap()
+            .contains("Vial layout missing (3, 7)")
     );
 }
 
