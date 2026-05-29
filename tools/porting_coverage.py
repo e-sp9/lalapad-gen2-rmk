@@ -2090,6 +2090,98 @@ def check_zmk_workflow_file_inventory(
     return results
 
 
+def compact_json_value(value: Any) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"))
+
+
+def zmk_json_file_inventory(value: dict[str, Any]) -> list[str]:
+    items: list[str] = []
+    known_top_level = {"id", "name", "layouts", "sensors"}
+
+    if "id" in value:
+        items.append(f"json.id={value['id']}")
+    if "name" in value:
+        items.append(f"json.name={value['name']}")
+
+    layouts = value.get("layouts", {})
+    if isinstance(layouts, dict):
+        layout_names = sorted(layouts)
+        items.append(f"json.layouts={','.join(layout_names)}")
+        for layout_name in layout_names:
+            layout = layouts[layout_name]
+            if not isinstance(layout, dict):
+                items.append(f"json.layouts.{layout_name}={compact_json_value(layout)}")
+                continue
+            if "name" in layout:
+                items.append(f"json.layouts.{layout_name}.name={layout['name']}")
+            if "layout" in layout:
+                layout_value = layout["layout"]
+                if isinstance(layout_value, list):
+                    items.append(f"json.layouts.{layout_name}.layout_count={len(layout_value)}")
+                else:
+                    items.append(
+                        f"json.layouts.{layout_name}.layout={compact_json_value(layout_value)}"
+                    )
+            for key in sorted(set(layout) - {"name", "layout"}):
+                items.append(f"json.layouts.{layout_name}.{key}={compact_json_value(layout[key])}")
+    elif "layouts" in value:
+        items.append(f"json.layouts={compact_json_value(layouts)}")
+
+    if "sensors" in value:
+        items.append(f"json.sensors={compact_json_value(value['sensors'])}")
+
+    for key in sorted(set(value) - known_top_level):
+        items.append(f"json.top_level.{key}={compact_json_value(value[key])}")
+    return items
+
+
+def check_zmk_json_file_inventory(manifest: dict[str, Any], zmk_config_dir: Path) -> list[Result]:
+    results: list[Result] = []
+    for check in manifest.get("source_inventory", {}).get("json_files", []):
+        source_file = check["source_file"]
+        expected = list(check["expected"])
+        source_path = zmk_config_dir / source_file
+        result_id = f"zmk_source.json_file_inventory.{source_file}"
+        if not source_path.exists():
+            results.append(
+                Result(
+                    result_id,
+                    "zmk_inventory",
+                    0,
+                    max(1, len(expected)),
+                    f"missing ZMK JSON source file {source_file!r}",
+                )
+            )
+            continue
+        try:
+            source_json = load_json(source_path)
+        except json.JSONDecodeError as e:
+            results.append(
+                Result(
+                    result_id,
+                    "zmk_inventory",
+                    0,
+                    max(1, len(expected)),
+                    f"invalid ZMK JSON source file {source_file!r}: {e}",
+                )
+            )
+            continue
+        if not isinstance(source_json, dict):
+            results.append(
+                Result(
+                    result_id,
+                    "zmk_inventory",
+                    0,
+                    max(1, len(expected)),
+                    f"ZMK JSON source file {source_file!r} must contain an object at the root",
+                )
+            )
+            continue
+        actual = zmk_json_file_inventory(source_json)
+        results.append(ordered_inventory_result(result_id, "zmk_inventory", expected, actual))
+    return results
+
+
 def check_zmk_dts_status_inventory(manifest: dict[str, Any], zmk_config_dir: Path) -> list[Result]:
     inventory = manifest.get("source_inventory", {})
     results: list[Result] = []
@@ -2705,6 +2797,7 @@ def check_zmk_source(
     results.extend(check_west_manifest_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_build_file_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_workflow_file_inventory(manifest, zmk_config_dir))
+    results.extend(check_zmk_json_file_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_config_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_dts_status_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_pin_values(manifest, keyboard, zmk_config_dir))

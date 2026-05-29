@@ -207,9 +207,9 @@ upstream ZMK layout JSON, verifies that ZMK's `default_transform` matrix map
 matches that same layout order, confirms the active ZMK physical layout points
 at that transform, checks the ZMK physical-layout key attributes, checks the ZMK
 repo-level and config source-file inventories, checks the upstream ZMK workflow
-and build-matrix files, checks the ZMK keymap layer and behavior inventories,
-checks ZMK behavior-node and combo-node property inventories, checks ZMK
-`#include` dependencies, checks the ZMK
+and build-matrix files, checks ZMK layout JSON metadata, checks the ZMK keymap
+layer and behavior inventories, checks ZMK behavior-node and combo-node
+property inventories, checks ZMK `#include` dependencies, checks the ZMK
 `Kconfig.*` shield/default entries, checks the `west.yml` ZMK module inventory,
 checks the ZMK trackpad virtual-position `#define` inventory, checks the ZMK
 `INPUT_BTN_*` to virtual-position binding inventory, checks the ZMK

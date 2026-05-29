@@ -34,6 +34,9 @@ build_files = [
 workflow_files = [
   { source_file = "../.github/workflows/build.yml", expected = ["workflow.name=Build ZMK firmware", "workflow.on=push,pull_request,workflow_dispatch", "workflow.jobs.build.uses=zmkfirmware/zmk/.github/workflows/build-user-config.yml@v0.3"] },
 ]
+json_files = [
+  { source_file = "lalapadgen2.json", expected = ["json.id=lalapadgen2", "json.name=lalapadgen2", "json.layouts=default_layout", "json.layouts.default_layout.name=default_layout", "json.layouts.default_layout.layout_count=68", "json.sensors=[]"] },
+]
 source_files = [
   "boards/shields/lalapadgen2/Kconfig.defconfig",
   "boards/shields/lalapadgen2/Kconfig.shield",

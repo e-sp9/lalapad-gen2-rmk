@@ -555,6 +555,26 @@ fn porting_coverage_includes_exact_rmk_inventory_gates() {
             assert_eq!(workflow_inventory["total"].as_i64(), Some(expected_items));
             assert_eq!(workflow_inventory["ok"], true);
         }
+
+        for json_file in porting_coverage_manifest_toml()["source_inventory"]["json_files"]
+            .as_array()
+            .unwrap()
+        {
+            let source_file = json_file["source_file"].as_str().unwrap();
+            let expected_items = json_file["expected"].as_array().unwrap().len() as i64;
+            let json_inventory = results
+                .iter()
+                .find(|result| {
+                    result["id"] == format!("zmk_source.json_file_inventory.{source_file}")
+                })
+                .unwrap_or_else(|| {
+                    panic!("ZMK JSON file inventory coverage result is missing for {source_file}")
+                });
+            assert_eq!(json_inventory["kind"], "zmk_inventory");
+            assert_eq!(json_inventory["passed"].as_i64(), Some(expected_items));
+            assert_eq!(json_inventory["total"].as_i64(), Some(expected_items));
+            assert_eq!(json_inventory["ok"], true);
+        }
     }
 }
 
@@ -2954,6 +2974,178 @@ print(json.dumps({
             .as_str()
             .unwrap()
             .contains("missing ZMK workflow source file")
+    );
+}
+
+#[test]
+fn porting_coverage_rejects_unclassified_zmk_json_files() {
+    let output = run_python(
+        r#"
+import importlib.util
+import json
+import sys
+import tempfile
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("porting_coverage", "tools/porting_coverage.py")
+pc = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = pc
+spec.loader.exec_module(pc)
+
+manifest = {
+    "source_inventory": {
+        "json_files": [{
+            "source_file": "lalapadgen2.json",
+            "expected": [
+                "json.id=lalapadgen2",
+                "json.name=lalapadgen2",
+                "json.layouts=default_layout",
+                "json.layouts.default_layout.name=default_layout",
+                "json.layouts.default_layout.layout_count=2",
+                "json.sensors=[]",
+            ],
+        }],
+    },
+}
+
+def layout(extra_top=None, sensors=None):
+    value = {
+        "id": "lalapadgen2",
+        "name": "lalapadgen2",
+        "layouts": {
+            "default_layout": {
+                "name": "default_layout",
+                "layout": [
+                    {"row": 0, "col": 0, "x": 0, "y": 0},
+                    {"row": 0, "col": 1, "x": 1, "y": 0},
+                ],
+            },
+        },
+        "sensors": [] if sensors is None else sensors,
+    }
+    if extra_top:
+        value.update(extra_top)
+    return json.dumps(value)
+
+def pack(results):
+    return [result.__dict__ | {"ok": result.ok} for result in results]
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    fixture = root / "lalapadgen2.json"
+    fixture.write_text(layout())
+    ok = pack(pc.check_zmk_json_file_inventory(manifest, root))
+    changed_name = json.loads(layout())
+    changed_name["layouts"]["default_layout"]["name"] = "renamed_layout"
+    fixture.write_text(json.dumps(changed_name))
+    changed = pack(pc.check_zmk_json_file_inventory(manifest, root))
+    fixture.write_text(layout(extra_top={"notes": "drift"}))
+    extra_top = pack(pc.check_zmk_json_file_inventory(manifest, root))
+    fixture.write_text(layout(sensors=[{"label": "encoder"}]))
+    sensor_drift = pack(pc.check_zmk_json_file_inventory(manifest, root))
+    fixture.write_text("{")
+    invalid_json = pack(pc.check_zmk_json_file_inventory(manifest, root))
+    fixture.write_text("[]")
+    invalid_root = pack(pc.check_zmk_json_file_inventory(manifest, root))
+    fixture.unlink()
+    missing_file = pack(pc.check_zmk_json_file_inventory(manifest, root))
+
+print(json.dumps({
+    "ok": ok,
+    "changed": changed,
+    "extra_top": extra_top,
+    "sensor_drift": sensor_drift,
+    "invalid_json": invalid_json,
+    "invalid_root": invalid_root,
+    "missing_file": missing_file,
+}))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "ZMK JSON inventory parser check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let ok_inventory = &parsed["ok"][0];
+    assert_eq!(ok_inventory["kind"], "zmk_inventory");
+    assert_eq!(ok_inventory["passed"].as_i64(), Some(6));
+    assert_eq!(ok_inventory["total"].as_i64(), Some(6));
+    assert_eq!(ok_inventory["ok"], true);
+
+    let changed_inventory = &parsed["changed"][0];
+    assert_eq!(changed_inventory["kind"], "zmk_inventory");
+    assert_eq!(changed_inventory["passed"].as_i64(), Some(5));
+    assert_eq!(changed_inventory["total"].as_i64(), Some(6));
+    assert_eq!(changed_inventory["ok"], false);
+    assert!(
+        changed_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("renamed_layout")
+    );
+
+    let extra_top_inventory = &parsed["extra_top"][0];
+    assert_eq!(extra_top_inventory["kind"], "zmk_inventory");
+    assert_eq!(extra_top_inventory["passed"].as_i64(), Some(6));
+    assert_eq!(extra_top_inventory["total"].as_i64(), Some(7));
+    assert_eq!(extra_top_inventory["ok"], false);
+    assert!(
+        extra_top_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("json.top_level.notes")
+    );
+
+    let sensor_drift_inventory = &parsed["sensor_drift"][0];
+    assert_eq!(sensor_drift_inventory["kind"], "zmk_inventory");
+    assert_eq!(sensor_drift_inventory["passed"].as_i64(), Some(5));
+    assert_eq!(sensor_drift_inventory["total"].as_i64(), Some(6));
+    assert_eq!(sensor_drift_inventory["ok"], false);
+    assert!(
+        sensor_drift_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("encoder")
+    );
+
+    let invalid_json_inventory = &parsed["invalid_json"][0];
+    assert_eq!(invalid_json_inventory["kind"], "zmk_inventory");
+    assert_eq!(invalid_json_inventory["passed"].as_i64(), Some(0));
+    assert_eq!(invalid_json_inventory["total"].as_i64(), Some(6));
+    assert_eq!(invalid_json_inventory["ok"], false);
+    assert!(
+        invalid_json_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("invalid ZMK JSON source file")
+    );
+
+    let invalid_root_inventory = &parsed["invalid_root"][0];
+    assert_eq!(invalid_root_inventory["kind"], "zmk_inventory");
+    assert_eq!(invalid_root_inventory["passed"].as_i64(), Some(0));
+    assert_eq!(invalid_root_inventory["total"].as_i64(), Some(6));
+    assert_eq!(invalid_root_inventory["ok"], false);
+    assert!(
+        invalid_root_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("must contain an object at the root")
+    );
+
+    let missing_file_inventory = &parsed["missing_file"][0];
+    assert_eq!(missing_file_inventory["kind"], "zmk_inventory");
+    assert_eq!(missing_file_inventory["passed"].as_i64(), Some(0));
+    assert_eq!(missing_file_inventory["total"].as_i64(), Some(6));
+    assert_eq!(missing_file_inventory["ok"], false);
+    assert!(
+        missing_file_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("missing ZMK JSON source file")
     );
 }
 
