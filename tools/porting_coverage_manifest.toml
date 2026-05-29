@@ -51,6 +51,9 @@ kconfig_entries = [
   { source_file = "boards/shields/lalapadgen2/Kconfig.defconfig", expected = ["ZMK_KEYBOARD_NAME:default \"LalapadGen2\"", "ZMK_SPLIT_ROLE_CENTRAL:default y", "ZMK_SPLIT_BLE_CENTRAL_PERIPHERALS:default 1", "BT_MAX_CONN:default 5", "ZMK_SPLIT:default y"] },
   { source_file = "boards/shields/lalapadgen2/Kconfig.shield", expected = ["SHIELD_LALAPADGEN2_LEFT:def_bool $(shields_list_contains,lalapadgen2_left)", "SHIELD_LALAPADGEN2_RIGHT:def_bool $(shields_list_contains,lalapadgen2_right)"] },
 ]
+define_entries = [
+  { source_file = "boards/shields/lalapadgen2/lalapadgen2.dtsi", prefix = "POS_TP_", expected = ["POS_TP_LCLK_L=52", "POS_TP_RCLK_L=53", "POS_TP_MCLK_L=54", "POS_TP_LEFT_L=58", "POS_TP_RIGHT_L=59", "POS_TP_UP_L=60", "POS_TP_DOWN_L=61", "POS_TP_PINCH_L=62", "POS_TP_LCLK_R=55", "POS_TP_RCLK_R=56", "POS_TP_MCLK_R=57", "POS_TP_LEFT_R=63", "POS_TP_RIGHT_R=64", "POS_TP_UP_R=65", "POS_TP_DOWN_R=66", "POS_TP_PINCH_R=67"] },
+]
 west_manifest = [
   "remote:zmkfirmware:url-base=https://github.com/zmkfirmware",
   "remote:ShiniNet:url-base=https://github.com/ShiniNet/",

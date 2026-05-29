@@ -199,6 +199,26 @@ fn porting_coverage_includes_exact_rmk_inventory_gates() {
             assert_eq!(kconfig_inventory["ok"], true);
         }
 
+        for define_file in porting_coverage_manifest_toml()["source_inventory"]["define_entries"]
+            .as_array()
+            .unwrap()
+        {
+            let source_file = define_file["source_file"].as_str().unwrap();
+            let expected_entries = define_file["expected"].as_array().unwrap().len() as i64;
+            let define_inventory = results
+                .iter()
+                .find(|result| result["id"] == format!("zmk_source.define_entries.{source_file}"))
+                .unwrap_or_else(|| {
+                    panic!(
+                        "ZMK define entry inventory coverage result is missing for {source_file}"
+                    )
+                });
+            assert_eq!(define_inventory["kind"], "zmk_inventory");
+            assert_eq!(define_inventory["passed"].as_i64(), Some(expected_entries));
+            assert_eq!(define_inventory["total"].as_i64(), Some(expected_entries));
+            assert_eq!(define_inventory["ok"], true);
+        }
+
         let west_inventory = results
             .iter()
             .find(|result| result["id"] == "zmk_source.west_manifest")
@@ -833,6 +853,96 @@ print(json.dumps({"ok": ok, "changed": changed, "missing_file": missing_file}))
             .as_str()
             .unwrap()
             .contains("missing Kconfig source file")
+    );
+}
+
+#[test]
+fn porting_coverage_rejects_unclassified_zmk_define_entries() {
+    let output = run_python(
+        r#"
+import importlib.util
+import json
+import sys
+import tempfile
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("porting_coverage", "tools/porting_coverage.py")
+pc = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = pc
+spec.loader.exec_module(pc)
+
+manifest = {
+    "source_inventory": {
+        "define_entries": [{
+            "source_file": "lalapadgen2.dtsi",
+            "prefix": "POS_TP_",
+            "expected": ["POS_TP_LCLK_L=52", "POS_TP_RCLK_L=53"],
+        }],
+    },
+}
+
+def pack(results):
+    return [result.__dict__ | {"ok": result.ok} for result in results]
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    fixture = root / "lalapadgen2.dtsi"
+    fixture.write_text('''
+    #define POS_TP_LCLK_L 52
+    #define POS_TP_RCLK_L 53
+    #define OTHER_DEFINE 99
+    ''')
+    ok = pack(pc.check_zmk_define_entry_inventory(manifest, root))
+
+    fixture.write_text('''
+    #define POS_TP_LCLK_L 52
+    #define POS_TP_RCLK_L 54
+    #define POS_TP_NEW 68
+    ''')
+    changed = pack(pc.check_zmk_define_entry_inventory(manifest, root))
+    fixture.unlink()
+    missing_file = pack(pc.check_zmk_define_entry_inventory(manifest, root))
+
+print(json.dumps({"ok": ok, "changed": changed, "missing_file": missing_file}))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "define entry inventory parser check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let ok_inventory = &parsed["ok"][0];
+    assert_eq!(ok_inventory["kind"], "zmk_inventory");
+    assert_eq!(ok_inventory["passed"].as_i64(), Some(2));
+    assert_eq!(ok_inventory["total"].as_i64(), Some(2));
+    assert_eq!(ok_inventory["ok"], true);
+
+    let changed_inventory = &parsed["changed"][0];
+    assert_eq!(changed_inventory["kind"], "zmk_inventory");
+    assert_eq!(changed_inventory["passed"].as_i64(), Some(1));
+    assert_eq!(changed_inventory["total"].as_i64(), Some(3));
+    assert_eq!(changed_inventory["ok"], false);
+    assert!(
+        changed_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("POS_TP_NEW")
+    );
+
+    let missing_file_inventory = &parsed["missing_file"][0];
+    assert_eq!(missing_file_inventory["kind"], "zmk_inventory");
+    assert_eq!(missing_file_inventory["passed"].as_i64(), Some(0));
+    assert_eq!(missing_file_inventory["total"].as_i64(), Some(2));
+    assert_eq!(missing_file_inventory["ok"], false);
+    assert!(
+        missing_file_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("missing define source file")
     );
 }
 
