@@ -33,7 +33,7 @@ KEYBOARD_TOML_PATH="$rmk_host_keyboard" \
 cargo test \
   --manifest-path vendor/rmk-0.8.2/Cargo.toml \
   --target x86_64-unknown-linux-gnu \
-  --test keyboard_morse_hold_on_other_press_test \
+  --tests \
   --no-default-features \
   --features "std host log"
 '''

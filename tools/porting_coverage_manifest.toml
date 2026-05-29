@@ -2691,13 +2691,13 @@ task = "uf2"
 dependencies_include = ["flash-layout"]
 
 [[makefile_task_invariants]]
-id = "makefile_rmk_behavior_tests_run_hold_on_other_press_suite"
+id = "makefile_rmk_behavior_tests_run_full_host_suite"
 task = "rmk-behavior-tests"
 script_contains = [
   "KEYBOARD_TOML_PATH=\"$rmk_host_keyboard\"",
   "vendor/rmk-0.8.2/Cargo.toml",
   "--target x86_64-unknown-linux-gnu",
-  "--test keyboard_morse_hold_on_other_press_test",
+  "--tests",
   "--no-default-features",
   "--features \"std host log\"",
 ]

@@ -361,7 +361,8 @@ run:
 cargo make migration-status-report
 ```
 
-To re-run the RMK engine-level tap/hold behavior regression suite locally, run:
+To re-run the vendored RMK host regression suite locally, including tap/hold,
+layer, combo, macro, and one-shot behavior, run:
 
 ```sh
 cargo make rmk-behavior-tests

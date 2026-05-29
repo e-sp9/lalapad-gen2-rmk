@@ -1810,9 +1810,9 @@ fn local_validation_entrypoints_match_ci_gates() {
         rmk_behavior_tests_task.contains("KEYBOARD_TOML_PATH=\"$rmk_host_keyboard\"")
             && rmk_behavior_tests_task.contains("vendor/rmk-0.8.2/Cargo.toml")
             && rmk_behavior_tests_task.contains("--target x86_64-unknown-linux-gnu")
-            && rmk_behavior_tests_task.contains("--test keyboard_morse_hold_on_other_press_test")
+            && rmk_behavior_tests_task.contains("--tests")
             && rmk_behavior_tests_task.contains("--features \"std host log\""),
-        "cargo make rmk-behavior-tests should run the vendored RMK hold-on-other-press suite on the host target"
+        "cargo make rmk-behavior-tests should run the vendored RMK host regression suite on the host target"
     );
     assert!(
         migration_status_task.contains("tools/migration_status.py")
@@ -4622,7 +4622,7 @@ with tempfile.TemporaryDirectory() as tempdir:
 with tempfile.TemporaryDirectory() as tempdir:
     root = Path(tempdir)
     (root / "Makefile.toml").write_text(
-        Path("Makefile.toml").read_text().replace("keyboard_morse_hold_on_other_press_test", "keyboard_morse_test", 1),
+        Path("Makefile.toml").read_text().replace("--tests", "--test keyboard_morse_hold_on_other_press_test", 1),
         encoding="utf-8",
     )
     bad_rmk_behavior_task = pc.check_makefile_task_invariants(manifest, root)
@@ -4697,7 +4697,7 @@ print(json.dumps({
         .as_array()
         .unwrap()
         .iter()
-        .find(|result| result["id"] == "makefile_rmk_behavior_tests_run_hold_on_other_press_suite")
+        .find(|result| result["id"] == "makefile_rmk_behavior_tests_run_full_host_suite")
         .expect("changed RMK behavior test task result is missing");
     assert_eq!(bad_rmk_behavior_task["kind"], "build_task");
     assert_eq!(bad_rmk_behavior_task["ok"], false);
@@ -4705,7 +4705,7 @@ print(json.dumps({
         bad_rmk_behavior_task["message"]
             .as_str()
             .unwrap()
-            .contains("tasks.rmk-behavior-tests.script missing required values ['--test keyboard_morse_hold_on_other_press_test']")
+            .contains("tasks.rmk-behavior-tests.script missing required values ['--tests']")
     );
 }
 
