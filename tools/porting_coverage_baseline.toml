@@ -1,8 +1,8 @@
 [coverage]
-passed = 2441
-total = 2441
-result_count = 447
-result_inventory_sha256 = "5a86769a974ce8dbc4f8e170f38e76e19eb3e00eba3c4e8910724011c293ce78"
+passed = 2452
+total = 2452
+result_count = 448
+result_inventory_sha256 = "b6e88903d0a67e01b439d3b31b7e42fc2723efabdfc4607c9bd749d0100ad526"
 
 [coverage.by_kind.behavior]
 passed = 10
@@ -23,6 +23,10 @@ total = 4
 [coverage.by_kind.config]
 passed = 14
 total = 14
+
+[coverage.by_kind.dependency]
+passed = 11
+total = 11
 
 [coverage.by_kind.iqs9151_bit_porting]
 passed = 96

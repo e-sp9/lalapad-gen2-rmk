@@ -239,6 +239,15 @@ def path_get(root: dict[str, Any], dotted: str) -> Any:
     return value
 
 
+def path_list_get(root: dict[str, Any], path: list[str]) -> Any:
+    value: Any = root
+    for part in path:
+        if not isinstance(value, dict) or part not in value:
+            raise KeyError(".".join(path))
+        value = value[part]
+    return value
+
+
 def keymap(config: dict[str, Any]) -> list[list[list[str]]]:
     return config["layout"]["keymap"]
 
@@ -2749,6 +2758,126 @@ def check_rmk_patch_invariants(manifest: dict[str, Any], project_root: Path) -> 
     return results
 
 
+def rmk_lock_package(lock: dict[str, Any]) -> dict[str, Any] | None:
+    for package in lock.get("package", []):
+        if package.get("name") == "rmk":
+            return package
+    return None
+
+
+def feature_set(value: Any) -> set[str]:
+    return {str(item) for item in value}
+
+
+def check_cargo_dependency_invariants(manifest: dict[str, Any], project_root: Path) -> list[Result]:
+    results: list[Result] = []
+    for check in manifest.get("cargo_dependency_invariants", []):
+        passed = 0
+        total = 0
+        messages: list[str] = []
+
+        try:
+            cargo = load_toml(project_root / check.get("cargo_file", "Cargo.toml"))
+            lock = load_toml(project_root / check.get("lock_file", "Cargo.lock"))
+            vendor = load_toml(project_root / check["vendor_cargo_file"])
+        except (OSError, tomllib.TOMLDecodeError) as e:
+            results.append(Result(check["id"], "dependency", 0, 1, str(e)))
+            continue
+
+        total += 1
+        expected_patch_path = check["patch_path"]
+        try:
+            actual_patch_path = path_list_get(cargo, ["patch", "crates-io", "rmk", "path"])
+        except KeyError:
+            messages.append("missing [patch.crates-io].rmk.path")
+        else:
+            if actual_patch_path == expected_patch_path:
+                passed += 1
+            else:
+                messages.append(f"rmk patch path expected {expected_patch_path!r}, got {actual_patch_path!r}")
+
+        total += 1
+        if (project_root / expected_patch_path).is_dir():
+            passed += 1
+        else:
+            messages.append(f"rmk patch path {expected_patch_path!r} is not a directory")
+
+        expected_features = set(check["features"])
+        for dep_id, dep_path, expected_optional in [
+            ("top-level rmk dependency", ["dependencies", "rmk"], True),
+            (
+                "arm rmk dependency",
+                ["target", 'cfg(target_arch = "arm")', "dependencies", "rmk"],
+                False,
+            ),
+        ]:
+            try:
+                dependency = path_list_get(cargo, dep_path)
+            except KeyError:
+                total += 3
+                messages.append(f"missing {dep_id}")
+                continue
+
+            total += 1
+            actual_version = dependency.get("version")
+            if actual_version == check["dependency_version"]:
+                passed += 1
+            else:
+                messages.append(f"{dep_id} version expected {check['dependency_version']!r}, got {actual_version!r}")
+
+            total += 1
+            actual_features = feature_set(dependency.get("features", []))
+            if actual_features == expected_features:
+                passed += 1
+            else:
+                messages.append(
+                    f"{dep_id} features expected {sorted(expected_features)!r}, got {sorted(actual_features)!r}"
+                )
+
+            total += 1
+            actual_optional = bool(dependency.get("optional", False))
+            if actual_optional == expected_optional:
+                passed += 1
+            else:
+                messages.append(f"{dep_id} optional expected {expected_optional}, got {actual_optional}")
+
+        total += 1
+        actual_vendor_name = vendor.get("package", {}).get("name")
+        actual_vendor_version = vendor.get("package", {}).get("version")
+        if actual_vendor_name == "rmk" and actual_vendor_version == check["vendor_version"]:
+            passed += 1
+        else:
+            messages.append(
+                f"vendor package expected rmk {check['vendor_version']!r}, got {actual_vendor_name!r} {actual_vendor_version!r}"
+            )
+
+        lock_package = rmk_lock_package(lock)
+        total += 1
+        if lock_package and lock_package.get("version") == check["vendor_version"]:
+            passed += 1
+        else:
+            messages.append(
+                f"Cargo.lock rmk version expected {check['vendor_version']!r}, got {None if lock_package is None else lock_package.get('version')!r}"
+            )
+
+        total += 1
+        if lock_package and "source" not in lock_package:
+            passed += 1
+        else:
+            messages.append("Cargo.lock rmk package must resolve as the local path patch, not a registry source")
+
+        results.append(
+            Result(
+                check["id"],
+                "dependency",
+                passed,
+                total,
+                "ok" if not messages else "; ".join(messages),
+            )
+        )
+    return results
+
+
 def check_rust_const_inventories(manifest: dict[str, Any], project_root: Path) -> list[Result]:
     results: list[Result] = []
     for check in manifest.get("rust_const_inventories", []):
@@ -3638,6 +3767,7 @@ def check_zmk_source(
     results.extend(check_iqs9151_bit_porting(manifest, project_root))
     results.extend(check_rust_byte_arrays(manifest, project_root))
     results.extend(check_rmk_patch_invariants(manifest, project_root))
+    results.extend(check_cargo_dependency_invariants(manifest, project_root))
     results.extend(check_vial_layout(manifest, project_root, zmk_config_dir))
     results.extend(check_vial_user_key_semantics(manifest, keyboard, project_root))
     return results

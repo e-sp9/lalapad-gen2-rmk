@@ -2370,6 +2370,23 @@ needles = [
   "self.mouse_report.notify(self.conn, &buf).await",
 ]
 
+[[cargo_dependency_invariants]]
+id = "cargo_uses_local_rmk_0_8_2_patch"
+cargo_file = "Cargo.toml"
+lock_file = "Cargo.lock"
+vendor_cargo_file = "vendor/rmk-0.8.2/Cargo.toml"
+dependency_version = "0.8"
+vendor_version = "0.8.2"
+patch_path = "vendor/rmk-0.8.2"
+features = [
+  "nrf52840_ble",
+  "split",
+  "async_matrix",
+  "controller",
+  "adafruit_bl",
+  "passkey_entry",
+]
+
 [[code_contains]]
 id = "central_iqs9151_pins_and_side"
 file = "src/central.rs"
