@@ -10,6 +10,7 @@ RMK-specific deltas.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -1206,6 +1207,28 @@ def parse_rust_const(path: Path, name: str) -> Any:
     if re.fullmatch(r"-?\d+", numeric):
         return int(numeric)
     return value
+
+
+def parse_rust_byte_array(path: Path, name: str) -> list[int]:
+    text = re.sub(r"/\*.*?\*/", "", path.read_text(), flags=re.S)
+    text = re.sub(r"//.*", "", text)
+    match = re.search(
+        rf"(?m)^\s*(?:pub(?:\([^)]*\))?\s+)?const\s+{re.escape(name)}\s*:\s*\[u8;\s*(?P<len>\d+)\]\s*=\s*\[(?P<body>.*?)\];",
+        text,
+        re.S,
+    )
+    if not match:
+        raise ValueError(f"byte array const {name!r} not found in {path}")
+    values = [
+        int(value, 16) if value.lower().startswith("0x") else int(value)
+        for value in re.findall(r"0x[0-9a-fA-F]+|\b\d+\b", match.group("body"))
+    ]
+    declared_len = int(match.group("len"))
+    if len(values) != declared_len:
+        raise ValueError(
+            f"byte array const {name!r} length mismatch in {path}: declared {declared_len}, got {len(values)}"
+        )
+    return values
 
 
 def check_source_regex_values(manifest: dict[str, Any], zmk_config_dir: Path) -> list[Result]:
@@ -2557,6 +2580,40 @@ def check_rust_const_values(manifest: dict[str, Any], zmk_config_dir: Path, proj
     return results
 
 
+def check_rust_byte_arrays(manifest: dict[str, Any], project_root: Path) -> list[Result]:
+    results: list[Result] = []
+    for check in manifest.get("rust_byte_arrays", []):
+        passed = 0
+        total = 2
+        messages: list[str] = []
+        try:
+            values = parse_rust_byte_array(project_root / check["target_file"], check["target_const"])
+        except (OSError, ValueError) as e:
+            messages.append(str(e))
+        else:
+            expected_len = int(check["expected_len"])
+            if len(values) == expected_len:
+                passed += 1
+            else:
+                messages.append(f"length expected {expected_len}, got {len(values)}")
+            actual_sha256 = hashlib.sha256(bytes(values)).hexdigest()
+            expected_sha256 = check["expected_sha256"]
+            if actual_sha256 == expected_sha256:
+                passed += 1
+            else:
+                messages.append(f"sha256 expected {expected_sha256}, got {actual_sha256}")
+        results.append(
+            Result(
+                check["id"],
+                "rust_byte_array",
+                passed,
+                total,
+                "ok" if not messages else "; ".join(messages),
+            )
+        )
+    return results
+
+
 def check_code_contains(manifest: dict[str, Any], project_root: Path) -> list[Result]:
     results: list[Result] = []
     for check in manifest.get("code_contains", []):
@@ -3067,6 +3124,7 @@ def check_zmk_source(
     results.extend(check_source_regex_values(manifest, zmk_config_dir))
     results.extend(check_zmk_matrix_transform(manifest, zmk_config_dir))
     results.extend(check_rust_const_values(manifest, zmk_config_dir, project_root))
+    results.extend(check_rust_byte_arrays(manifest, project_root))
     results.extend(check_vial_layout(manifest, project_root, zmk_config_dir))
     return results
 

@@ -692,6 +692,21 @@ fn porting_coverage_includes_exact_rmk_inventory_gates() {
             assert_eq!(layout_inventory["ok"], true);
         }
     }
+
+    for byte_array in porting_coverage_manifest_toml()["rust_byte_arrays"]
+        .as_array()
+        .unwrap()
+    {
+        let array_id = byte_array["id"].as_str().unwrap();
+        let inventory = results
+            .iter()
+            .find(|result| result["id"] == array_id)
+            .unwrap_or_else(|| panic!("Rust byte array coverage result is missing for {array_id}"));
+        assert_eq!(inventory["kind"], "rust_byte_array");
+        assert_eq!(inventory["passed"].as_i64(), Some(2));
+        assert_eq!(inventory["total"].as_i64(), Some(2));
+        assert_eq!(inventory["ok"], true);
+    }
 }
 
 #[test]
@@ -3329,6 +3344,165 @@ print(json.dumps({"ok": ok, "changed": changed}))
             .as_str()
             .unwrap()
             .contains("source expected")
+    );
+}
+
+#[test]
+fn porting_coverage_rejects_rust_byte_array_drift() {
+    let output = run_python(
+        r#"
+import hashlib
+import importlib.util
+import json
+import sys
+import tempfile
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("porting_coverage", "tools/porting_coverage.py")
+pc = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = pc
+spec.loader.exec_module(pc)
+
+expected_hash = hashlib.sha256(bytes([0, 1, 255])).hexdigest()
+manifest = {
+    "rust_byte_arrays": [
+        {
+            "id": "ok_array",
+            "target_file": "firmware.rs",
+            "target_const": "IQS9151_CONFIG",
+            "expected_len": 3,
+            "expected_sha256": expected_hash,
+        },
+        {
+            "id": "missing_array",
+            "target_file": "firmware.rs",
+            "target_const": "MISSING_ARRAY",
+            "expected_len": 3,
+            "expected_sha256": expected_hash,
+        },
+        {
+            "id": "missing_file",
+            "target_file": "missing.rs",
+            "target_const": "IQS9151_CONFIG",
+            "expected_len": 3,
+            "expected_sha256": expected_hash,
+        },
+        {
+            "id": "length_mismatch",
+            "target_file": "bad_len.rs",
+            "target_const": "IQS9151_CONFIG",
+            "expected_len": 3,
+            "expected_sha256": expected_hash,
+        },
+    ],
+}
+
+def pack(results):
+    return [result.__dict__ | {"ok": result.ok} for result in results]
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    (root / "firmware.rs").write_text('''
+    #[cfg(target_arch = "arm")]
+    const IQS9151_CONFIG: [u8; 3] = [0x00, 1, 0xff];
+    ''')
+    (root / "bad_len.rs").write_text('const IQS9151_CONFIG: [u8; 4] = [0x00, 1, 0xff];')
+    ok = pack(pc.check_rust_byte_arrays(manifest, root))
+
+    (root / "firmware.rs").write_text('''
+    const IQS9151_CONFIG: [u8; 3] = [0x00, 2, 0xff];
+    ''')
+    changed = pack(pc.check_rust_byte_arrays(manifest, root))
+
+print(json.dumps({"ok": ok, "changed": changed}))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "Rust byte array inventory parser check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let ok_array = parsed["ok"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "ok_array")
+        .expect("missing ok byte array result");
+    assert_eq!(ok_array["kind"], "rust_byte_array");
+    assert_eq!(ok_array["passed"].as_i64(), Some(2));
+    assert_eq!(ok_array["total"].as_i64(), Some(2));
+    assert_eq!(ok_array["ok"], true);
+
+    let missing_array = parsed["ok"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "missing_array")
+        .expect("missing missing-array result");
+    assert_eq!(missing_array["kind"], "rust_byte_array");
+    assert_eq!(missing_array["passed"].as_i64(), Some(0));
+    assert_eq!(missing_array["total"].as_i64(), Some(2));
+    assert_eq!(missing_array["ok"], false);
+    assert!(
+        missing_array["message"]
+            .as_str()
+            .unwrap()
+            .contains("not found")
+    );
+
+    let missing_file = parsed["ok"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "missing_file")
+        .expect("missing missing-file result");
+    assert_eq!(missing_file["kind"], "rust_byte_array");
+    assert_eq!(missing_file["passed"].as_i64(), Some(0));
+    assert_eq!(missing_file["total"].as_i64(), Some(2));
+    assert_eq!(missing_file["ok"], false);
+    assert!(
+        missing_file["message"]
+            .as_str()
+            .unwrap()
+            .contains("missing.rs")
+    );
+
+    let length_mismatch = parsed["ok"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "length_mismatch")
+        .expect("missing length-mismatch result");
+    assert_eq!(length_mismatch["kind"], "rust_byte_array");
+    assert_eq!(length_mismatch["passed"].as_i64(), Some(0));
+    assert_eq!(length_mismatch["total"].as_i64(), Some(2));
+    assert_eq!(length_mismatch["ok"], false);
+    assert!(
+        length_mismatch["message"]
+            .as_str()
+            .unwrap()
+            .contains("length mismatch")
+    );
+
+    let changed_array = parsed["changed"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "ok_array")
+        .expect("missing changed byte array result");
+    assert_eq!(changed_array["kind"], "rust_byte_array");
+    assert_eq!(changed_array["passed"].as_i64(), Some(1));
+    assert_eq!(changed_array["total"].as_i64(), Some(2));
+    assert_eq!(changed_array["ok"], false);
+    assert!(
+        changed_array["message"]
+            .as_str()
+            .unwrap()
+            .contains("sha256 expected")
     );
 }
 

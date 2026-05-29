@@ -1558,6 +1558,41 @@ target_file = "src/rgb_widget.rs"
 target_const = "BATTERY_LEVEL_CRITICAL"
 expected = 10
 
+[[rust_byte_arrays]]
+id = "iqs9151_alp_compensation_bytes"
+target_file = "src/iqs9151.rs"
+target_const = "IQS9151_ALP_COMPENSATION"
+expected_len = 26
+expected_sha256 = "b5eee743bf99db4ec635d342ced2194c179fa9e27188841c9b531503b1341b52"
+
+[[rust_byte_arrays]]
+id = "iqs9151_main_config_bytes"
+target_file = "src/iqs9151.rs"
+target_const = "IQS9151_MAIN_CONFIG"
+expected_len = 126
+expected_sha256 = "6e1181f7ead0e8407fc7cb51a6f490e265f9d27b455b495ce2078ae30225228c"
+
+[[rust_byte_arrays]]
+id = "iqs9151_rx_tx_mapping_bytes"
+target_file = "src/iqs9151.rs"
+target_const = "IQS9151_RX_TX_MAPPING"
+expected_len = 46
+expected_sha256 = "6a25edd74a01eee275c1343276351c2f230b6a89e19e6c9d1615ddb68841dbd1"
+
+[[rust_byte_arrays]]
+id = "iqs9151_channel_disable_bytes"
+target_file = "src/iqs9151.rs"
+target_const = "IQS9151_CHANNEL_DISABLE"
+expected_len = 88
+expected_sha256 = "197bf4dda274f6702a86fda179a990c6febff6fd316ae025905c5fd97c1876a0"
+
+[[rust_byte_arrays]]
+id = "iqs9151_snap_enable_bytes"
+target_file = "src/iqs9151.rs"
+target_const = "IQS9151_SNAP_ENABLE"
+expected_len = 88
+expected_sha256 = "10eef285deef7a4b7c82b22aa53589b7833df29de3814649c772bbd5c832f365"
+
 [[code_contains]]
 id = "central_iqs9151_pins_and_side"
 file = "src/central.rs"
