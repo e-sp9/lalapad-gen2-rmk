@@ -385,6 +385,9 @@ overlay file using the format in
 `tools/hardware_validation_evidence.example.toml`; each evidence entry updates
 one manifest check by id and must provide `validated_at`, `tester`,
 `firmware_ref`, and `artifact_or_notes` before it can count as `validated`.
+Each manifest check must also declare non-empty `evidence_needles`, so
+`--require-hardware-classified` catches hardware checks that lack concrete
+observation terms before any release claim is made.
 `validated_at` must be a real `YYYY-MM-DD` date that is not in the future.
 `firmware_ref` is an exact string match against the release tag, commit hash, or
 other immutable identifier for the central/peripheral firmware pair that was

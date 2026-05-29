@@ -166,6 +166,15 @@ def is_placeholder_value(value: Any) -> bool:
     )
 
 
+def validate_evidence_needles_schema(check_id: str, check: dict[str, Any]) -> list[str]:
+    evidence_needles = check.get("evidence_needles")
+    if not isinstance(evidence_needles, list) or not evidence_needles:
+        return [f"{check_id}: evidence_needles must be a non-empty string array"]
+    if not all(isinstance(needle, str) and needle.strip() for needle in evidence_needles):
+        return [f"{check_id}: evidence_needles must be a non-empty string array"]
+    return []
+
+
 def validate_validated_evidence(check_id: str, check: dict[str, Any]) -> list[str]:
     errors: list[str] = []
     validated_at = str(check.get("validated_at", "")).strip()
@@ -204,23 +213,20 @@ def validate_validated_evidence(check_id: str, check: dict[str, Any]) -> list[st
         )
 
     evidence_needles = check.get("evidence_needles", [])
-    if evidence_needles:
-        if not isinstance(evidence_needles, list) or not all(
-            isinstance(needle, str) and needle.strip() for needle in evidence_needles
-        ):
-            errors.append(f"{check_id}: evidence_needles must be a non-empty string array")
-        else:
-            lower_notes = artifact_or_notes.lower()
-            missing_needles = [
-                needle
-                for needle in evidence_needles
-                if needle.lower() not in lower_notes
-            ]
-            if missing_needles:
-                errors.append(
-                    f"{check_id}: artifact_or_notes must mention required observation(s): "
-                    + ", ".join(repr(needle) for needle in missing_needles)
-                )
+    if isinstance(evidence_needles, list) and all(
+        isinstance(needle, str) and needle.strip() for needle in evidence_needles
+    ):
+        lower_notes = artifact_or_notes.lower()
+        missing_needles = [
+            needle
+            for needle in evidence_needles
+            if needle.lower() not in lower_notes
+        ]
+        if missing_needles:
+            errors.append(
+                f"{check_id}: artifact_or_notes must mention required observation(s): "
+                + ", ".join(repr(needle) for needle in missing_needles)
+            )
 
     return errors
 
@@ -443,6 +449,7 @@ def summarize(
         missing = [field for field in REQUIRED_FIELDS if not str(check.get(field, "")).strip()]
         if missing:
             errors.append(f"{check_id}: missing required field(s): {', '.join(missing)}")
+        errors.extend(validate_evidence_needles_schema(check_id, check))
         source = str(check.get("source", "")).strip()
         if source:
             errors.extend(validate_source_ref(check_id, source, source_root or Path(".")))

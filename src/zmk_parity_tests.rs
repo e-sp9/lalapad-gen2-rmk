@@ -747,6 +747,7 @@ side = "right"
 requirement = """A | B
 C"""
 evidence = "Scope | log"
+evidence_needles = ["photo", "serial log"]
 source = "docs/TRACKPAD_HARDWARE_CHECK.md"
 status = "validated"
 validated_at = "2026-05-29"
@@ -782,6 +783,7 @@ area = "trackpad"
 side = "right"
 requirement = "A hardware-only behavior is documented."
 evidence = "Run the documented hardware check."
+evidence_needles = ["documented", "hardware"]
 source = "docs/TRACKPAD_HARDWARE_CHECK.md#missing-heading"
 status = "requires_hardware"
 "#;
@@ -812,6 +814,7 @@ area = "trackpad"
 side = "right"
 requirement = "A hardware-only behavior is documented."
 evidence = "Run the documented hardware check."
+evidence_needles = ["documented", "hardware"]
 source = "Cargo.toml"
 status = "requires_hardware"
 "#;
@@ -959,6 +962,58 @@ fn hardware_validation_manifest_requires_observation_needles_for_each_check() {
                 .iter()
                 .all(|needle| needle.as_str().is_some_and(|text| !text.trim().is_empty())),
             "{check_id} evidence_needles should be non-empty strings"
+        );
+    }
+}
+
+#[test]
+fn hardware_validation_classification_requires_observation_needles() {
+    let manifest = r#"
+[[checks]]
+id = "missing_needles"
+area = "trackpad"
+side = "right"
+requirement = "A hardware-only behavior is documented."
+evidence = "Run the documented hardware check."
+source = "docs/TRACKPAD_HARDWARE_CHECK.md#firmware-baseline"
+status = "requires_hardware"
+
+[[checks]]
+id = "empty_needles"
+area = "trackpad"
+side = "left"
+requirement = "Another hardware-only behavior is documented."
+evidence = "Run the documented hardware check."
+evidence_needles = []
+source = "docs/TRACKPAD_HARDWARE_CHECK.md#firmware-baseline"
+status = "requires_hardware"
+
+[[checks]]
+id = "blank_needles"
+area = "trackpad"
+side = "both"
+requirement = "A third hardware-only behavior is documented."
+evidence = "Run the documented hardware check."
+evidence_needles = ["cursor", ""]
+source = "docs/TRACKPAD_HARDWARE_CHECK.md#firmware-baseline"
+status = "requires_hardware"
+"#;
+    let path = write_temp_file("hardware-validation-missing-needles", manifest);
+    let output =
+        run_hardware_validation(&["--manifest", path.to_str().unwrap(), "--require-classified"]);
+    let _ = std::fs::remove_file(&path);
+
+    assert!(
+        !output.status.success(),
+        "hardware manifest without concrete observation needles unexpectedly passed"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    for check_id in ["missing_needles", "empty_needles", "blank_needles"] {
+        assert!(
+            stderr.contains(&format!(
+                "{check_id}: evidence_needles must be a non-empty string array"
+            )),
+            "missing/invalid evidence_needles should be reported for {check_id}: {stderr}"
         );
     }
 }

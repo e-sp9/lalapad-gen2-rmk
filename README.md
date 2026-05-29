@@ -238,6 +238,8 @@ Real hardware results can be kept in a separate overlay file using the format
 shown in `tools/hardware_validation_evidence.example.toml` and passed with
 `--evidence path/to/evidence.toml`; this lets the manifest remain the stable
 requirement list while measured evidence drives the validation rate.
+Every hardware check declares non-empty `evidence_needles`; the classified
+hardware gate fails if a check lacks those required observation terms.
 Validated evidence must include `validated_at`, `tester`, `firmware_ref`, and
 `artifact_or_notes`. `validated_at` must be a real `YYYY-MM-DD` date that is
 not in the future. `firmware_ref` is compared as an exact string, usually a
