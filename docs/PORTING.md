@@ -210,9 +210,10 @@ source-file inventory, checks the ZMK keymap layer and behavior inventories,
 checks ZMK `#include` dependencies, checks the ZMK `Kconfig.*` shield/default
 entries, checks the `west.yml` ZMK module inventory, checks the ZMK trackpad
 virtual-position `#define` inventory, checks the ZMK `INPUT_BTN_*` to
-virtual-position binding inventory, checks the ZMK `*.dtsi` / `*.overlay`
-status-node inventory, and checks the RMK custom keycode order used for the ZMK
-Bluetooth and trackpad scale actions.
+virtual-position binding inventory, checks selected ZMK DTS properties for split
+input and dynamic scaling, checks the ZMK `*.dtsi` / `*.overlay` status-node
+inventory, and checks the RMK custom keycode order used for the ZMK Bluetooth
+and trackpad scale actions.
 
 When the upstream checkout from `metadata.source_repo_hint` is available, the
 gate also parses `config/lalapadgen2.keymap` directly and checks the manifest

@@ -265,6 +265,30 @@ fn porting_coverage_includes_exact_rmk_inventory_gates() {
             assert_eq!(binding_inventory["ok"], true);
         }
 
+        for dts_property_block in
+            porting_coverage_manifest_toml()["source_inventory"]["dts_properties"]
+                .as_array()
+                .unwrap()
+        {
+            let source_block = dts_property_block["source_block"].as_str().unwrap();
+            let expected_entries = dts_property_block["expected"].as_array().unwrap().len() as i64;
+            let property_inventory = results
+                .iter()
+                .find(|result| result["id"] == format!("zmk_source.dts_properties.{source_block}"))
+                .unwrap_or_else(|| {
+                    panic!(
+                        "ZMK DTS property inventory coverage result is missing for {source_block}"
+                    )
+                });
+            assert_eq!(property_inventory["kind"], "zmk_inventory");
+            assert_eq!(
+                property_inventory["passed"].as_i64(),
+                Some(expected_entries)
+            );
+            assert_eq!(property_inventory["total"].as_i64(), Some(expected_entries));
+            assert_eq!(property_inventory["ok"], true);
+        }
+
         let west_inventory = results
             .iter()
             .find(|result| result["id"] == "zmk_source.west_manifest")
@@ -1237,6 +1261,136 @@ print(json.dumps({
             .as_str()
             .unwrap()
             .contains("missing input behavior source file")
+    );
+}
+
+#[test]
+fn porting_coverage_rejects_unclassified_zmk_dts_properties() {
+    let output = run_python(
+        r#"
+import importlib.util
+import json
+import sys
+import tempfile
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("porting_coverage", "tools/porting_coverage.py")
+pc = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = pc
+spec.loader.exec_module(pc)
+
+manifest = {
+    "source_inventory": {
+        "dts_properties": [{
+            "source_file": "lalapadgen2.dtsi",
+            "source_block": "zip_dynamic_xy_scaler",
+            "expected": [
+                "compatible=\"zmk,input-processor-dynamic-scaler\"",
+                "type=<INPUT_EV_REL>",
+                "codes=<INPUT_REL_X INPUT_REL_Y>",
+                "scale-group=<ZDS_XY>",
+                "track-remainders",
+            ],
+        }],
+    },
+}
+
+def pack(results):
+    return [result.__dict__ | {"ok": result.ok} for result in results]
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    fixture = root / "lalapadgen2.dtsi"
+    fixture.write_text('''
+    zip_dynamic_xy_scaler: zip_dynamic_xy_scaler {
+        compatible = "zmk,input-processor-dynamic-scaler";
+        type = <INPUT_EV_REL>;
+        codes = <INPUT_REL_X INPUT_REL_Y>;
+        scale-group = <ZDS_XY>;
+        track-remainders;
+        child { type = <SHOULD_NOT_BE_COLLECTED>; };
+    };
+    ''')
+    ok = pack(pc.check_zmk_dts_property_inventory(manifest, root))
+
+    fixture.write_text('''
+    zip_dynamic_xy_scaler: zip_dynamic_xy_scaler {
+        compatible = "zmk,input-processor-dynamic-scaler";
+        type = <INPUT_EV_REL>;
+        codes = <INPUT_REL_X INPUT_REL_WHEEL>;
+        scale-group = <ZDS_SC>;
+        track-remainders;
+        extra-prop;
+    };
+    ''')
+    changed = pack(pc.check_zmk_dts_property_inventory(manifest, root))
+
+    fixture.write_text('''
+    other_node: other_node {
+        compatible = "zmk,input-processor-dynamic-scaler";
+    };
+    ''')
+    missing_block = pack(pc.check_zmk_dts_property_inventory(manifest, root))
+    fixture.unlink()
+    missing_file = pack(pc.check_zmk_dts_property_inventory(manifest, root))
+
+print(json.dumps({
+    "ok": ok,
+    "changed": changed,
+    "missing_block": missing_block,
+    "missing_file": missing_file,
+}))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "DTS property inventory parser check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let ok_inventory = &parsed["ok"][0];
+    assert_eq!(ok_inventory["kind"], "zmk_inventory");
+    assert_eq!(ok_inventory["passed"].as_i64(), Some(5));
+    assert_eq!(ok_inventory["total"].as_i64(), Some(5));
+    assert_eq!(ok_inventory["ok"], true);
+
+    let changed_inventory = &parsed["changed"][0];
+    assert_eq!(changed_inventory["kind"], "zmk_inventory");
+    assert_eq!(changed_inventory["passed"].as_i64(), Some(3));
+    assert_eq!(changed_inventory["total"].as_i64(), Some(6));
+    assert_eq!(changed_inventory["ok"], false);
+    assert!(
+        changed_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("extra-prop")
+    );
+
+    let missing_block_inventory = &parsed["missing_block"][0];
+    assert_eq!(missing_block_inventory["kind"], "zmk_inventory");
+    assert_eq!(missing_block_inventory["passed"].as_i64(), Some(0));
+    assert_eq!(missing_block_inventory["total"].as_i64(), Some(5));
+    assert_eq!(missing_block_inventory["ok"], false);
+    assert!(
+        missing_block_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("invalid DTS property source")
+    );
+
+    let missing_file_inventory = &parsed["missing_file"][0];
+    assert_eq!(missing_file_inventory["kind"], "zmk_inventory");
+    assert_eq!(missing_file_inventory["passed"].as_i64(), Some(0));
+    assert_eq!(missing_file_inventory["total"].as_i64(), Some(5));
+    assert_eq!(missing_file_inventory["ok"], false);
+    assert!(
+        missing_file_inventory["message"]
+            .as_str()
+            .unwrap()
+            .contains("missing DTS property source file")
     );
 }
 

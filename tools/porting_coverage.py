@@ -1411,6 +1411,79 @@ def check_zmk_input_behavior_binding_inventory(
     return results
 
 
+def normalize_dts_property_value(value: str) -> str:
+    value = value.strip()
+    if value.startswith("<") and value.endswith(">"):
+        return f"<{' '.join(value[1:-1].split())}>"
+    if value.startswith('"') and value.endswith('"'):
+        return value
+    return " ".join(value.split())
+
+
+def dts_property_inventory(text: str, block_name: str) -> list[str]:
+    raw_block = extract_block(strip_c_style_comments(text), block_name)
+    block = top_level_text(raw_block)
+    entries: list[str] = []
+    property_name = r"[#A-Za-z_][A-Za-z0-9_,#-]*"
+    property_value = r"<.*?>|\".*?\"|[^;]+"
+    pattern = re.compile(
+        rf"(?<![A-Za-z0-9_,#-])(?P<name>{property_name})\s*"
+        rf"(?:=\s*(?P<value>{property_value}))?\s*;",
+        re.S,
+    )
+    for match in pattern.finditer(block):
+        if "{" in raw_block[match.start() : match.end()]:
+            continue
+        name = match.group("name")
+        value = match.group("value")
+        if value is None:
+            entries.append(name)
+        else:
+            entries.append(f"{name}={normalize_dts_property_value(value)}")
+    return entries
+
+
+def check_zmk_dts_property_inventory(manifest: dict[str, Any], zmk_config_dir: Path) -> list[Result]:
+    results: list[Result] = []
+    for check in manifest.get("source_inventory", {}).get("dts_properties", []):
+        source_file = check["source_file"]
+        expected = list(check["expected"])
+        source_path = zmk_config_dir / source_file
+        if not source_path.exists():
+            results.append(
+                Result(
+                    f"zmk_source.dts_properties.{check['source_block']}",
+                    "zmk_inventory",
+                    0,
+                    max(1, len(expected)),
+                    f"missing DTS property source file {source_file!r}",
+                )
+            )
+            continue
+        try:
+            actual = dts_property_inventory(source_path.read_text(), check["source_block"])
+        except ValueError as e:
+            results.append(
+                Result(
+                    f"zmk_source.dts_properties.{check['source_block']}",
+                    "zmk_inventory",
+                    0,
+                    max(1, len(expected)),
+                    f"invalid DTS property source {source_file!r}: {e}",
+                )
+            )
+            continue
+        results.append(
+            ordered_inventory_result(
+                f"zmk_source.dts_properties.{check['source_block']}",
+                "zmk_inventory",
+                expected,
+                actual,
+            )
+        )
+    return results
+
+
 def west_manifest_inventory(text: str) -> list[str]:
     items: list[str] = []
     section: str | None = None
@@ -2021,6 +2094,7 @@ def check_zmk_source(
     results.extend(check_zmk_define_entry_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_physical_layout_attr_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_input_behavior_binding_inventory(manifest, zmk_config_dir))
+    results.extend(check_zmk_dts_property_inventory(manifest, zmk_config_dir))
     results.extend(check_west_manifest_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_config_inventory(manifest, zmk_config_dir))
     results.extend(check_zmk_dts_status_inventory(manifest, zmk_config_dir))
