@@ -20,6 +20,7 @@ on:
       - 'vendor/rmk-0.8.2/**'
       - 'tools/check_flash_layout.py'
       - 'tools/hardware_validation.py'
+      - 'tools/hardware_validation_baseline.toml'
       - 'tools/hardware_validation_evidence.example.toml'
       - 'tools/hardware_validation_manifest.toml'
       - 'tools/migration_status.py'
@@ -100,10 +101,12 @@ jobs:
       - name: Verify RMK config and flash layout
         run: |
           python3 -m json.tool vial.json >/tmp/lalapad-vial-check.json
-          python3 -c 'import tomllib; [tomllib.load(open(path, "rb")) for path in ("keyboard.toml", "Cargo.toml", "Makefile.toml", "tools/porting_coverage_manifest.toml", "tools/porting_coverage_baseline.toml", "tools/hardware_validation_manifest.toml", "tools/hardware_validation_evidence.example.toml")]; print("toml ok")'
+          python3 -c 'import tomllib; [tomllib.load(open(path, "rb")) for path in ("keyboard.toml", "Cargo.toml", "Makefile.toml", "tools/porting_coverage_manifest.toml", "tools/porting_coverage_baseline.toml", "tools/hardware_validation_manifest.toml", "tools/hardware_validation_baseline.toml", "tools/hardware_validation_evidence.example.toml")]; print("toml ok")'
           python3 tools/check_flash_layout.py --config-only
           python3 tools/hardware_validation.py --markdown >> "$GITHUB_STEP_SUMMARY"
-          python3 tools/hardware_validation.py --require-classified
+          python3 tools/hardware_validation.py \
+            --hardware-baseline tools/hardware_validation_baseline.toml \
+            --require-classified
 
       - name: Verify ZMK-to-RMK porting coverage
         run: |
@@ -114,6 +117,7 @@ jobs:
             --require-porting-complete
           python3 tools/migration_status.py \
             --coverage-baseline tools/porting_coverage_baseline.toml \
+            --hardware-baseline tools/hardware_validation_baseline.toml \
             --zmk-keymap zmk-config-LalaPadGen2/config/lalapadgen2.keymap \
             --require-zmk-source \
             --require-software-complete \

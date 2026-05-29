@@ -25,7 +25,12 @@ args = [
 
 [tasks.hardware-validation]
 command = "python3"
-args = ["tools/hardware_validation.py", "--require-classified"]
+args = [
+    "tools/hardware_validation.py",
+    "--hardware-baseline",
+    "tools/hardware_validation_baseline.toml",
+    "--require-classified",
+]
 
 [tasks.hardware-validation-report]
 command = "python3"
@@ -41,6 +46,8 @@ args = [
     "tools/migration_status.py",
     "--coverage-baseline",
     "tools/porting_coverage_baseline.toml",
+    "--hardware-baseline",
+    "tools/hardware_validation_baseline.toml",
     "--require-zmk-source",
     "--require-software-complete",
     "--require-hardware-classified",
@@ -52,6 +59,7 @@ script = '''
 : "${FIRMWARE_REF:?set FIRMWARE_REF=<tag-or-commit>}"
 python3 tools/migration_status.py \
   --coverage-baseline tools/porting_coverage_baseline.toml \
+  --hardware-baseline tools/hardware_validation_baseline.toml \
   --evidence "$HARDWARE_EVIDENCE" \
   --require-software-complete \
   --require-hardware-classified \

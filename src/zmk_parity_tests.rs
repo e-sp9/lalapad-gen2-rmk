@@ -7,6 +7,8 @@ const AUTO_TAG_WORKFLOW_YAML: &str = include_str!("../.github/workflows/auto-tag
 const FIRMWARE_WORKFLOW_YAML: &str = include_str!("../.github/workflows/firmware.yml");
 const HARDWARE_VALIDATION_MANIFEST_TOML: &str =
     include_str!("../tools/hardware_validation_manifest.toml");
+const HARDWARE_VALIDATION_BASELINE_TOML: &str =
+    include_str!("../tools/hardware_validation_baseline.toml");
 const HARDWARE_VALIDATION_EVIDENCE_EXAMPLE_TOML: &str =
     include_str!("../tools/hardware_validation_evidence.example.toml");
 const MAKEFILE_TOML: &str = include_str!("../Makefile.toml");
@@ -32,6 +34,10 @@ fn porting_coverage_baseline_toml() -> toml::Value {
 
 fn hardware_validation_manifest_toml() -> toml::Value {
     toml::from_str(HARDWARE_VALIDATION_MANIFEST_TOML).unwrap()
+}
+
+fn hardware_validation_baseline_toml() -> toml::Value {
+    toml::from_str(HARDWARE_VALIDATION_BASELINE_TOML).unwrap()
 }
 
 fn vial_json() -> serde_json::Value {
@@ -326,9 +332,11 @@ fn hardware_validation_manifest_is_classified_but_not_release_blocking() {
     assert_eq!(parsed["by_side"]["left"]["total"].as_i64(), Some(3));
     assert_eq!(parsed["by_side"]["both"]["total"].as_i64(), Some(4));
     assert!(
-        FIRMWARE_WORKFLOW_YAML
-            .contains("python3 tools/hardware_validation.py --require-classified"),
-        "firmware CI should keep the real-hardware validation tracker classified"
+        FIRMWARE_WORKFLOW_YAML.contains("python3 tools/hardware_validation.py")
+            && FIRMWARE_WORKFLOW_YAML
+                .contains("--hardware-baseline tools/hardware_validation_baseline.toml")
+            && FIRMWARE_WORKFLOW_YAML.contains("--require-classified"),
+        "firmware CI should keep the real-hardware validation tracker classified against the frozen baseline"
     );
     assert!(
         FIRMWARE_WORKFLOW_YAML.contains(
@@ -372,11 +380,103 @@ fn hardware_validation_manifest_is_classified_but_not_release_blocking() {
 }
 
 #[test]
+fn hardware_validation_baseline_matches_current_manifest_inventory() {
+    let output = run_hardware_validation(&[
+        "--json",
+        "--hardware-baseline",
+        "tools/hardware_validation_baseline.toml",
+        "--require-classified",
+    ]);
+
+    assert!(
+        output.status.success(),
+        "hardware validation baseline failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let baseline = hardware_validation_baseline_toml();
+    assert_eq!(
+        parsed["total"].as_i64(),
+        baseline["hardware_validation"]["total"].as_integer()
+    );
+    assert_eq!(parsed["classified"].as_bool(), Some(true));
+    assert_eq!(parsed["errors"].as_array().unwrap().len(), 0);
+    assert_eq!(
+        parsed["by_status"]["requires_hardware"].as_i64(),
+        baseline["hardware_validation"]["by_status"]["requires_hardware"].as_integer()
+    );
+    assert_eq!(
+        parsed["by_area"]["trackpad"]["total"].as_i64(),
+        baseline["hardware_validation"]["by_area"]["trackpad"].as_integer()
+    );
+    assert_eq!(
+        parsed["by_side"]["right"]["total"].as_i64(),
+        baseline["hardware_validation"]["by_side"]["right"].as_integer()
+    );
+}
+
+#[test]
+fn hardware_validation_rejects_manifest_baseline_drift() {
+    let bad_baseline = r#"
+[hardware_validation]
+total = 1
+check_inventory_sha256 = "bad"
+
+[hardware_validation.by_status]
+requires_hardware = 1
+
+[hardware_validation.by_area]
+trackpad = 1
+
+[hardware_validation.by_side]
+right = 1
+"#;
+    let path = write_temp_file("hardware-validation-bad-baseline", bad_baseline);
+    let output = run_hardware_validation(&[
+        "--hardware-baseline",
+        path.to_str().unwrap(),
+        "--require-classified",
+    ]);
+    let _ = std::fs::remove_file(&path);
+
+    assert!(
+        !output.status.success(),
+        "bad hardware validation baseline unexpectedly passed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("hardware_validation.total: expected baseline 1, got 12"));
+    assert!(stderr.contains("hardware_validation.check_inventory_sha256: expected baseline bad"));
+    assert!(
+        stderr.contains(
+            "hardware_validation.by_status.blocked: actual manifest key is missing from baseline"
+        ),
+        "baseline should enumerate every status bucket"
+    );
+    assert!(
+        stderr.contains(
+            "hardware_validation.by_area.battery: actual manifest key is missing from baseline"
+        ),
+        "baseline should enumerate every hardware area"
+    );
+    assert!(
+        stderr.contains(
+            "hardware_validation.by_side.both: actual manifest key is missing from baseline"
+        ),
+        "baseline should enumerate every hardware side"
+    );
+}
+
+#[test]
 fn migration_status_combines_software_and_hardware_progress() {
     let output = run_migration_status(&[
         "--json",
         "--coverage-baseline",
         "tools/porting_coverage_baseline.toml",
+        "--hardware-baseline",
+        "tools/hardware_validation_baseline.toml",
         "--require-software-complete",
         "--require-hardware-classified",
     ]);
@@ -415,6 +515,8 @@ fn migration_status_combines_software_and_hardware_progress() {
         "--markdown",
         "--coverage-baseline",
         "tools/porting_coverage_baseline.toml",
+        "--hardware-baseline",
+        "tools/hardware_validation_baseline.toml",
     ]);
     assert!(
         markdown.status.success(),
@@ -460,6 +562,8 @@ ported_by_config_image = 6
     let output = run_migration_status(&[
         "--coverage-baseline",
         path.to_str().unwrap(),
+        "--hardware-baseline",
+        "tools/hardware_validation_baseline.toml",
         "--require-software-complete",
     ]);
     let _ = std::fs::remove_file(&path);
@@ -478,6 +582,45 @@ ported_by_config_image = 6
 }
 
 #[test]
+fn migration_status_rejects_hardware_baseline_drift() {
+    let bad_baseline = r#"
+[hardware_validation]
+total = 1
+check_inventory_sha256 = "bad"
+
+[hardware_validation.by_status]
+requires_hardware = 1
+
+[hardware_validation.by_area]
+trackpad = 1
+
+[hardware_validation.by_side]
+right = 1
+"#;
+    let path = write_temp_file("migration-status-bad-hardware-baseline", bad_baseline);
+    let output = run_migration_status(&[
+        "--coverage-baseline",
+        "tools/porting_coverage_baseline.toml",
+        "--hardware-baseline",
+        path.to_str().unwrap(),
+        "--require-software-complete",
+        "--require-hardware-classified",
+    ]);
+    let _ = std::fs::remove_file(&path);
+
+    assert!(
+        !output.status.success(),
+        "migration status accepted hardware baseline drift\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Hardware validation failures:"));
+    assert!(stdout.contains("hardware_validation.total: expected baseline 1, got 12"));
+    assert!(stdout.contains("hardware_validation.check_inventory_sha256: expected baseline bad"));
+}
+
+#[test]
 fn migration_status_accepts_complete_hardware_evidence_for_final_gate() {
     let firmware_ref = "test-firmware-ref";
     let evidence = complete_hardware_evidence_overlay(firmware_ref);
@@ -487,6 +630,8 @@ fn migration_status_accepts_complete_hardware_evidence_for_final_gate() {
         "--json",
         "--coverage-baseline",
         "tools/porting_coverage_baseline.toml",
+        "--hardware-baseline",
+        "tools/hardware_validation_baseline.toml",
         "--evidence",
         path.to_str().unwrap(),
         "--require-firmware-ref",
@@ -516,6 +661,8 @@ fn migration_status_accepts_complete_hardware_evidence_for_final_gate() {
     let stale_output = run_migration_status(&[
         "--coverage-baseline",
         "tools/porting_coverage_baseline.toml",
+        "--hardware-baseline",
+        "tools/hardware_validation_baseline.toml",
         "--evidence",
         path.to_str().unwrap(),
         "--require-firmware-ref",
@@ -1156,6 +1303,8 @@ fn local_validation_entrypoints_match_ci_gates() {
         MAKEFILE_TOML.contains("[tasks.migration-status]")
             && MAKEFILE_TOML.contains("tools/migration_status.py")
             && MAKEFILE_TOML.contains("--coverage-baseline")
+            && MAKEFILE_TOML.contains("--hardware-baseline")
+            && MAKEFILE_TOML.contains("tools/hardware_validation_baseline.toml")
             && MAKEFILE_TOML.contains("--require-software-complete")
             && MAKEFILE_TOML.contains("--require-hardware-classified"),
         "cargo make migration-status should expose the combined release dashboard gate"
@@ -1164,6 +1313,8 @@ fn local_validation_entrypoints_match_ci_gates() {
         MAKEFILE_TOML.contains("[tasks.migration-status-final]")
             && MAKEFILE_TOML.contains("HARDWARE_EVIDENCE")
             && MAKEFILE_TOML.contains("FIRMWARE_REF")
+            && MAKEFILE_TOML
+                .contains("--hardware-baseline tools/hardware_validation_baseline.toml")
             && MAKEFILE_TOML.contains("--require-hardware-validated")
             && MAKEFILE_TOML.contains("--require-firmware-ref \"$FIRMWARE_REF\""),
         "cargo make migration-status-final should require evidence and firmware_ref for complete validation claims"
@@ -1171,6 +1322,7 @@ fn local_validation_entrypoints_match_ci_gates() {
     assert!(
         MAKEFILE_TOML.contains("[tasks.hardware-validation]")
             && MAKEFILE_TOML.contains("tools/hardware_validation.py")
+            && MAKEFILE_TOML.contains("--hardware-baseline")
             && MAKEFILE_TOML.contains("--require-classified"),
         "Makefile.toml should expose the hardware validation classification gate"
     );
@@ -1191,10 +1343,10 @@ fn local_validation_entrypoints_match_ci_gates() {
     for required in [
         "--require-porting-complete",
         "tools/porting_coverage.py --coverage-baseline tools/porting_coverage_baseline.toml --require-zmk-source --require-porting-complete",
-        "tools/migration_status.py --coverage-baseline tools/porting_coverage_baseline.toml --require-zmk-source --require-software-complete --require-hardware-classified",
-        "tools/migration_status.py --coverage-baseline tools/porting_coverage_baseline.toml --evidence path/to/evidence.toml --require-software-complete --require-hardware-classified --require-hardware-validated --require-firmware-ref <tag-or-commit>",
+        "tools/migration_status.py --coverage-baseline tools/porting_coverage_baseline.toml --hardware-baseline tools/hardware_validation_baseline.toml --require-zmk-source --require-software-complete --require-hardware-classified",
+        "tools/migration_status.py --coverage-baseline tools/porting_coverage_baseline.toml --hardware-baseline tools/hardware_validation_baseline.toml --evidence path/to/evidence.toml --require-software-complete --require-hardware-classified --require-hardware-validated --require-firmware-ref <tag-or-commit>",
         "HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-final",
-        "tools/hardware_validation.py --require-classified",
+        "tools/hardware_validation.py --hardware-baseline tools/hardware_validation_baseline.toml --require-classified",
         "tools/hardware_validation.py --markdown",
         "tools/hardware_validation.py --evidence-template",
         "tools/hardware_validation.py --evidence-template --firmware-ref-template <tag-or-commit>",
@@ -1202,6 +1354,7 @@ fn local_validation_entrypoints_match_ci_gates() {
         "tools/hardware_validation.py --evidence path/to/evidence.toml --require-validated --require-firmware-ref <tag-or-commit>",
         "tools/porting_coverage_baseline.toml",
         "tools/hardware_validation_manifest.toml",
+        "tools/hardware_validation_baseline.toml",
         "tools/hardware_validation_evidence.example.toml",
     ] {
         assert!(
@@ -1218,7 +1371,12 @@ fn local_validation_entrypoints_match_ci_gates() {
         "firmware CI path filters should include the porting coverage denominator baseline"
     );
     assert!(
+        FIRMWARE_WORKFLOW_YAML.contains("tools/hardware_validation_baseline.toml"),
+        "firmware CI path filters should include the hardware validation denominator baseline"
+    );
+    assert!(
         FIRMWARE_WORKFLOW_YAML.contains("tools/migration_status.py")
+            && FIRMWARE_WORKFLOW_YAML.contains("--hardware-baseline")
             && FIRMWARE_WORKFLOW_YAML.contains("--require-software-complete")
             && FIRMWARE_WORKFLOW_YAML.contains("--require-hardware-classified")
             && FIRMWARE_WORKFLOW_YAML.contains("--markdown >> \"$GITHUB_STEP_SUMMARY\""),
@@ -1252,6 +1410,7 @@ fn local_validation_entrypoints_match_ci_gates() {
     );
     assert!(
         RELEASE_MD.contains("HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-final")
+            && RELEASE_MD.contains("--hardware-baseline tools/hardware_validation_baseline.toml")
             && RELEASE_MD.contains("Full validation: pass")
             && RELEASE_MD.contains("if the announcement claims complete hardware validation"),
         "release guide should require the final migration status gate before complete hardware-validation claims"

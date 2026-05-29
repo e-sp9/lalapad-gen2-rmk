@@ -112,12 +112,12 @@ Reset/storage-clear UF2 files, when generated for hardware testing, are kept und
 
 ```shell
 python3 -m json.tool vial.json >/tmp/lalapad-vial-check.json
-python3 -c 'import tomllib; [tomllib.load(open(path, "rb")) for path in ("keyboard.toml", "Cargo.toml", "Makefile.toml", "tools/porting_coverage_manifest.toml", "tools/porting_coverage_baseline.toml", "tools/hardware_validation_manifest.toml", "tools/hardware_validation_evidence.example.toml")]; print("toml ok")'
+python3 -c 'import tomllib; [tomllib.load(open(path, "rb")) for path in ("keyboard.toml", "Cargo.toml", "Makefile.toml", "tools/porting_coverage_manifest.toml", "tools/porting_coverage_baseline.toml", "tools/hardware_validation_manifest.toml", "tools/hardware_validation_baseline.toml", "tools/hardware_validation_evidence.example.toml")]; print("toml ok")'
 rmkit get-chip --keyboard-toml-path keyboard.toml
 rmkit get-project-name --keyboard-toml-path keyboard.toml
 python3 tools/porting_coverage.py --coverage-baseline tools/porting_coverage_baseline.toml --require-zmk-source --require-porting-complete
-python3 tools/migration_status.py --coverage-baseline tools/porting_coverage_baseline.toml --require-zmk-source --require-software-complete --require-hardware-classified
-python3 tools/hardware_validation.py --require-classified
+python3 tools/migration_status.py --coverage-baseline tools/porting_coverage_baseline.toml --hardware-baseline tools/hardware_validation_baseline.toml --require-zmk-source --require-software-complete --require-hardware-classified
+python3 tools/hardware_validation.py --hardware-baseline tools/hardware_validation_baseline.toml --require-classified
 python3 tools/hardware_validation.py --markdown
 python3 tools/hardware_validation.py --evidence-template
 python3 tools/check_flash_layout.py --config-only
@@ -147,7 +147,11 @@ inventory, DTS/Kconfig mirrors, Rust constants, or firmware code needles. The
 `--coverage-baseline tools/porting_coverage_baseline.toml` gate also freezes
 the current denominator, result-id inventory hash, and per-kind totals, so
 deleting or swapping coverage items cannot silently turn into a smaller
-`100.00%`. The Rust checks cover the RMK-side IQS9151 register-address
+`100.00%`. `--hardware-baseline tools/hardware_validation_baseline.toml`
+similarly freezes the real-hardware validation check inventory, area/side
+counts, and default status counts so hardware-only gaps cannot be deleted or
+renamed to manufacture a smaller final-validation denominator. The Rust checks
+cover the RMK-side IQS9151 register-address
 inventory, upstream IQS9151 register and bit-flag porting classifications,
 product/register address values, reset/gesture bits, IQS9151 feature-enable
 flags, dynamic-scale bounds, timing values, and initialization byte-array
@@ -235,6 +239,7 @@ For the combined final gate, run:
 
 ```shell
 python3 tools/migration_status.py --coverage-baseline tools/porting_coverage_baseline.toml \
+  --hardware-baseline tools/hardware_validation_baseline.toml \
   --evidence path/to/evidence.toml \
   --require-software-complete \
   --require-hardware-classified \

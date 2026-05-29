@@ -1,0 +1,22 @@
+[hardware_validation]
+total = 12
+check_inventory_sha256 = "dba4ea80d64e37f9ff2f16267f578c95ee73f27128374bd9f6ae07c0d3afca12"
+
+[hardware_validation.by_status]
+blocked = 0
+requires_hardware = 12
+simulated = 0
+validated = 0
+
+[hardware_validation.by_area]
+battery = 1
+ble_split = 1
+status_led = 1
+storage = 1
+trackpad = 7
+vial = 1
+
+[hardware_validation.by_side]
+both = 4
+left = 3
+right = 5

@@ -124,16 +124,29 @@ def software_status(
 
 def hardware_status(
     manifest_path: Path,
+    hardware_baseline_path: Path | None,
     evidence_paths: list[Path],
     required_firmware_ref: str | None,
 ) -> dict[str, Any]:
+    manifest_doc = hardware_validation.load_toml(manifest_path)
+    baseline_failures: list[str] = []
+    if hardware_baseline_path is not None:
+        try:
+            hardware_baseline = hardware_validation.load_toml(hardware_baseline_path)
+        except OSError as e:
+            baseline_failures = [f"failed to read {hardware_baseline_path}: {e}"]
+        else:
+            baseline_failures = hardware_validation.hardware_baseline_errors(
+                hardware_baseline,
+                manifest_doc,
+            )
     manifest, evidence_errors = hardware_validation.merge_evidence(
-        hardware_validation.load_toml(manifest_path),
+        manifest_doc,
         [hardware_validation.load_toml(path) for path in evidence_paths],
     )
     summary = hardware_validation.summarize(
         manifest,
-        evidence_errors,
+        evidence_errors + baseline_failures,
         Path("."),
         required_firmware_ref,
     )
@@ -150,6 +163,7 @@ def build_status(args: argparse.Namespace) -> MigrationStatus:
     )
     hardware = hardware_status(
         args.hardware_manifest,
+        args.hardware_baseline,
         args.evidence,
         args.require_firmware_ref,
     )
@@ -211,6 +225,10 @@ def print_text(status: MigrationStatus) -> None:
                 f"- {failure['kind']} {failure['id']}: "
                 f"{failure['passed']}/{failure['total']} {failure['message']}"
             )
+    if hardware["errors"]:
+        print("Hardware validation failures:")
+        for error in hardware["errors"]:
+            print(f"- {error}")
     if hardware["remaining"]:
         print("Hardware remaining:")
         for item in hardware["remaining"]:
@@ -325,6 +343,7 @@ def main() -> None:
         type=Path,
         default=Path("tools/hardware_validation_manifest.toml"),
     )
+    parser.add_argument("--hardware-baseline", type=Path, default=None)
     parser.add_argument("--evidence", type=Path, action="append", default=[])
     parser.add_argument("--require-firmware-ref", metavar="REF")
     parser.add_argument("--require-software-complete", action="store_true")

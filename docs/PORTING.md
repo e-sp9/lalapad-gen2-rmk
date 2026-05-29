@@ -252,7 +252,7 @@ Run:
 
 ```sh
 python3 tools/porting_coverage.py --coverage-baseline tools/porting_coverage_baseline.toml --require-zmk-source --require-porting-complete
-python3 tools/migration_status.py --coverage-baseline tools/porting_coverage_baseline.toml --require-zmk-source --require-software-complete --require-hardware-classified
+python3 tools/migration_status.py --coverage-baseline tools/porting_coverage_baseline.toml --hardware-baseline tools/hardware_validation_baseline.toml --require-zmk-source --require-software-complete --require-hardware-classified
 ```
 
 The firmware GitHub Actions workflow checks out `e-sp9/zmk-config-LalaPadGen2`,
@@ -282,13 +282,19 @@ checks instead of treating the total percentage as a black box.
 overall denominator, result-id inventory hash, and per-kind denominator. Use
 `--coverage-baseline` in CI and release checks so a removed or swapped check
 fails explicitly instead of producing a smaller `100.00%`.
+`tools/hardware_validation_baseline.toml` does the same for the real-hardware
+validation manifest: it freezes the 12-check inventory hash plus area, side,
+and default status totals before evidence overlays are applied. Use
+`--hardware-baseline` with the normal CI and release dashboard gates so
+hardware-only requirements cannot be removed, renamed, or reclassified to
+manufacture a smaller final-validation denominator.
 It is intended to prevent regressions like a visible `LT(...)` binding whose
 tap-hold behavior is changed by RMK's global flow-tap setting.
 
 `tools/migration_status.py` is the combined dashboard for release review. It
 runs the same source-backed software checks, the coverage-denominator baseline,
-and the hardware validation tracker in one report. The CI gate uses
-`--require-software-complete` and
+the hardware validation baseline, and the hardware validation tracker in one
+report. The CI gate uses `--require-software-complete` and
 `--require-hardware-classified`, which means software migration must stay at
 100% while hardware-only checks are allowed to remain unvalidated but cannot
 become malformed or untracked. The Markdown report includes hardware progress
@@ -299,6 +305,7 @@ The full release-validation command is:
 
 ```sh
 python3 tools/migration_status.py --coverage-baseline tools/porting_coverage_baseline.toml \
+  --hardware-baseline tools/hardware_validation_baseline.toml \
   --evidence path/to/evidence.toml \
   --require-software-complete \
   --require-hardware-classified \
@@ -325,6 +332,7 @@ Run:
 
 ```sh
 python3 tools/hardware_validation.py --require-classified
+python3 tools/hardware_validation.py --hardware-baseline tools/hardware_validation_baseline.toml --require-classified
 python3 tools/hardware_validation.py --markdown
 python3 tools/hardware_validation.py --evidence-template
 python3 tools/hardware_validation.py --evidence-template --firmware-ref-template <tag-or-commit>

@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import copy
 import datetime
+import hashlib
 import json
 import re
 import sys
@@ -201,6 +202,122 @@ def validate_validated_evidence(check_id: str, check: dict[str, Any]) -> list[st
         errors.append(
             f"{check_id}: artifact_or_notes must include a concrete photo/log/probe/Vial observation note"
         )
+
+    return errors
+
+
+def manifest_inventory_items(manifest: dict[str, Any]) -> list[dict[str, str]]:
+    checks = manifest.get("checks", [])
+    if not isinstance(checks, list):
+        return []
+    fields = ("id", "area", "side", "requirement", "evidence", "source", "status")
+    return [
+        {field: str(check.get(field, "")) for field in fields}
+        for check in checks
+        if isinstance(check, dict)
+    ]
+
+
+def manifest_inventory_digest(manifest: dict[str, Any]) -> tuple[int, str]:
+    items = manifest_inventory_items(manifest)
+    payload = json.dumps(items, sort_keys=True, separators=(",", ":")).encode()
+    return len(items), hashlib.sha256(payload).hexdigest()
+
+
+def manifest_baseline_counts(manifest: dict[str, Any]) -> dict[str, Any]:
+    checks = manifest.get("checks", [])
+    by_status = {status: 0 for status in sorted(VALID_STATUSES)}
+    by_area: dict[str, int] = {}
+    by_side: dict[str, int] = {}
+    if not isinstance(checks, list):
+        return {"total": 0, "by_status": by_status, "by_area": {}, "by_side": {}}
+
+    for check in checks:
+        if not isinstance(check, dict):
+            continue
+        status = str(check.get("status", ""))
+        by_status[status] = by_status.get(status, 0) + 1
+        area = str(check.get("area", ""))
+        side = str(check.get("side", ""))
+        by_area[area] = by_area.get(area, 0) + 1
+        by_side[side] = by_side.get(side, 0) + 1
+
+    return {
+        "total": len([check for check in checks if isinstance(check, dict)]),
+        "by_status": by_status,
+        "by_area": dict(sorted(by_area.items())),
+        "by_side": dict(sorted(by_side.items())),
+    }
+
+
+def table_int(value: Any, key: str, errors: list[str], label: str) -> int | None:
+    if not isinstance(value, dict):
+        errors.append(f"{label}: baseline section is missing")
+        return None
+    actual = value.get(key)
+    if not isinstance(actual, int):
+        errors.append(f"{label}: baseline missing integer field {key}")
+        return None
+    return actual
+
+
+def compare_int(expected: int | None, actual: int, label: str, errors: list[str]) -> None:
+    if expected is not None and expected != actual:
+        errors.append(f"{label}: expected baseline {expected}, got {actual}")
+
+
+def hardware_baseline_errors(baseline: dict[str, Any], manifest: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    hardware = baseline.get("hardware_validation", {})
+    if not isinstance(hardware, dict):
+        return ["hardware baseline must contain a [hardware_validation] table"]
+
+    total, inventory_sha256 = manifest_inventory_digest(manifest)
+    counts = manifest_baseline_counts(manifest)
+    compare_int(
+        table_int(hardware, "total", errors, "hardware_validation"),
+        total,
+        "hardware_validation.total",
+        errors,
+    )
+    expected_sha256 = hardware.get("check_inventory_sha256")
+    if not isinstance(expected_sha256, str):
+        errors.append("hardware_validation: baseline missing field check_inventory_sha256")
+    elif expected_sha256 != inventory_sha256:
+        errors.append(
+            "hardware_validation.check_inventory_sha256: "
+            f"expected baseline {expected_sha256}, got {inventory_sha256}"
+        )
+
+    for key, actual_counts in [
+        ("by_status", counts["by_status"]),
+        ("by_area", counts["by_area"]),
+        ("by_side", counts["by_side"]),
+    ]:
+        expected_counts = hardware.get(key)
+        if not isinstance(expected_counts, dict):
+            errors.append(f"hardware_validation baseline must contain [hardware_validation.{key}]")
+            continue
+        expected_keys = set(expected_counts)
+        actual_keys = set(actual_counts)
+        for missing in sorted(expected_keys - actual_keys):
+            errors.append(
+                f"hardware_validation.{key}.{missing}: baseline key is missing from actual manifest"
+            )
+        for missing in sorted(actual_keys - expected_keys):
+            errors.append(
+                f"hardware_validation.{key}.{missing}: actual manifest key is missing from baseline"
+            )
+        for item_key in sorted(expected_keys & actual_keys):
+            expected = expected_counts[item_key]
+            if not isinstance(expected, int):
+                errors.append(f"hardware_validation.{key}.{item_key}: baseline value must be an integer")
+                continue
+            actual = actual_counts[item_key]
+            if expected != actual:
+                errors.append(
+                    f"hardware_validation.{key}.{item_key}: expected baseline {expected}, got {actual}"
+                )
 
     return errors
 
@@ -563,6 +680,12 @@ def main() -> None:
         default=Path("tools/hardware_validation_manifest.toml"),
     )
     parser.add_argument(
+        "--hardware-baseline",
+        type=Path,
+        default=None,
+        help="fail if the hardware validation manifest inventory drifts",
+    )
+    parser.add_argument(
         "--evidence",
         type=Path,
         action="append",
@@ -605,10 +728,25 @@ def main() -> None:
     if args.firmware_ref_template and not args.evidence_template:
         parser.error("--firmware-ref-template can only be used with --evidence-template")
 
+    manifest_doc = load_toml(args.manifest)
+    baseline_failures: list[str] = []
+    if args.hardware_baseline is not None:
+        try:
+            baseline = load_toml(args.hardware_baseline)
+        except OSError as e:
+            baseline_failures = [f"failed to read {args.hardware_baseline}: {e}"]
+        else:
+            baseline_failures = hardware_baseline_errors(baseline, manifest_doc)
+
     manifest, evidence_errors = merge_evidence(
-        load_toml(args.manifest), [load_toml(path) for path in args.evidence]
+        manifest_doc, [load_toml(path) for path in args.evidence]
     )
-    summary = summarize(manifest, evidence_errors, Path("."), args.require_firmware_ref)
+    summary = summarize(
+        manifest,
+        evidence_errors + baseline_failures,
+        Path("."),
+        args.require_firmware_ref,
+    )
     if args.json:
         print(json.dumps(as_json(summary), indent=2, sort_keys=True))
     elif args.markdown:
