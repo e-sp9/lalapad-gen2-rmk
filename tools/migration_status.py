@@ -232,17 +232,22 @@ def print_text(status: MigrationStatus) -> None:
     if hardware["remaining"]:
         print("Hardware remaining:")
         for item in hardware["remaining"]:
-            print(f"- {item['id']} ({item['area']}/{item['side']}): {item['status']}")
+            needs = item.get("evidence_needles", "")
+            suffix = f" [needs: {needs}]" if needs else ""
+            print(f"- {item['id']} ({item['area']}/{item['side']}): {item['status']}{suffix}")
 
 
-def markdown_table(rows: list[list[str]]) -> str:
-    header = rows[0]
+def markdown_table(rows: list[list[Any]]) -> str:
+    escaped_rows = [
+        [hardware_validation.markdown_escape(cell) for cell in row] for row in rows
+    ]
+    header = escaped_rows[0]
     separator = ["---"] * len(header)
     lines = [
         "| " + " | ".join(header) + " |",
         "| " + " | ".join(separator) + " |",
     ]
-    for row in rows[1:]:
+    for row in escaped_rows[1:]:
         lines.append("| " + " | ".join(row) + " |")
     return "\n".join(lines)
 
@@ -314,13 +319,14 @@ def print_markdown(status: MigrationStatus) -> None:
         print()
         print("### Hardware Remaining")
         print()
-        rows = [["ID", "Area", "Side", "Status"]]
+        rows = [["ID", "Area", "Side", "Status", "Required observations"]]
         rows.extend(
             [
                 str(item["id"]),
                 str(item["area"]),
                 str(item["side"]),
                 str(item["status"]),
+                str(item.get("evidence_needles", "")),
             ]
             for item in hardware["remaining"]
         )

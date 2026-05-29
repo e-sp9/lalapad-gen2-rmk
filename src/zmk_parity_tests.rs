@@ -522,6 +522,15 @@ fn migration_status_combines_software_and_hardware_progress() {
     assert_eq!(parsed["hardware"]["classified"].as_bool(), Some(true));
     assert_eq!(parsed["hardware"]["validated"].as_i64(), Some(0));
     assert_eq!(parsed["hardware"]["total"].as_i64(), Some(12));
+    let remaining = parsed["hardware"]["remaining"].as_array().unwrap();
+    let right_trackpad = remaining
+        .iter()
+        .find(|item| item["id"] == "right_trackpad_cursor_tap_scroll")
+        .expect("migration status hardware remaining item is missing");
+    assert_eq!(
+        right_trackpad["evidence_needles"].as_str(),
+        Some("right, cursor, tap, vertical scroll, horizontal scroll")
+    );
     assert_eq!(
         parsed["ready_for_release_without_hardware"].as_bool(),
         Some(true)
@@ -549,7 +558,53 @@ fn migration_status_combines_software_and_hardware_progress() {
     assert!(stdout.contains("### Hardware Progress By Side"));
     assert!(stdout.contains("| right | 0 | 5 | 0.00% |"));
     assert!(stdout.contains("### Hardware Remaining"));
-    assert!(stdout.contains("| vial_thumb_layer_taps | vial | both | requires_hardware |"));
+    assert!(stdout.contains("| ID | Area | Side | Status | Required observations |"));
+    assert!(stdout.contains(
+        "| vial_thumb_layer_taps | vial | both | requires_hardware | Vial, Space, Enter, layer 1, layer 2 |"
+    ));
+
+    let text = run_migration_status(&[
+        "--coverage-baseline",
+        "tools/porting_coverage_baseline.toml",
+        "--hardware-baseline",
+        "tools/hardware_validation_baseline.toml",
+    ]);
+    assert!(
+        text.status.success(),
+        "migration status text failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&text.stdout),
+        String::from_utf8_lossy(&text.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&text.stdout)
+            .contains("[needs: right, cursor, tap, vertical scroll, horizontal scroll]")
+    );
+}
+
+#[test]
+fn migration_status_markdown_table_escapes_cells() {
+    let output = run_python(
+        r#"
+import sys
+sys.path.insert(0, "tools")
+import migration_status
+
+print(migration_status.markdown_table([
+    ["Header|A", "Header\nB"],
+    ["value|A", "value\nB"],
+]))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "migration_status markdown table escape check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("| Header\\|A | Header B |"));
+    assert!(stdout.contains("| value\\|A | value B |"));
 }
 
 #[test]
