@@ -246,7 +246,7 @@ ported = 1
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("porting coverage baseline drift:"));
-    assert!(stderr.contains("coverage.total: expected baseline 1, got 2478"));
+    assert!(stderr.contains("coverage.total: expected baseline 1, got 2510"));
     assert!(stderr.contains("coverage.result_count: expected baseline 1, got 450"));
     assert!(stderr.contains("coverage.result_inventory_sha256: expected baseline bad"));
     assert!(
@@ -526,7 +526,7 @@ fn migration_status_combines_software_and_hardware_progress() {
     );
     let stdout = String::from_utf8_lossy(&markdown.stdout);
     assert!(stdout.contains("## RMK Migration Status"));
-    assert!(stdout.contains("| Software coverage | 2478 | 2478 | 100.00% |"));
+    assert!(stdout.contains("| Software coverage | 2510 | 2510 | 100.00% |"));
     assert!(stdout.contains("### Hardware Progress By Area"));
     assert!(stdout.contains("| trackpad | 0 | 7 | 0.00% |"));
     assert!(stdout.contains("### Hardware Progress By Side"));
@@ -539,7 +539,7 @@ fn migration_status_combines_software_and_hardware_progress() {
 fn migration_status_rejects_coverage_baseline_drift() {
     let bad_baseline = r#"
 [coverage]
-passed = 2478
+passed = 2510
 total = 1
 result_count = 1
 result_inventory_sha256 = "bad"
@@ -576,7 +576,7 @@ ported_by_config_image = 6
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("Software failures:"));
-    assert!(stdout.contains("coverage.total: expected baseline 1, got 2478"));
+    assert!(stdout.contains("coverage.total: expected baseline 1, got 2510"));
     assert!(stdout.contains("coverage.result_count: expected baseline 1, got 450"));
     assert!(stdout.contains("coverage.result_inventory_sha256: expected baseline bad"));
 }
@@ -2388,17 +2388,17 @@ print(json.dumps({
 
     let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(parsed["ok"][0]["kind"], "zmk_source_scenario");
-    assert_eq!(parsed["ok"][0]["passed"].as_i64(), Some(2));
-    assert_eq!(parsed["ok"][0]["total"].as_i64(), Some(2));
+    assert_eq!(parsed["ok"][0]["passed"].as_i64(), Some(3));
+    assert_eq!(parsed["ok"][0]["total"].as_i64(), Some(3));
     assert_eq!(parsed["ok"][0]["ok"], true);
-    assert_eq!(parsed["ok"][1]["passed"].as_i64(), Some(3));
-    assert_eq!(parsed["ok"][1]["total"].as_i64(), Some(3));
+    assert_eq!(parsed["ok"][1]["passed"].as_i64(), Some(5));
+    assert_eq!(parsed["ok"][1]["total"].as_i64(), Some(5));
     assert_eq!(parsed["ok"][1]["ok"], true);
 
     let changed = &parsed["changed"][0];
     assert_eq!(changed["kind"], "zmk_source_scenario");
-    assert_eq!(changed["passed"].as_i64(), Some(1));
-    assert_eq!(changed["total"].as_i64(), Some(2));
+    assert_eq!(changed["passed"].as_i64(), Some(2));
+    assert_eq!(changed["total"].as_i64(), Some(3));
     assert_eq!(changed["ok"], false);
     assert!(
         changed["message"]
@@ -2406,6 +2406,79 @@ print(json.dumps({
             .unwrap()
             .contains("source output expected 'Kp7', got 'Kp8'")
     );
+}
+
+#[test]
+fn porting_coverage_rejects_thumb_layer_tap_declared_layer_drift() {
+    let output = run_python(
+        r#"
+import importlib.util
+import json
+import sys
+
+spec = importlib.util.spec_from_file_location("porting_coverage", "tools/porting_coverage.py")
+pc = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = pc
+spec.loader.exec_module(pc)
+
+config = {
+    "behavior": {"tri_layer": {"lower": 1, "upper": 2, "adjust": 3}},
+    "layout": {
+        "keymap": [
+            [["LT(2, Space, FAST_LAYER)", "U"]],
+            [["_", "Kp7"]],
+            [["_", "Home"]],
+            [["_", "User0"]],
+        ],
+    },
+}
+manifest = {
+    "scenarios": [
+        {
+            "id": "space_hold_u_declared_layer_drift",
+            "hold": {
+                "row": 0,
+                "col": 0,
+                "expected_action": "LT(2, Space, FAST_LAYER)",
+                "activates_layer": 1,
+            },
+            "tap": {"row": 0, "col": 1},
+            "expected_output": "Kp7",
+        },
+    ],
+}
+source_layers = config["layout"]["keymap"]
+
+def pack(results):
+    return [result.__dict__ | {"ok": result.ok} for result in results]
+
+print(json.dumps({
+    "rmk": pack(pc.check_scenarios(manifest, config)),
+    "source": pack(pc.check_zmk_source_scenarios(manifest, config, source_layers)),
+}))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "declared layer drift parser check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    for group in ["rmk", "source"] {
+        let result = &parsed[group][0];
+        assert_eq!(result["passed"].as_i64(), Some(2));
+        assert_eq!(result["total"].as_i64(), Some(3));
+        assert_eq!(result["ok"], false);
+        assert!(
+            result["message"].as_str().unwrap().contains(
+                "hold declared layer expected 2 from 'LT(2, Space, FAST_LAYER)', got activates_layer 1"
+            ),
+            "{group} should reject manifest activates_layer drift"
+        );
+    }
 }
 
 #[test]

@@ -273,6 +273,43 @@ def tap_action(action: str) -> str:
     return action
 
 
+def hold_action_layer(action: str) -> int | None:
+    if action.startswith("LT("):
+        inside = action.removeprefix("LT(").removesuffix(")")
+        pieces = [piece.strip() for piece in inside.split(",")]
+        if pieces and pieces[0].isdigit():
+            return int(pieces[0])
+    if action.startswith("MO("):
+        inside = action.removeprefix("MO(").removesuffix(")").strip()
+        if inside.isdigit():
+            return int(inside)
+    return None
+
+
+def check_hold_declared_layer(
+    hold: dict[str, Any],
+    action: str,
+    expected_action: str,
+    messages: list[str],
+    prefix: str = "",
+) -> bool:
+    declared_layer = int(hold["activates_layer"])
+    expected_layer = hold_action_layer(expected_action)
+    actual_layer = hold_action_layer(action)
+    if expected_layer != declared_layer:
+        messages.append(
+            f"{prefix}hold declared layer expected {expected_layer!r} from "
+            f"{expected_action!r}, got activates_layer {declared_layer}"
+        )
+        return False
+    if actual_layer != declared_layer:
+        messages.append(
+            f"{prefix}hold action layer expected {declared_layer}, got {actual_layer!r} from {action!r}"
+        )
+        return False
+    return True
+
+
 def active_layers_from_holds(config: dict[str, Any], holds: list[dict[str, Any]]) -> list[int]:
     active = {int(hold["activates_layer"]) for hold in holds}
     tri = config.get("behavior", {}).get("tri_layer", {})
@@ -488,7 +525,7 @@ def check_scenarios(manifest: dict[str, Any], config: dict[str, Any]) -> list[Re
             holds.append(scenario["hold"])
 
         passed = 0
-        total = 1 + len(holds)
+        total = 1 + len(holds) * 2
         messages: list[str] = []
         for hold in holds:
             action = km[0][int(hold["row"])][int(hold["col"])]
@@ -497,6 +534,8 @@ def check_scenarios(manifest: dict[str, Any], config: dict[str, Any]) -> list[Re
                 passed += 1
             else:
                 messages.append(f"hold action expected {expected_action!r}, got {action!r}")
+            if check_hold_declared_layer(hold, action, expected_action, messages):
+                passed += 1
 
         active_layers = active_layers_from_holds(config, holds)
         tap = scenario["tap"]
@@ -531,7 +570,7 @@ def check_zmk_source_scenarios(
             holds.append(scenario["hold"])
 
         passed = 0
-        total = 1 + len(holds)
+        total = 1 + len(holds) * 2
         messages: list[str] = []
         for hold in holds:
             action = source_layers[0][int(hold["row"])][int(hold["col"])]
@@ -542,6 +581,8 @@ def check_zmk_source_scenarios(
                 messages.append(
                     f"source hold action expected {expected_action!r}, got {action!r}"
                 )
+            if check_hold_declared_layer(hold, action, expected_action, messages, "source "):
+                passed += 1
 
         active_layers = active_layers_from_holds(config, holds)
         tap = scenario["tap"]

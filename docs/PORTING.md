@@ -195,7 +195,9 @@ contract derived from the upstream ZMK keymap plus documented RMK-specific
 deltas. It covers the exact RMK keymap array shape, all configured RMK keymap
 cells, the exact RMK combo inventory, tri-layer and tap-hold behavior settings,
 and golden thumb-layer scenarios for Space, Enter, and the system tri-layer. It
-also covers source-backed split matrix pins,
+derives each scenario hold layer from the `LT(...)`/`MO(...)` action and checks
+that it matches the manifest's `activates_layer`, so the scenario metadata
+cannot drift together with the expected output. It also covers source-backed split matrix pins,
 right-central/left-peripheral orientation, BLE TX power, charge pins, RGB pins,
 IQS9151 I2C/IRQ pins, trackpad scaling constants, the RMK-side IQS9151
 register-address inventory, upstream IQS9151 register and bit-flag porting
