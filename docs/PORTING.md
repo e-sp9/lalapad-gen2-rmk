@@ -390,7 +390,9 @@ one manifest check by id and must provide `validated_at`, `tester`,
 other immutable identifier for the central/peripheral firmware pair that was
 flashed; placeholders and moving refs such as `main`, `latest`, and `HEAD` are
 rejected. `artifact_or_notes` must describe concrete observed evidence such as
-a photo, log, probe reading, Vial observation, or similar check-specific note.
+a photo, log, probe reading, Vial observation, or similar check-specific note,
+and must mention the check-specific observation terms declared by
+`evidence_needles` in the hardware validation manifest.
 `--require-firmware-ref` only rejects stale validated evidence; combine it with
 `--require-validated` when all checks must be proven for that exact firmware.
 Use `--evidence-template > hardware-validation-evidence.local.toml` to generate

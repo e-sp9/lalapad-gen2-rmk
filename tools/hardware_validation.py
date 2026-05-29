@@ -203,6 +203,25 @@ def validate_validated_evidence(check_id: str, check: dict[str, Any]) -> list[st
             f"{check_id}: artifact_or_notes must include a concrete photo/log/probe/Vial observation note"
         )
 
+    evidence_needles = check.get("evidence_needles", [])
+    if evidence_needles:
+        if not isinstance(evidence_needles, list) or not all(
+            isinstance(needle, str) and needle.strip() for needle in evidence_needles
+        ):
+            errors.append(f"{check_id}: evidence_needles must be a non-empty string array")
+        else:
+            lower_notes = artifact_or_notes.lower()
+            missing_needles = [
+                needle
+                for needle in evidence_needles
+                if needle.lower() not in lower_notes
+            ]
+            if missing_needles:
+                errors.append(
+                    f"{check_id}: artifact_or_notes must mention required observation(s): "
+                    + ", ".join(repr(needle) for needle in missing_needles)
+                )
+
     return errors
 
 
@@ -212,7 +231,14 @@ def manifest_inventory_items(manifest: dict[str, Any]) -> list[dict[str, str]]:
         return []
     fields = ("id", "area", "side", "requirement", "evidence", "source", "status")
     return [
-        {field: str(check.get(field, "")) for field in fields}
+        {
+            **{field: str(check.get(field, "")) for field in fields},
+            "evidence_needles": json.dumps(
+                check.get("evidence_needles", []),
+                sort_keys=True,
+                separators=(",", ":"),
+            ),
+        }
         for check in checks
         if isinstance(check, dict)
     ]
@@ -549,6 +575,10 @@ def as_evidence_template(manifest: dict[str, Any], firmware_ref: str = "") -> st
             lines.extend(toml_comment(check.get("requirement", "")))
             lines.append("# Required evidence:")
             lines.extend(toml_comment(check.get("evidence", "")))
+            evidence_needles = check.get("evidence_needles", [])
+            if evidence_needles:
+                lines.append("# Artifact/notes must mention:")
+                lines.extend(toml_comment(", ".join(str(needle) for needle in evidence_needles)))
             lines.append("")
     return "\n".join(lines)
 

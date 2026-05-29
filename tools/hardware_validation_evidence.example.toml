@@ -9,7 +9,8 @@
 #
 # Evidence entries are overlays keyed by check id from
 # tools/hardware_validation_manifest.toml. Keep artifact_or_notes specific:
-# include a photo/log path, probe reading, or Vial observation note. Set
+# include a photo/log path, probe reading, or Vial observation note, and include
+# every required observation listed by `evidence_needles` for that check. Set
 # firmware_ref to the release tag, commit hash, or other immutable firmware
 # identifier that was flashed during the hardware test. Do not use placeholders
 # or moving refs such as main/latest/HEAD. validated_at must be a real
