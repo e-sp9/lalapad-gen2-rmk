@@ -25,6 +25,8 @@ class SoftwareStatus:
     total: int
     rate: float | None
     zmk_source: dict[str, Any]
+    zmk_source_clean: bool
+    zmk_source_clean_errors: list[str]
     by_kind: dict[str, dict[str, int | float | None]]
     implementation: dict[str, Any]
     complete: bool
@@ -93,6 +95,7 @@ def software_status(
             }
             for failure in failures
         ]
+    zmk_clean_errors = porting_coverage.zmk_source_clean_errors(zmk_source)
     zmk_source_failures = [
         {
             "id": "zmk_source_clean",
@@ -102,9 +105,7 @@ def software_status(
             "message": failure,
         }
         for failure in (
-            porting_coverage.zmk_source_clean_errors(zmk_source)
-            if require_zmk_clean_source
-            else []
+            zmk_clean_errors if require_zmk_clean_source else []
         )
     ]
     zmk_source_commit_failures = [
@@ -150,6 +151,8 @@ def software_status(
         total=total,
         rate=None if total == 0 else passed / total,
         zmk_source=zmk_source,
+        zmk_source_clean=not zmk_clean_errors,
+        zmk_source_clean_errors=zmk_clean_errors,
         by_kind=by_kind_json,
         implementation={
             "total": implementation.total,
@@ -406,7 +409,7 @@ def build_status(args: argparse.Namespace) -> MigrationStatus:
     )
     hardware_classified = bool(hardware["classified"])
     hardware_validated = hardware_classified and hardware["validated"] == hardware["total"]
-    ready_without_hardware = software.complete and hardware_classified
+    ready_without_hardware = software.complete and software.zmk_source_clean and hardware_classified
     return MigrationStatus(
         software=software,
         hardware=hardware,
@@ -423,6 +426,8 @@ def as_json(status: MigrationStatus) -> dict[str, Any]:
             "total": status.software.total,
             "rate": status.software.rate,
             "zmk_source": status.software.zmk_source,
+            "zmk_source_clean": status.software.zmk_source_clean,
+            "zmk_source_clean_errors": status.software.zmk_source_clean_errors,
             "by_kind": status.software.by_kind,
             "implementation": status.software.implementation,
             "complete": status.software.complete,
@@ -462,6 +467,7 @@ def print_text(status: MigrationStatus) -> None:
         f"{implementation['implemented']}/{implementation['total']} = "
         f"{percent(implementation['rate'])}"
     )
+    print(f"ZMK source clean: {'pass' if status.software.zmk_source_clean else 'fail'}")
     print(
         "Hardware validation: "
         f"{hardware['validated']}/{hardware['total']} = {hardware_rate}"
@@ -487,6 +493,12 @@ def print_text(status: MigrationStatus) -> None:
                 f"- {failure['kind']} {failure['id']}: "
                 f"{failure['passed']}/{failure['total']} {failure['message']}"
             )
+    if not status.software.zmk_source_clean and not any(
+        failure["id"] == "zmk_source_clean" for failure in status.software.failed
+    ):
+        print("ZMK source clean failures:")
+        for failure in status.software.zmk_source_clean_errors:
+            print(f"- {failure}")
     if hardware["errors"]:
         print("Hardware validation failures:")
         for error in hardware["errors"]:
@@ -586,6 +598,11 @@ def print_markdown(status: MigrationStatus) -> None:
         f"`{hardware_validation.markdown_escape(hardware['check_inventory_sha256'])}`"
     )
     print()
+    print(f"ZMK source clean: {'pass' if status.software.zmk_source_clean else 'fail'}")
+    if not status.software.zmk_source_clean:
+        for failure in status.software.zmk_source_clean_errors:
+            print(f"- {hardware_validation.markdown_escape(failure)}")
+        print()
     print(
         f"Release gate without hardware: "
         f"{'pass' if status.ready_for_release_without_hardware else 'fail'}"

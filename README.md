@@ -195,6 +195,9 @@ inventory, DTS/Kconfig mirrors, Rust constants, or firmware code needles. The
 same reports include the ZMK keymap path, source availability, Git repository
 path, Git commit, dirty state, and dirty path list so a `100.00%` porting
 result is tied to the exact upstream checkout used as the source contract. The
+combined release-readiness line stays failed when that checkout is dirty or
+outside Git, even if the source-backed software coverage percentage is 100%.
+The
 `--coverage-baseline tools/porting_coverage_baseline.toml` gate also freezes
 the current denominator, result-id inventory hash, and per-kind totals, so
 deleting or swapping coverage items cannot silently turn into a smaller

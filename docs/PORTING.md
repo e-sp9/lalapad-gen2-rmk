@@ -359,6 +359,9 @@ code-needle checks instead of treating the total percentage as a black box.
 They also include the ZMK keymap path, source availability, Git repository
 path, Git commit, dirty state, and dirty path list so the migration percentage
 can be traced back to the exact upstream checkout used as the source contract.
+The combined release-readiness gate requires that source checkout to be clean,
+so a dirty ZMK reference cannot be hidden behind a 100% software coverage
+number.
 The Vial checks also pin a normalized KLE geometry signature, so row grouping,
 spacing directives, and half-size thumb/trackpad controls cannot drift while
 the same matrix coordinates remain present.

@@ -231,6 +231,99 @@ fn default_zmk_config_dir() -> Option<std::path::PathBuf> {
     None
 }
 
+fn clean_zmk_keymap_fixture() -> Option<(std::path::PathBuf, std::path::PathBuf)> {
+    fn copy_dir_without_git(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
+        std::fs::create_dir_all(dst)?;
+        for entry in std::fs::read_dir(src)? {
+            let entry = entry?;
+            let file_name = entry.file_name();
+            if file_name == ".git" {
+                continue;
+            }
+            let src_path = entry.path();
+            let dst_path = dst.join(file_name);
+            let file_type = entry.file_type()?;
+            if file_type.is_dir() {
+                copy_dir_without_git(&src_path, &dst_path)?;
+            } else if file_type.is_file() {
+                std::fs::copy(&src_path, &dst_path)?;
+            } else if file_type.is_symlink() {
+                let target = std::fs::read_link(&src_path)?;
+                #[cfg(unix)]
+                std::os::unix::fs::symlink(target, &dst_path)?;
+            }
+        }
+        Ok(())
+    }
+
+    let zmk_config_dir = default_zmk_config_dir()?;
+    let repo_output = Command::new("git")
+        .args([
+            "-C",
+            zmk_config_dir.to_str().unwrap(),
+            "rev-parse",
+            "--show-toplevel",
+        ])
+        .output()
+        .ok()?;
+    if !repo_output.status.success() {
+        return None;
+    }
+    let source_repo = String::from_utf8(repo_output.stdout).ok()?;
+    let source_repo = source_repo.trim();
+    if source_repo.is_empty() {
+        return None;
+    }
+
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?
+        .as_nanos();
+    let root =
+        std::env::temp_dir().join(format!("lalapad-clean-zmk-{}-{unique}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).ok()?;
+    let clone_dir = root.join("zmk-config-LalaPadGen2");
+    copy_dir_without_git(std::path::Path::new(source_repo), &clone_dir).ok()?;
+    let init_output = Command::new("git")
+        .args(["init", "--quiet"])
+        .current_dir(&clone_dir)
+        .output()
+        .ok()?;
+    if !init_output.status.success() {
+        let _ = std::fs::remove_dir_all(&root);
+        return None;
+    }
+    Command::new("git")
+        .args(["add", "."])
+        .current_dir(&clone_dir)
+        .output()
+        .ok()
+        .filter(|output| output.status.success())?;
+    Command::new("git")
+        .args([
+            "-c",
+            "user.name=Porting Test",
+            "-c",
+            "user.email=porting-test@example.invalid",
+            "commit",
+            "--quiet",
+            "-m",
+            "source fixture",
+        ])
+        .current_dir(&clone_dir)
+        .output()
+        .ok()
+        .filter(|output| output.status.success())?;
+
+    let keymap = clone_dir.join("config").join("lalapadgen2.keymap");
+    if !keymap.exists() {
+        let _ = std::fs::remove_dir_all(&root);
+        return None;
+    }
+    Some((root, keymap))
+}
+
 fn manifest_status_counts(manifest: &toml::Value) -> BTreeMap<String, i64> {
     let mut counts = BTreeMap::new();
     for section in ["iqs9151_register_porting", "iqs9151_bit_porting"] {
@@ -1180,6 +1273,12 @@ fn migration_status_combines_software_and_hardware_progress() {
     assert_eq!(parsed["hardware"]["classified"].as_bool(), Some(true));
     assert_eq!(parsed["hardware"]["validated"].as_i64(), Some(0));
     assert_eq!(parsed["hardware"]["total"].as_i64(), Some(12));
+    assert!(parsed["software"]["zmk_source_clean"].as_bool().is_some());
+    assert!(
+        parsed["software"]["zmk_source_clean_errors"]
+            .as_array()
+            .is_some()
+    );
     let hardware_baseline = hardware_validation_baseline_toml();
     assert_eq!(
         parsed["hardware"]["check_inventory_sha256"].as_str(),
@@ -1199,7 +1298,7 @@ fn migration_status_combines_software_and_hardware_progress() {
     );
     assert_eq!(
         parsed["ready_for_release_without_hardware"].as_bool(),
-        Some(true)
+        parsed["software"]["zmk_source_clean"].as_bool()
     );
     assert_eq!(parsed["fully_validated"].as_bool(), Some(false));
 
@@ -1226,6 +1325,7 @@ fn migration_status_combines_software_and_hardware_progress() {
     )));
     assert!(stdout.contains("### Hardware Progress By Area"));
     assert!(stdout.contains("Hardware check inventory SHA256: `"));
+    assert!(stdout.contains("ZMK source clean:"));
     assert!(stdout.contains("| trackpad | 0 | 7 | 0.00% |"));
     assert!(stdout.contains("### Hardware Progress By Side"));
     assert!(stdout.contains("| right | 0 | 5 | 0.00% |"));
@@ -1407,9 +1507,8 @@ fn migration_status_accepts_complete_hardware_evidence_for_final_gate() {
     let (artifact_root, artifact_path, pair_sha256) = test_firmware_artifact_fixture(firmware_ref);
     let evidence = complete_hardware_evidence_overlay_with_pair_sha(firmware_ref, &pair_sha256);
     let path = write_temp_file("migration-status-complete-evidence", &evidence);
-    let zmk_keymap_path = default_zmk_config_dir()
-        .expect("complete final gate requires upstream ZMK source")
-        .join("lalapadgen2.keymap");
+    let (clean_zmk_root, zmk_keymap_path) =
+        clean_zmk_keymap_fixture().expect("complete final gate requires upstream ZMK source");
     let zmk_keymap = zmk_keymap_path.to_str().unwrap();
 
     let output = run_migration_status(&[
@@ -1450,6 +1549,60 @@ fn migration_status_accepts_complete_hardware_evidence_for_final_gate() {
         Some(true)
     );
     assert_eq!(parsed["fully_validated"].as_bool(), Some(true));
+
+    let (dirty_zmk_root, dirty_zmk_keymap_path) = clean_zmk_keymap_fixture()
+        .expect("dirty-source release readiness regression requires upstream ZMK source");
+    let dirty_zmk_keymap = dirty_zmk_keymap_path.to_str().unwrap();
+    let clean_zmk_repo = dirty_zmk_root.join("zmk-config-LalaPadGen2");
+    let dirty_mode = Command::new("git")
+        .args(["update-index", "--chmod=+x", "config/lalapadgen2.conf"])
+        .current_dir(&clean_zmk_repo)
+        .output()
+        .unwrap();
+    assert!(
+        dirty_mode.status.success(),
+        "failed to mark ZMK fixture dirty\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&dirty_mode.stdout),
+        String::from_utf8_lossy(&dirty_mode.stderr)
+    );
+    let dirty_source_output = run_migration_status(&[
+        "--json",
+        "--coverage-baseline",
+        "tools/porting_coverage_baseline.toml",
+        "--hardware-baseline",
+        "tools/hardware_validation_baseline.toml",
+        "--zmk-keymap",
+        dirty_zmk_keymap,
+        "--evidence",
+        path.to_str().unwrap(),
+        "--firmware-artifact-manifest",
+        artifact_path.to_str().unwrap(),
+        "--artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--require-zmk-source",
+        "--require-firmware-ref",
+        firmware_ref,
+        "--require-software-complete",
+        "--require-hardware-classified",
+    ]);
+    assert!(
+        dirty_source_output.status.success(),
+        "dirty-source readiness report should render without a hard full-validation gate\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&dirty_source_output.stdout),
+        String::from_utf8_lossy(&dirty_source_output.stderr)
+    );
+    let dirty_source: serde_json::Value =
+        serde_json::from_slice(&dirty_source_output.stdout).unwrap();
+    assert_eq!(
+        dirty_source["software"]["zmk_source_clean"].as_bool(),
+        Some(false)
+    );
+    assert_eq!(
+        dirty_source["ready_for_release_without_hardware"].as_bool(),
+        Some(false)
+    );
+    assert_eq!(dirty_source["fully_validated"].as_bool(), Some(false));
+    let _ = std::fs::remove_dir_all(&dirty_zmk_root);
 
     let baseline = hardware_validation_baseline_toml();
     let inventory_sha256 = baseline["hardware_validation"]["check_inventory_sha256"]
@@ -1575,6 +1728,7 @@ fn migration_status_accepts_complete_hardware_evidence_for_final_gate() {
     ]);
     let _ = std::fs::remove_file(&path);
     let _ = std::fs::remove_dir_all(&artifact_root);
+    let _ = std::fs::remove_dir_all(&clean_zmk_root);
 
     assert!(
         !stale_output.status.success(),
@@ -1604,6 +1758,9 @@ fn migration_status_ties_hardware_evidence_to_firmware_artifact_manifest() {
         &evidence_one_missing_pair_sha,
     );
     let evidence_path = write_temp_file("migration-status-artifact-backed-evidence", &evidence);
+    let (clean_zmk_root, zmk_keymap_path) =
+        clean_zmk_keymap_fixture().expect("artifact final gate requires upstream ZMK source");
+    let zmk_keymap = zmk_keymap_path.to_str().unwrap();
 
     let output = run_migration_status(&[
         "--json",
@@ -1611,12 +1768,15 @@ fn migration_status_ties_hardware_evidence_to_firmware_artifact_manifest() {
         "tools/porting_coverage_baseline.toml",
         "--hardware-baseline",
         "tools/hardware_validation_baseline.toml",
+        "--zmk-keymap",
+        zmk_keymap,
         "--evidence",
         evidence_path.to_str().unwrap(),
         "--firmware-artifact-manifest",
         artifact_path.to_str().unwrap(),
         "--artifact-root",
         artifact_root.to_str().unwrap(),
+        "--require-zmk-source",
         "--require-software-complete",
         "--require-hardware-classified",
         "--require-hardware-validated",
@@ -1883,6 +2043,7 @@ fn migration_status_ties_hardware_evidence_to_firmware_artifact_manifest() {
     ]);
     let _ = std::fs::remove_file(&bad_shape_path);
     let _ = std::fs::remove_dir_all(&artifact_root);
+    let _ = std::fs::remove_dir_all(&clean_zmk_root);
     assert!(
         !bad_shape.status.success(),
         "migration status accepted malformed artifact manifest shape\nstdout:\n{}\nstderr:\n{}",
@@ -1954,7 +2115,7 @@ artifact_or_notes = "log: /tmp/right-i2c.log; right P0_04 SDA and P0_05 SCL show
     );
     assert_eq!(
         parsed["ready_for_release_without_hardware"].as_bool(),
-        Some(true)
+        parsed["software"]["zmk_source_clean"].as_bool()
     );
     assert_eq!(parsed["fully_validated"].as_bool(), Some(false));
 
