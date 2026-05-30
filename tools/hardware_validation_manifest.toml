@@ -48,18 +48,18 @@ area = "trackpad"
 side = "right"
 requirement = "Right trackpad emits cursor motion, tap click, two-finger vertical scroll, and two-finger horizontal scroll without false cursor or click events during continuous scroll."
 evidence = "Flash current central firmware, pair over BLE, and run the trackpad firmware baseline checklist on the right half."
-evidence_needles = ["right", "cursor", "tap", "vertical scroll", "horizontal scroll"]
-source = "docs/TRACKPAD_HARDWARE_CHECK.md#firmware-baseline"
+evidence_needles = ["right", "cursor", "tap", "vertical scroll", "horizontal scroll", "no cursor during scroll", "no right-click during scroll", "inertia continues", "inertia stops on touch"]
+source = "docs/TRACKPAD_HARDWARE_CHECK.md#trackpad-cursor-tap-scroll-check"
 status = "requires_hardware"
 
 [[checks]]
 id = "left_trackpad_split_cursor_tap_scroll"
 area = "trackpad"
 side = "left"
-requirement = "Left trackpad emits cursor motion, tap click, two-finger vertical scroll, and two-finger horizontal scroll through the split custom-event path."
+requirement = "Left trackpad emits cursor motion, tap click, two-finger vertical scroll, and two-finger horizontal scroll through the split custom-event path without false cursor or click events during continuous scroll."
 evidence = "Flash current central and peripheral firmware, pair over BLE, and run the trackpad firmware baseline checklist on the left half."
-evidence_needles = ["left", "split", "cursor", "tap", "vertical scroll", "horizontal scroll"]
-source = "docs/TRACKPAD_HARDWARE_CHECK.md#firmware-baseline"
+evidence_needles = ["left", "split", "cursor", "tap", "vertical scroll", "horizontal scroll", "no cursor during scroll", "no right-click during scroll", "inertia continues", "inertia stops on touch"]
+source = "docs/TRACKPAD_HARDWARE_CHECK.md#trackpad-cursor-tap-scroll-check"
 status = "requires_hardware"
 
 [[checks]]

@@ -1171,7 +1171,9 @@ fn migration_status_combines_software_and_hardware_progress() {
         .expect("migration status hardware remaining item is missing");
     assert_eq!(
         right_trackpad["evidence_needles"].as_str(),
-        Some("right, cursor, tap, vertical scroll, horizontal scroll")
+        Some(
+            "right, cursor, tap, vertical scroll, horizontal scroll, no cursor during scroll, no right-click during scroll, inertia continues, inertia stops on touch"
+        )
     );
     assert_eq!(
         parsed["ready_for_release_without_hardware"].as_bool(),
@@ -1229,8 +1231,9 @@ fn migration_status_combines_software_and_hardware_progress() {
         String::from_utf8_lossy(&text.stderr)
     );
     assert!(
-        String::from_utf8_lossy(&text.stdout)
-            .contains("[needs: right, cursor, tap, vertical scroll, horizontal scroll]")
+        String::from_utf8_lossy(&text.stdout).contains(
+            "[needs: right, cursor, tap, vertical scroll, horizontal scroll, no cursor during scroll, no right-click during scroll, inertia continues, inertia stops on touch]"
+        )
     );
     assert!(String::from_utf8_lossy(&text.stdout).contains(
         "[needs: right central, left peripheral, BLE re-pair, reconnect right first, left Q, left A, right Y, right H]"
@@ -1967,7 +1970,9 @@ fn hardware_validation_markdown_report_lists_required_evidence() {
     assert!(stdout.contains(
         "| ID | Area | Side | Status | Requirement | Required evidence | Required observations | Validated at | Tester | Firmware ref | Artifact/notes |"
     ));
-    assert!(stdout.contains("right, cursor, tap, vertical scroll, horizontal scroll"));
+    assert!(stdout.contains(
+        "right, cursor, tap, vertical scroll, horizontal scroll, no cursor during scroll, no right-click during scroll, inertia continues, inertia stops on touch"
+    ));
     assert!(stdout.contains(
         "right central, left peripheral, BLE re-pair, reconnect right first, left Q, left A, right Y, right H"
     ));
@@ -2055,7 +2060,9 @@ fn hardware_validation_reports_required_observations_in_json_and_text() {
         .expect("right trackpad remaining item is missing");
     assert_eq!(
         right_trackpad["evidence_needles"].as_str(),
-        Some("right, cursor, tap, vertical scroll, horizontal scroll")
+        Some(
+            "right, cursor, tap, vertical scroll, horizontal scroll, no cursor during scroll, no right-click during scroll, inertia continues, inertia stops on touch"
+        )
     );
 
     let text_stdout = String::from_utf8_lossy(&text.stdout);
@@ -2063,9 +2070,9 @@ fn hardware_validation_reports_required_observations_in_json_and_text() {
         text_stdout
             .contains("right_trackpad_cursor_tap_scroll (trackpad/right): requires_hardware")
     );
-    assert!(
-        text_stdout.contains("[needs: right, cursor, tap, vertical scroll, horizontal scroll]")
-    );
+    assert!(text_stdout.contains(
+        "[needs: right, cursor, tap, vertical scroll, horizontal scroll, no cursor during scroll, no right-click during scroll, inertia continues, inertia stops on touch]"
+    ));
 }
 
 #[test]
@@ -2534,8 +2541,12 @@ artifact_or_notes = "video: /tmp/storage-reset.mp4; flashed reset central UF2 an
             error.contains("artifact_or_notes must mention required observation(s)")
                 && error.contains("'vertical scroll'")
                 && error.contains("'horizontal scroll'")
+                && error.contains("'no cursor during scroll'")
+                && error.contains("'no right-click during scroll'")
+                && error.contains("'inertia continues'")
+                && error.contains("'inertia stops on touch'")
         }),
-        "missing scroll observations should be rejected: {errors:?}"
+        "missing scroll and inertia observations should be rejected: {errors:?}"
     );
     assert!(
         errors.iter().any(|error| {
@@ -2996,7 +3007,7 @@ status = "validated"
 validated_at = "2026-05-29"
 tester = "bench operator"
 firmware_ref = "35b3f1f"
-artifact_or_notes = "TODO log: /tmp/left-trackpad.log; left split cursor tap vertical scroll horizontal scroll"
+artifact_or_notes = "TODO log: /tmp/left-trackpad.log; left split cursor tap vertical scroll horizontal scroll no cursor during scroll no right-click during scroll inertia continues inertia stops on touch"
 "#;
     let path = write_temp_file("hardware-validation-placeholder-evidence", evidence);
     let output = run_hardware_validation(&["--evidence", path.to_str().unwrap(), "--json"]);

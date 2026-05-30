@@ -40,6 +40,26 @@ Hardware evidence for this check must name the right central, left peripheral,
 BLE re-pair, reconnect order, left `Q`, left `A`, right `Y`, and right `H`
 observations.
 
+## Trackpad Cursor Tap Scroll Check
+
+Use this check for each half after the firmware baseline setup. The right half
+reports directly from the central firmware. The left half must prove the same
+behavior through the split custom-event path.
+
+1. Move one finger and confirm cursor motion on the tested half.
+2. Tap with one finger and confirm a left-click tap.
+3. Perform two-finger vertical scroll.
+4. Perform two-finger horizontal scroll.
+5. While continuously scrolling, confirm there is no cursor motion and no
+   right-click tap.
+6. Flick once and release. Confirm scroll inertia continues briefly.
+7. Touch the pad again and confirm inertia stops on touch.
+
+Hardware evidence for this check must name the tested side, cursor, tap,
+vertical scroll, horizontal scroll, no cursor during scroll, no right-click
+during scroll, inertia continues, and inertia stops on touch observations. Left
+trackpad evidence must also name the split path.
+
 ## Thumb Layer-Tap Check
 
 Use a host key-event viewer after flashing the current firmware and re-pairing
