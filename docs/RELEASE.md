@@ -80,7 +80,8 @@ in `artifact_paths`. Relative evidence artifact paths are resolved under
 Simulated, synthetic, mock, or host-only output is not valid hardware evidence.
 `cargo make hardware-validation-session-current` pre-fills
 that hash in the local evidence overlay generated for a clean current-ref bench
-session. Direct
+session and prints the manifest's exact firmware artifact paths, roles, sides,
+sizes, and SHA256 hashes in the local checklist. Direct
 `tools/migration_status.py --require-hardware-validated` use also requires
 `--firmware-artifact-manifest`; the final validation gate cannot pass from an
 evidence file alone. `cargo make migration-status-final-current` regenerates

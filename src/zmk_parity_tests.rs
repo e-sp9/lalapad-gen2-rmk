@@ -3725,12 +3725,19 @@ fn hardware_validation_can_generate_complete_evidence_template() {
 #[test]
 fn hardware_validation_can_generate_bench_checklist() {
     let output = run_hardware_validation(&["--checklist"]);
+    let (_artifact_root, artifact_manifest_path, artifact_pair_sha256) =
+        test_firmware_artifact_fixture("checklist-bound-ref");
     let bound_output = run_hardware_validation(&[
         "--checklist",
         "--firmware-ref-template",
         "v0.4.0-test",
         "--artifact-pair-sha256-template",
         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    ]);
+    let artifact_bound_output = run_hardware_validation(&[
+        "--checklist",
+        "--firmware-artifact-manifest-template",
+        artifact_manifest_path.to_str().unwrap(),
     ]);
 
     assert!(
@@ -3745,8 +3752,15 @@ fn hardware_validation_can_generate_bench_checklist() {
         String::from_utf8_lossy(&bound_output.stdout),
         String::from_utf8_lossy(&bound_output.stderr)
     );
+    assert!(
+        artifact_bound_output.status.success(),
+        "artifact-bound hardware validation checklist generation failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&artifact_bound_output.stdout),
+        String::from_utf8_lossy(&artifact_bound_output.stderr)
+    );
     let stdout = String::from_utf8_lossy(&output.stdout);
     let bound_stdout = String::from_utf8_lossy(&bound_output.stdout);
+    let artifact_bound_stdout = String::from_utf8_lossy(&artifact_bound_output.stdout);
     let manifest = hardware_validation_manifest_toml();
     let checks = manifest["checks"].as_array().unwrap();
     assert!(stdout.contains("# LaLaPad Gen2 RMK Hardware Validation Checklist"));
@@ -3818,6 +3832,34 @@ fn hardware_validation_can_generate_bench_checklist() {
     assert!(bound_stdout.contains(
         "copy aid after pass: firmware artifact pair_sha256 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;"
     ));
+    assert!(artifact_bound_stdout.contains("- Firmware ref: `checklist-bound-ref`"));
+    assert!(artifact_bound_stdout.contains(&format!(
+        "- Firmware artifact pair SHA256: `{artifact_pair_sha256}`"
+    )));
+    assert!(artifact_bound_stdout.contains("- Firmware artifacts:"));
+    assert!(
+        artifact_bound_stdout
+            .contains("right central uf2: `firmware/normal/lalapad-gen2-rmk-central.uf2` sha256"),
+        "artifact-bound checklist should name the normal central UF2"
+    );
+    assert!(
+        artifact_bound_stdout.contains(
+            "left peripheral uf2: `firmware/normal/lalapad-gen2-rmk-peripheral.uf2` sha256"
+        ),
+        "artifact-bound checklist should name the normal peripheral UF2"
+    );
+    assert!(
+        artifact_bound_stdout.contains(
+            "right reset-central reset-uf2: `firmware/reset/lalapad-gen2-rmk-reset-central.uf2` sha256"
+        ),
+        "artifact-bound checklist should name the reset central UF2"
+    );
+    assert!(
+        artifact_bound_stdout.contains(
+            "left reset-peripheral reset-uf2: `firmware/reset/lalapad-gen2-rmk-reset-peripheral.uf2` sha256"
+        ),
+        "artifact-bound checklist should name the reset peripheral UF2"
+    );
 
     let bad_mix = run_hardware_validation(&["--checklist", "--markdown"]);
     assert!(
@@ -3833,6 +3875,8 @@ fn hardware_validation_can_generate_bench_checklist() {
 #[test]
 fn hardware_validation_evidence_template_can_prefill_firmware_ref() {
     let pair_sha256 = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
+    let (_artifact_root, artifact_manifest_path, artifact_pair_sha256) =
+        test_firmware_artifact_fixture("template-bound-ref");
     let output = run_hardware_validation(&[
         "--evidence-template",
         "--firmware-ref-template",
@@ -3875,6 +3919,39 @@ fn hardware_validation_evidence_template_can_prefill_firmware_ref() {
             "# artifact_or_notes = \"firmware artifact pair_sha256 {pair_sha256}; <photo/log/probe/Vial path or reading>; artifact:"
         )),
         "artifact-bound template should include pair SHA in the copy aid"
+    );
+
+    let artifact_bound_output = run_hardware_validation(&[
+        "--evidence-template",
+        "--firmware-artifact-manifest-template",
+        artifact_manifest_path.to_str().unwrap(),
+    ]);
+    assert!(
+        artifact_bound_output.status.success(),
+        "artifact-bound hardware validation evidence template failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&artifact_bound_output.stdout),
+        String::from_utf8_lossy(&artifact_bound_output.stderr)
+    );
+    let artifact_bound_stdout = String::from_utf8_lossy(&artifact_bound_output.stdout);
+    let artifact_bound_template: toml::Value = toml::from_str(&artifact_bound_stdout).unwrap();
+    assert!(
+        artifact_bound_template["evidence"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|entry| {
+                entry["firmware_ref"].as_str() == Some("template-bound-ref")
+                    && entry["artifact_or_notes"]
+                        .as_str()
+                        .unwrap()
+                        .contains(&artifact_pair_sha256)
+            }),
+        "artifact-bound evidence template should inherit firmware_ref and pair_sha256 from the manifest"
+    );
+    assert!(
+        artifact_bound_stdout
+            .contains("# right central uf2: `firmware/normal/lalapad-gen2-rmk-central.uf2` sha256"),
+        "artifact-bound evidence template should include artifact path and hash comments"
     );
 }
 
@@ -3920,6 +3997,27 @@ fn hardware_validation_rejects_template_firmware_ref_without_template_output() {
         !String::from_utf8_lossy(&artifact_pair_output.stderr).contains("No such file"),
         "invalid artifact pair template usage should fail before reading manifest files"
     );
+
+    let artifact_manifest_output = run_hardware_validation(&[
+        "--manifest",
+        "/tmp/lalapad-missing-hardware-validation.toml",
+        "--firmware-artifact-manifest-template",
+        "/tmp/lalapad-missing-firmware-artifacts.json",
+    ]);
+    assert!(
+        !artifact_manifest_output.status.success(),
+        "--firmware-artifact-manifest-template without template output unexpectedly passed"
+    );
+    assert!(
+        String::from_utf8_lossy(&artifact_manifest_output.stderr).contains(
+            "--firmware-artifact-manifest-template can only be used with --evidence-template"
+        ),
+        "invalid artifact manifest template usage should explain the required output mode"
+    );
+    assert!(
+        !String::from_utf8_lossy(&artifact_manifest_output.stderr).contains("No such file"),
+        "invalid artifact manifest template usage should fail before reading manifest files"
+    );
 }
 
 #[test]
@@ -3958,6 +4056,48 @@ fn hardware_validation_rejects_placeholder_template_bindings() {
         String::from_utf8_lossy(&malformed_pair.stderr)
             .contains("--artifact-pair-sha256-template must be a SHA256 hex string"),
         "malformed artifact pair template rejection should describe the SHA256 requirement"
+    );
+
+    let (_artifact_root, artifact_manifest_path, _pair_sha256) =
+        test_firmware_artifact_fixture("artifact-template-ref");
+    let mismatched_ref = run_hardware_validation(&[
+        "--checklist",
+        "--firmware-ref-template",
+        "different-artifact-template-ref",
+        "--firmware-artifact-manifest-template",
+        artifact_manifest_path.to_str().unwrap(),
+    ]);
+    assert!(
+        !mismatched_ref.status.success(),
+        "hardware validation accepted mismatched firmware_ref and artifact manifest binding\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&mismatched_ref.stdout),
+        String::from_utf8_lossy(&mismatched_ref.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&mismatched_ref.stderr).contains(
+            "--firmware-ref-template must match --firmware-artifact-manifest-template firmware_ref"
+        ),
+        "mismatched artifact manifest ref rejection should explain the binding error"
+    );
+
+    let mismatched_pair = run_hardware_validation(&[
+        "--checklist",
+        "--artifact-pair-sha256-template",
+        "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "--firmware-artifact-manifest-template",
+        artifact_manifest_path.to_str().unwrap(),
+    ]);
+    assert!(
+        !mismatched_pair.status.success(),
+        "hardware validation accepted mismatched pair_sha256 and artifact manifest binding\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&mismatched_pair.stdout),
+        String::from_utf8_lossy(&mismatched_pair.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&mismatched_pair.stderr).contains(
+            "--artifact-pair-sha256-template must match --firmware-artifact-manifest-template pair_sha256"
+        ),
+        "mismatched artifact manifest pair rejection should explain the binding error"
     );
 }
 

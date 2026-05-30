@@ -756,6 +756,70 @@ def artifact_or_notes_copy_hint(check: dict[str, Any], artifact_prefix: str = ""
     return "; ".join(parts)
 
 
+def load_firmware_artifact_manifest(path: Path) -> tuple[dict[str, Any] | None, list[str]]:
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError as e:
+        return None, [f"failed to read firmware artifact manifest {path}: {e}"]
+    try:
+        manifest = json.loads(raw)
+    except json.JSONDecodeError as e:
+        return None, [f"firmware artifact manifest {path} is invalid JSON: {e}"]
+    if not isinstance(manifest, dict):
+        return None, [f"firmware artifact manifest {path} must be a JSON object"]
+    return manifest, []
+
+
+def firmware_artifact_manifest_errors(manifest: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    firmware_ref = str(manifest.get("firmware_ref", "")).strip()
+    if firmware_ref and is_mutable_firmware_ref(firmware_ref):
+        errors.append("firmware artifact manifest firmware_ref must be immutable")
+    pair_sha256 = str(manifest.get("pair_sha256", "")).strip()
+    if pair_sha256 and not SHA256_RE.fullmatch(pair_sha256):
+        errors.append("firmware artifact manifest pair_sha256 must be a SHA256 hex string")
+    artifacts = manifest.get("artifacts", [])
+    if not isinstance(artifacts, list):
+        return errors + ["firmware artifact manifest artifacts must be an array"]
+    for index, artifact in enumerate(artifacts):
+        if not isinstance(artifact, dict):
+            errors.append(f"firmware artifact manifest artifacts[{index}] must be an object")
+            continue
+        for field in ["path", "role", "side", "kind", "sha256"]:
+            value = str(artifact.get(field, "")).strip()
+            if not value:
+                errors.append(f"firmware artifact manifest artifacts[{index}].{field} is missing")
+        sha256 = str(artifact.get("sha256", "")).strip()
+        if sha256 and not SHA256_RE.fullmatch(sha256):
+            errors.append(
+                f"firmware artifact manifest artifacts[{index}].sha256 must be a SHA256 hex string"
+            )
+    return errors
+
+
+def firmware_artifact_manifest_lines(manifest: dict[str, Any] | None) -> list[str]:
+    if not manifest:
+        return []
+    artifacts = manifest.get("artifacts", [])
+    if not isinstance(artifacts, list):
+        return []
+    lines: list[str] = []
+    for artifact in artifacts:
+        if not isinstance(artifact, dict):
+            continue
+        path = str(artifact.get("path", "")).strip()
+        role = str(artifact.get("role", "")).strip()
+        side = str(artifact.get("side", "")).strip()
+        kind = str(artifact.get("kind", "")).strip()
+        sha256 = str(artifact.get("sha256", "")).strip()
+        size = artifact.get("size", "")
+        if not (path and role and side and kind and sha256):
+            continue
+        size_text = f", size {size}" if isinstance(size, int) else ""
+        lines.append(f"{side} {role} {kind}: `{path}` sha256 `{sha256}`{size_text}")
+    return lines
+
+
 def toml_string(value: Any) -> str:
     return json.dumps(str(value))
 
@@ -766,7 +830,10 @@ def toml_comment(value: Any) -> list[str]:
 
 
 def as_evidence_template(
-    manifest: dict[str, Any], firmware_ref: str = "", artifact_pair_sha256: str = ""
+    manifest: dict[str, Any],
+    firmware_ref: str = "",
+    artifact_pair_sha256: str = "",
+    firmware_artifact_manifest: dict[str, Any] | None = None,
 ) -> str:
     _, inventory_sha256 = manifest_inventory_digest(manifest)
     lines = [
@@ -787,6 +854,12 @@ def as_evidence_template(
         f"{EVIDENCE_INVENTORY_FIELD} = {toml_string(inventory_sha256)}",
         "",
     ]
+    artifact_lines = firmware_artifact_manifest_lines(firmware_artifact_manifest)
+    if artifact_lines:
+        lines.extend(["# Firmware artifacts bound to this evidence session:"])
+        for line in artifact_lines:
+            lines.extend(toml_comment(line))
+        lines.append("")
     checks = manifest.get("checks", [])
     if isinstance(checks, list):
         for check in checks:
@@ -913,7 +986,10 @@ def as_markdown(manifest: dict[str, Any], summary: HardwareValidationSummary) ->
 
 
 def as_checklist(
-    manifest: dict[str, Any], firmware_ref: str = "", artifact_pair_sha256: str = ""
+    manifest: dict[str, Any],
+    firmware_ref: str = "",
+    artifact_pair_sha256: str = "",
+    firmware_artifact_manifest: dict[str, Any] | None = None,
 ) -> str:
     lines = [
         "# LaLaPad Gen2 RMK Hardware Validation Checklist",
@@ -934,6 +1010,10 @@ def as_checklist(
             lines.append(f"- Firmware ref: `{firmware_ref}`")
         if artifact_pair_sha256:
             lines.append(f"- Firmware artifact pair SHA256: `{artifact_pair_sha256}`")
+        artifact_lines = firmware_artifact_manifest_lines(firmware_artifact_manifest)
+        if artifact_lines:
+            lines.append("- Firmware artifacts:")
+            lines.extend(f"  - {line}" for line in artifact_lines)
         lines.append("")
     checks = manifest.get("checks", [])
     current_area: str | None = None
@@ -1091,6 +1171,16 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--firmware-artifact-manifest-template",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help=(
+            "bind --evidence-template or --checklist output to a generated "
+            "firmware artifact manifest and list the exact artifact paths and hashes"
+        ),
+    )
+    parser.add_argument(
         "--evidence-artifact-root",
         type=Path,
         default=Path("."),
@@ -1139,6 +1229,46 @@ def main() -> None:
         parser.error(
             "--artifact-pair-sha256-template can only be used with --evidence-template or --checklist"
         )
+    if args.firmware_artifact_manifest_template and not (
+        args.evidence_template or args.checklist
+    ):
+        parser.error(
+            "--firmware-artifact-manifest-template can only be used with "
+            "--evidence-template or --checklist"
+        )
+    firmware_artifact_manifest: dict[str, Any] | None = None
+    if args.firmware_artifact_manifest_template is not None:
+        firmware_artifact_manifest, artifact_manifest_errors = load_firmware_artifact_manifest(
+            args.firmware_artifact_manifest_template
+        )
+        if artifact_manifest_errors:
+            parser.error("; ".join(artifact_manifest_errors))
+        assert firmware_artifact_manifest is not None
+        artifact_manifest_errors = firmware_artifact_manifest_errors(firmware_artifact_manifest)
+        if artifact_manifest_errors:
+            parser.error("; ".join(artifact_manifest_errors))
+        manifest_firmware_ref = str(
+            firmware_artifact_manifest.get("firmware_ref", "")
+        ).strip()
+        manifest_pair_sha256 = str(
+            firmware_artifact_manifest.get("pair_sha256", "")
+        ).strip()
+        if args.firmware_ref_template and manifest_firmware_ref:
+            if args.firmware_ref_template != manifest_firmware_ref:
+                parser.error(
+                    "--firmware-ref-template must match "
+                    "--firmware-artifact-manifest-template firmware_ref"
+                )
+        elif manifest_firmware_ref:
+            args.firmware_ref_template = manifest_firmware_ref
+        if args.artifact_pair_sha256_template and manifest_pair_sha256:
+            if args.artifact_pair_sha256_template != manifest_pair_sha256:
+                parser.error(
+                    "--artifact-pair-sha256-template must match "
+                    "--firmware-artifact-manifest-template pair_sha256"
+                )
+        elif manifest_pair_sha256:
+            args.artifact_pair_sha256_template = manifest_pair_sha256
     if args.firmware_ref_template and is_mutable_firmware_ref(args.firmware_ref_template):
         parser.error("--firmware-ref-template must be an immutable flashed tag or commit")
     if args.artifact_pair_sha256_template and not SHA256_RE.fullmatch(
@@ -1180,6 +1310,7 @@ def main() -> None:
                 manifest,
                 args.firmware_ref_template,
                 args.artifact_pair_sha256_template,
+                firmware_artifact_manifest,
             ),
             end="",
         )
@@ -1189,6 +1320,7 @@ def main() -> None:
                 manifest,
                 args.firmware_ref_template,
                 args.artifact_pair_sha256_template,
+                firmware_artifact_manifest,
             ),
             end="",
         )

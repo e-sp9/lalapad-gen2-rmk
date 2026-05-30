@@ -170,10 +170,12 @@ artifact_pair_sha256="$(python3 -c 'import json; print(json.load(open("firmware-
 python3 tools/hardware_validation.py --evidence-template \
   --firmware-ref-template "$firmware_ref" \
   --artifact-pair-sha256-template "$artifact_pair_sha256" \
+  --firmware-artifact-manifest-template firmware-artifacts.local.json \
   > hardware-validation-evidence.local.toml
 python3 tools/hardware_validation.py --checklist \
   --firmware-ref-template "$firmware_ref" \
   --artifact-pair-sha256-template "$artifact_pair_sha256" \
+  --firmware-artifact-manifest-template firmware-artifacts.local.json \
   > hardware-validation-checklist.local.md
 python3 tools/hardware_validation.py --evidence hardware-validation-evidence.local.toml --markdown
 ```
@@ -347,7 +349,10 @@ command generates a complete local overlay file containing every current
 hardware check; pass `--firmware-ref-template <tag-or-commit>` with it to
 pre-fill the flashed firmware reference in every entry. Pass
 `--artifact-pair-sha256-template <sha256>` when you also want each evidence note
-seeded with the exact firmware artifact pair hash. Generated
+seeded with the exact firmware artifact pair hash. Add
+`--firmware-artifact-manifest-template firmware-artifacts.local.json` to bind
+the generated template/checklist to the manifest and print the exact UF2/HEX
+paths, sides, roles, sizes, and SHA256 hashes for the bench session. Generated
 `--checklist` output turns the same manifest into a bench checklist for
 collecting those observations. `cargo make
 hardware-validation-evidence-template-current` fills the template from the
@@ -367,8 +372,8 @@ current-ref firmware artifact manifest task, then writes
 `hardware-validation-checklist.local.md`, and `migration-status.local.md` for a
 single hardware bench session; its evidence overlay is prefilled with both the
 current firmware ref and the generated artifact `pair_sha256`, and its
-checklist repeats the same identifiers so bench notes stay tied to the exact
-artifact set. Generated
+checklist repeats the same identifiers plus the individual firmware artifact
+paths and hashes so bench notes stay tied to the exact artifact set. Generated
 `hardware-validation-evidence*.toml`,
 `hardware-validation-checklist*.md`, `migration-status*.md`, and
 `firmware-artifacts*.json` files are ignored by default.

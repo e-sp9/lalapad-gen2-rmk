@@ -143,12 +143,14 @@ python3 tools/hardware_validation.py \
   --evidence-template \
   --firmware-ref-template "$firmware_ref" \
   --artifact-pair-sha256-template "$artifact_pair_sha256" \
+  --firmware-artifact-manifest-template firmware-artifacts.local.json \
   > hardware-validation-evidence.local.toml
 
 python3 tools/hardware_validation.py \
   --checklist \
   --firmware-ref-template "$firmware_ref" \
   --artifact-pair-sha256-template "$artifact_pair_sha256" \
+  --firmware-artifact-manifest-template firmware-artifacts.local.json \
   > hardware-validation-checklist.local.md
 
 set -- \

@@ -580,12 +580,15 @@ commit as `firmware_ref` and refuses tracked or untracked non-ignored changes.
 When any migration-status command is run with `--firmware-artifact-manifest`,
 each validated hardware evidence note must also mention that manifest's
 `pair_sha256`, tying the bench observation to the exact normal/reset UF2 set
-rather than only to a moving file name or host-side state. `--evidence-template` accepts
-`--artifact-pair-sha256-template <sha256>` to seed every evidence note with that
-hash before bench observations are added.
+rather than only to a moving file name or host-side state. `--evidence-template`
+and `--checklist` accept `--artifact-pair-sha256-template <sha256>` to seed
+every evidence note with that hash before bench observations are added. Add
+`--firmware-artifact-manifest-template firmware-artifacts.local.json` to make
+the generated bench packet print the exact firmware paths, sides, roles, sizes,
+and SHA256 hashes that the evidence is tied to.
 Use `cargo make hardware-validation-session-current` to prepare a complete
 current-ref bench packet in one step: RMK ZMK-derived runtime scenario results,
 project host parity and RMK behavior regression results, rebuilt UF2 artifact
 hashes, a firmware-ref and pair-SHA-prefilled evidence overlay, a hardware
-checklist that repeats the same firmware ref and pair SHA, and a local
-Markdown migration status report.
+checklist that repeats the same firmware ref, pair SHA, and per-artifact
+hashes, and a local Markdown migration status report.
