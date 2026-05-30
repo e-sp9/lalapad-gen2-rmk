@@ -2763,6 +2763,7 @@ features = [
 ]
 feature_closure_contains = [
   { feature = "default", contains = ["storage", "vial", "vial_lock", "host"] },
+  { feature = "passkey_entry", contains = ["_ble", "storage"] },
   { feature = "nrf52840_ble", contains = ["storage"] },
   { feature = "adafruit_bl", contains = ["storage"] },
 ]
