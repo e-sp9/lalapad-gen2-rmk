@@ -113,9 +113,10 @@ that will be flashed or referenced in hardware evidence:
 python3 tools/firmware_artifact_manifest.py --require-uf2 > firmware-artifacts.local.json
 ```
 
-For a clean local build, prefer the current-ref helper. It writes the same
-manifest to `firmware-artifacts.local.json`, pre-fills `firmware_ref` from the
-current exact tag or short commit, and refuses mutable working-tree state:
+For a clean local build, prefer the current-ref helper. It writes the manifest
+to `firmware-artifacts.local.json`, or to `FIRMWARE_ARTIFACT_MANIFEST` when
+that environment variable is set, pre-fills `firmware_ref` from the current
+exact tag or short commit, and refuses mutable working-tree state:
 
 ```shell
 cargo make firmware-artifact-manifest-current
@@ -334,8 +335,9 @@ changes, which avoids recording evidence against a mutable local build.
 `tools/firmware_artifact_manifest.py --require-uf2` records the flashed UF2
 file sizes and SHA256 hashes so `artifact_or_notes` can point to an exact
 artifact set. `cargo make firmware-artifact-manifest-current` records the same
-hashes in `firmware-artifacts.local.json` and requires a clean current tag or
-commit for its `firmware_ref`. `cargo make
+hashes in `firmware-artifacts.local.json`, or in `FIRMWARE_ARTIFACT_MANIFEST`
+when set, and requires a clean current tag or commit for its `firmware_ref`.
+`cargo make
 hardware-validation-session-current` runs the RMK ZMK-derived runtime
 scenarios, project host parity tests, RMK behavior regression suite, and the
 current-ref firmware artifact manifest task, then writes
@@ -370,7 +372,9 @@ revision. The task uses `firmware-artifacts.local.json` by default, or
 
 For hardware evidence collected from the current clean commit, this variant
 derives the exact tag or short commit automatically and refuses tracked or
-untracked non-ignored RMK changes before running the same final gate:
+untracked non-ignored RMK changes, regenerates
+the artifact manifest path used by the final gate from the current UF2 outputs,
+and then runs the same final gate:
 
 ```shell
 HARDWARE_EVIDENCE=hardware-validation-evidence.local.toml cargo make migration-status-final-current

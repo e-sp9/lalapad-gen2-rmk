@@ -3939,7 +3939,7 @@ fn local_validation_entrypoints_match_ci_gates() {
     assert!(
         migration_status_final_current_task.contains("HARDWARE_EVIDENCE")
             && migration_status_final_current_task
-                .contains("dependencies = [\"clean-current-git-ref\", \"rmk-zmk-scenario-tests\", \"host-parity-tests\", \"rmk-behavior-tests\"]")
+                .contains("dependencies = [\"clean-current-git-ref\", \"firmware-artifact-manifest-current\", \"rmk-zmk-scenario-tests\", \"host-parity-tests\", \"rmk-behavior-tests\"]")
             && migration_status_final_current_task
                 .contains("git status --porcelain --untracked-files=normal")
             && migration_status_final_current_task.contains("git describe --tags --exact-match")
@@ -3976,9 +3976,11 @@ fn local_validation_entrypoints_match_ci_gates() {
                 .contains("tools/firmware_artifact_manifest.py")
             && firmware_artifact_manifest_current_task.contains("--require-uf2")
             && firmware_artifact_manifest_current_task.contains("--firmware-ref \"$firmware_ref\"")
-            && firmware_artifact_manifest_current_task
-                .contains("--output firmware-artifacts.local.json"),
-        "cargo make firmware-artifact-manifest-current should hash built UF2 artifacts against a clean current git ref"
+            && firmware_artifact_manifest_current_task.contains(
+                "artifact_manifest=\"${FIRMWARE_ARTIFACT_MANIFEST:-firmware-artifacts.local.json}\""
+            )
+            && firmware_artifact_manifest_current_task.contains("--output \"$artifact_manifest\""),
+        "cargo make firmware-artifact-manifest-current should hash built UF2 artifacts against the clean current git ref and the manifest path used by current final validation"
     );
     assert!(
         hardware_validation_task.contains("tools/hardware_validation.py")
@@ -8130,7 +8132,7 @@ with tempfile.TemporaryDirectory() as tempdir:
 with tempfile.TemporaryDirectory() as tempdir:
     root = Path(tempdir)
     (root / "Makefile.toml").write_text(
-        Path("Makefile.toml").read_text().replace("--output firmware-artifacts.local.json", "--output firmware-artifacts.json", 1),
+        Path("Makefile.toml").read_text().replace('--output "$artifact_manifest"', '--output firmware-artifacts.json', 1),
         encoding="utf-8",
     )
     bad_current_artifact_manifest_task = pc.check_makefile_task_invariants(manifest, root)
@@ -8182,6 +8184,21 @@ with tempfile.TemporaryDirectory() as tempdir:
     )
     bad_current_final_task = pc.check_makefile_task_invariants(manifest, root)
 
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    makefile = Path("Makefile.toml").read_text()
+    before, marker, after = makefile.partition("[tasks.migration-status-final-current]")
+    assert marker
+    (root / "Makefile.toml").write_text(
+        before + marker + after.replace(
+            'dependencies = ["clean-current-git-ref", "firmware-artifact-manifest-current", "rmk-zmk-scenario-tests", "host-parity-tests", "rmk-behavior-tests"]',
+            'dependencies = ["clean-current-git-ref", "rmk-zmk-scenario-tests", "host-parity-tests", "rmk-behavior-tests"]',
+            1,
+        ),
+        encoding="utf-8",
+    )
+    bad_current_final_dependency = pc.check_makefile_task_invariants(manifest, root)
+
 def pack(results):
     return [result.__dict__ | {"ok": result.ok} for result in results]
 
@@ -8207,6 +8224,7 @@ print(json.dumps({
     "bad_current_hardware_session_task": pack(bad_current_hardware_session_task),
     "bad_current_hardware_session_dependency_order": pack(bad_current_hardware_session_dependency_order),
     "bad_current_final_task": pack(bad_current_final_task),
+    "bad_current_final_dependency": pack(bad_current_final_dependency),
 }))
 "#,
     );
@@ -8482,7 +8500,7 @@ print(json.dumps({
         bad_current_artifact_manifest_task["message"]
             .as_str()
             .unwrap()
-            .contains("tasks.firmware-artifact-manifest-current.script missing required values ['--output firmware-artifacts.local.json']")
+            .contains("tasks.firmware-artifact-manifest-current.script missing required values ['--output \"$artifact_manifest\"']")
     );
 
     let bad_clean_current_task = parsed["bad_clean_current_task"]
@@ -8568,6 +8586,21 @@ print(json.dumps({
             .as_str()
             .unwrap()
             .contains("tasks.migration-status-final-current.script missing required values ['--require-firmware-ref \"$firmware_ref\"']")
+    );
+
+    let bad_current_final_dependency = parsed["bad_current_final_dependency"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "makefile_current_migration_final_uses_clean_git_ref")
+        .expect("changed current final migration dependency result is missing");
+    assert_eq!(bad_current_final_dependency["kind"], "build_task");
+    assert_eq!(bad_current_final_dependency["ok"], false);
+    assert!(
+        bad_current_final_dependency["message"]
+            .as_str()
+            .unwrap()
+            .contains("tasks.migration-status-final-current.dependencies expected ['clean-current-git-ref', 'firmware-artifact-manifest-current', 'rmk-zmk-scenario-tests', 'host-parity-tests', 'rmk-behavior-tests']")
     );
 }
 

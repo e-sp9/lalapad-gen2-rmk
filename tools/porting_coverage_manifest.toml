@@ -2926,7 +2926,8 @@ script_contains = [
   "tools/firmware_artifact_manifest.py",
   "--require-uf2",
   "--firmware-ref \"$firmware_ref\"",
-  "--output firmware-artifacts.local.json",
+  "artifact_manifest=\"${FIRMWARE_ARTIFACT_MANIFEST:-firmware-artifacts.local.json}\"",
+  "--output \"$artifact_manifest\"",
 ]
 
 [[makefile_task_invariants]]
@@ -3031,6 +3032,7 @@ id = "makefile_current_migration_final_uses_clean_git_ref"
 task = "migration-status-final-current"
 dependencies_equal = [
   "clean-current-git-ref",
+  "firmware-artifact-manifest-current",
   "rmk-zmk-scenario-tests",
   "host-parity-tests",
   "rmk-behavior-tests",

@@ -78,7 +78,10 @@ that hash in the local evidence overlay generated for a clean current-ref bench
 session. Direct
 `tools/migration_status.py --require-hardware-validated` use also requires
 `--firmware-artifact-manifest`; the final validation gate cannot pass from an
-evidence file alone.
+evidence file alone. `cargo make migration-status-final-current` regenerates
+the same artifact manifest path that the final gate will read before checking
+evidence, so a complete current-ref validation claim is tied to the UF2 files
+built from that clean commit.
 
 ## Flashing With UF2
 

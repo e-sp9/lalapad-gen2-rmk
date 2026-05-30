@@ -282,7 +282,7 @@ python3 "$@"
 '''
 
 [tasks.migration-status-final-current]
-dependencies = ["clean-current-git-ref", "rmk-zmk-scenario-tests", "host-parity-tests", "rmk-behavior-tests"]
+dependencies = ["clean-current-git-ref", "firmware-artifact-manifest-current", "rmk-zmk-scenario-tests", "host-parity-tests", "rmk-behavior-tests"]
 script = '''
 : "${HARDWARE_EVIDENCE:?set HARDWARE_EVIDENCE=path/to/evidence.toml}"
 if [ -n "$(git status --porcelain --untracked-files=normal)" ]; then
@@ -414,10 +414,11 @@ if [ -n "$(git status --porcelain --untracked-files=normal)" ]; then
 fi
 
 firmware_ref="$(git describe --tags --exact-match 2>/dev/null || git rev-parse --short=12 HEAD)"
+artifact_manifest="${FIRMWARE_ARTIFACT_MANIFEST:-firmware-artifacts.local.json}"
 python3 tools/firmware_artifact_manifest.py \
   --require-uf2 \
   --firmware-ref "$firmware_ref" \
-  --output firmware-artifacts.local.json
+  --output "$artifact_manifest"
 '''
 
 [tasks.uf2]

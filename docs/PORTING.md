@@ -429,7 +429,9 @@ a complete validation claim can pass.
 
 For evidence captured from the current clean commit, the current-ref variant
 derives the exact tag or short commit automatically and refuses tracked or
-untracked non-ignored changes:
+untracked non-ignored changes. It also runs
+`cargo make firmware-artifact-manifest-current` first so the final gate checks
+the current UF2 artifact hashes rather than a stale local manifest:
 
 ```sh
 HARDWARE_EVIDENCE=hardware-validation-evidence.local.toml cargo make migration-status-final-current
@@ -562,8 +564,9 @@ After building the UF2 files that will be flashed, use
 firmware-artifacts.local.json` to preserve the exact central/peripheral file
 sizes and SHA256 hashes alongside the hardware evidence overlay. Prefer
 `cargo make firmware-artifact-manifest-current` for a clean local build; it
-creates `firmware-artifacts.local.json` with the current exact tag or short
-commit as `firmware_ref` and refuses tracked or untracked non-ignored changes.
+creates `firmware-artifacts.local.json`, or `FIRMWARE_ARTIFACT_MANIFEST` when
+set, with the current exact tag or short commit as `firmware_ref` and refuses
+tracked or untracked non-ignored changes.
 When any migration-status command is run with `--firmware-artifact-manifest`,
 each validated hardware evidence note must also mention that manifest's
 `pair_sha256`, tying the bench observation to the exact UF2 pair rather than
