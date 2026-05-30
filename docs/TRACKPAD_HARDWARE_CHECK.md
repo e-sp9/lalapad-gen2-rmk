@@ -34,6 +34,27 @@ tap-hold timing, or an incorrect RMK action.
 4. Hold Enter, press Y, release Y, then release Enter. Confirm the host sees
    `PageUp`, proving the Enter hold path selected layer 2.
 
+## Storage Reset And Reflash Check
+
+Use this check when validating that host/Vial behavior is not coming from stale
+RMK storage. RMK storage persists Vial keymap changes and BLE bond data, so a
+normal firmware reflash alone does not prove the compiled default keymap is what
+the host is using.
+
+1. Flash the reset/storage-clear UF2 for the right central half.
+2. Flash the reset/storage-clear UF2 for the left peripheral half.
+3. Flash the matching normal central UF2 to the right half.
+4. Flash the matching normal peripheral UF2 to the left half.
+5. Remove the old host BLE pairing, reconnect the right half first, then the
+   left half, and pair again.
+6. Open Vial and confirm the default keymap is visible, then repeat the thumb
+   layer-tap check above.
+
+Hardware evidence for this check must name the reset central UF2, reset
+peripheral UF2, normal central UF2, normal peripheral UF2, BLE re-pair, and
+Vial observation so the final validation gate cannot accidentally accept a
+normal-only reflash.
+
 The current diagnostic firmware intentionally sends a tiny left/right cursor nudge about every two seconds while IQS9151 initialization or degraded coordinate polling is failing. Use that as the first split:
 
 - Diagnostic nudge appears, but touch does not work: RMK controller execution and HID reporting are alive; focus on IQS9151 I2C/product/config/RDY.

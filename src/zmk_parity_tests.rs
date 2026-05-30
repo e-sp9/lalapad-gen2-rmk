@@ -1209,6 +1209,9 @@ fn migration_status_combines_software_and_hardware_progress() {
     assert!(stdout.contains(
         "| vial_thumb_layer_taps | vial | both | requires_hardware | Vial, Space, Enter, layer 1, layer 2, Space+Y, NumLock, Enter+Y, PageUp |"
     ));
+    assert!(stdout.contains(
+        "| storage_reset_and_reflash | storage | both | requires_hardware | reset central UF2, reset peripheral UF2, normal central UF2, normal peripheral UF2, re-pair, Vial |"
+    ));
 
     let text = run_migration_status(&[
         "--coverage-baseline",
@@ -1225,6 +1228,11 @@ fn migration_status_combines_software_and_hardware_progress() {
     assert!(
         String::from_utf8_lossy(&text.stdout)
             .contains("[needs: right, cursor, tap, vertical scroll, horizontal scroll]")
+    );
+    assert!(
+        String::from_utf8_lossy(&text.stdout).contains(
+            "[needs: reset central UF2, reset peripheral UF2, normal central UF2, normal peripheral UF2, re-pair, Vial]"
+        )
     );
 }
 
@@ -1957,6 +1965,9 @@ fn hardware_validation_markdown_report_lists_required_evidence() {
     assert!(
         stdout.contains("Vial, Space, Enter, layer 1, layer 2, Space+Y, NumLock, Enter+Y, PageUp")
     );
+    assert!(stdout.contains(
+        "reset central UF2, reset peripheral UF2, normal central UF2, normal peripheral UF2, re-pair, Vial"
+    ));
     for required in [
         "iqs9151_right_i2c_identity",
         "left_trackpad_split_cursor_tap_scroll",
@@ -2472,6 +2483,14 @@ validated_at = "2026-05-29"
 tester = "hardware bench"
 firmware_ref = "35b3f1f"
 artifact_or_notes = "log: /tmp/right-i2c.log; I2C scan found 0x56 and product register 0x1000 read 0x09bc on the right half."
+
+[[evidence]]
+id = "storage_reset_and_reflash"
+status = "validated"
+validated_at = "2026-05-29"
+tester = "hardware bench"
+firmware_ref = "35b3f1f"
+artifact_or_notes = "video: /tmp/storage-reset.mp4; flashed reset central UF2 and normal central UF2, then re-pair BLE and opened Vial."
 "#;
     let path = write_temp_file("hardware-validation-missing-observations", evidence);
     let output = run_hardware_validation(&["--evidence", path.to_str().unwrap(), "--json"]);
@@ -2523,6 +2542,15 @@ artifact_or_notes = "log: /tmp/right-i2c.log; I2C scan found 0x56 and product re
             ) && error.contains("'left'")
         }),
         "left IQS9151 identity should require left-side evidence instead of accepting a right-side log: {errors:?}"
+    );
+    assert!(
+        errors.iter().any(|error| {
+            error.contains(
+                "storage_reset_and_reflash: artifact_or_notes must mention required observation(s)",
+            ) && error.contains("'reset peripheral UF2'")
+                && error.contains("'normal peripheral UF2'")
+        }),
+        "storage reset evidence should require both reset and normal UF2 observations for the peripheral half: {errors:?}"
     );
     assert!(
         !require_output.status.success(),
