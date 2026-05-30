@@ -2698,6 +2698,45 @@ with tempfile.TemporaryDirectory() as tempdir:
     parsed = json.loads(output_path.read_text())
     output_path_exists = output_path.exists()
 
+    refs_tag = subprocess.run(
+        [
+            sys.executable,
+            "tools/firmware_artifact_manifest.py",
+            "--root",
+            str(root),
+            "--firmware-ref",
+            "refs/tags/v0.3.0",
+            "--require-uf2",
+            "--require-reset-uf2",
+        ],
+        check=True,
+        cwd=Path.cwd(),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    refs_tag_manifest = json.loads(refs_tag.stdout)
+
+    invalid_ref_output = root / "invalid-ref-firmware-artifacts.local.json"
+    invalid_ref_output.write_text("stale\n")
+    invalid_ref = subprocess.run(
+        [
+            sys.executable,
+            "tools/firmware_artifact_manifest.py",
+            "--root",
+            str(root),
+            "--firmware-ref",
+            "origin/release/lalapad-test",
+            "--require-uf2",
+            "--output",
+            str(invalid_ref_output),
+        ],
+        cwd=Path.cwd(),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+
     missing = root / "firmware/normal/lalapad-gen2-rmk-peripheral.uf2"
     missing.unlink()
     stale_output = root / "stale-firmware-artifacts.local.json"
@@ -2724,6 +2763,12 @@ print(json.dumps({
     "manifest": parsed,
     "stdout": manifest.stdout,
     "output_path_exists": output_path_exists,
+    "refs_tag_manifest": refs_tag_manifest,
+    "refs_tag_stderr": refs_tag.stderr,
+    "invalid_ref_code": invalid_ref.returncode,
+    "invalid_ref_stdout": invalid_ref.stdout,
+    "invalid_ref_stderr": invalid_ref.stderr,
+    "invalid_ref_output_exists_after_failure": invalid_ref_output.exists(),
     "central_uf2_sha256": hashlib.sha256(b"central uf2").hexdigest(),
     "failed_code": failed.returncode,
     "failed_stdout": failed.stdout,
@@ -2744,6 +2789,11 @@ print(json.dumps({
     assert_eq!(parsed["stdout"].as_str(), Some(""));
     assert_eq!(parsed["output_path_exists"].as_bool(), Some(true));
     assert_eq!(manifest["firmware_ref"].as_str(), Some("v0.3.0"));
+    assert_eq!(
+        parsed["refs_tag_manifest"]["firmware_ref"].as_str(),
+        Some("refs/tags/v0.3.0")
+    );
+    assert_eq!(parsed["refs_tag_stderr"].as_str(), Some(""));
     assert_eq!(manifest["artifact_count"].as_i64(), Some(8));
     assert!(
         manifest["pair_sha256"]
@@ -2783,6 +2833,18 @@ print(json.dumps({
     assert_eq!(
         central_dfu["dfu_manifest"]["application"]["bin_file"].as_str(),
         Some("central.bin")
+    );
+    assert_ne!(parsed["invalid_ref_code"].as_i64(), Some(0));
+    assert_eq!(parsed["invalid_ref_stdout"].as_str(), Some(""));
+    assert_eq!(
+        parsed["invalid_ref_output_exists_after_failure"].as_bool(),
+        Some(false)
+    );
+    assert!(
+        parsed["invalid_ref_stderr"]
+            .as_str()
+            .unwrap()
+            .contains("--firmware-ref must be an immutable flashed tag or commit")
     );
     assert_ne!(parsed["failed_code"].as_i64(), Some(0));
     assert_eq!(parsed["failed_stdout"].as_str(), Some(""));
@@ -4899,7 +4961,15 @@ artifact_or_notes = "scope: /tmp/left-rdy.csv; left P1_11 RDY D6 active-low no-t
 #[test]
 fn migration_status_rejects_mutable_firmware_artifact_refs() {
     let (artifact_root, artifact_manifest_path, _pair_sha256) =
-        test_firmware_artifact_fixture("develop");
+        test_firmware_artifact_fixture("35b3f1f");
+    let mut mutable_artifact_manifest: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&artifact_manifest_path).unwrap()).unwrap();
+    mutable_artifact_manifest["firmware_ref"] = serde_json::Value::String("develop".into());
+    std::fs::write(
+        &artifact_manifest_path,
+        serde_json::to_string_pretty(&mutable_artifact_manifest).unwrap(),
+    )
+    .unwrap();
     let evidence = r#"
 [[evidence]]
 id = "iqs9151_right_i2c_identity"

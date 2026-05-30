@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import hardware_validation
+
 
 @dataclass(frozen=True)
 class ArtifactSpec:
@@ -230,6 +232,13 @@ def main() -> None:
 
     root = args.root.resolve()
     firmware_ref = args.firmware_ref if args.firmware_ref is not None else git_ref(root)
+    if not firmware_ref.strip() or hardware_validation.is_mutable_firmware_ref(firmware_ref):
+        if args.output is not None:
+            output = args.output
+            if not output.is_absolute():
+                output = root / output
+            output.unlink(missing_ok=True)
+        parser.error("--firmware-ref must be an immutable flashed tag or commit")
     manifest, errors = build_manifest(
         root,
         firmware_ref,
