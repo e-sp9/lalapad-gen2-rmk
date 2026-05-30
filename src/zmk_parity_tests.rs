@@ -4046,26 +4046,34 @@ fn hardware_validation_firmware_ref_gate_allows_zero_validated_checks() {
 
 #[test]
 fn hardware_validation_and_migration_status_reject_mutable_required_firmware_refs() {
-    let hardware_output = run_hardware_validation(&[
-        "--json",
-        "--require-firmware-ref",
+    for firmware_ref in [
         "refs/remotes/upstream/main",
-    ]);
-    assert!(
-        !hardware_output.status.success(),
-        "hardware validation accepted a mutable required firmware ref\nstdout:\n{}\nstderr:\n{}",
-        String::from_utf8_lossy(&hardware_output.stdout),
-        String::from_utf8_lossy(&hardware_output.stderr)
-    );
-    assert!(
-        String::from_utf8_lossy(&hardware_output.stderr)
-            .contains("--require-firmware-ref must be an immutable flashed tag or commit"),
-        "hardware validation should explain the immutable required ref constraint"
-    );
-    assert!(
-        !String::from_utf8_lossy(&hardware_output.stderr).contains("Traceback"),
-        "mutable required firmware ref should be a CLI validation error, not a traceback"
-    );
+        "refs/heads/feature/layer-fix",
+        "origin/release/lalapad-test",
+        "HEAD~1",
+        "@{upstream}",
+        "main~1",
+        "main@{upstream}",
+        "master^{commit}",
+    ] {
+        let hardware_output =
+            run_hardware_validation(&["--json", "--require-firmware-ref", firmware_ref]);
+        assert!(
+            !hardware_output.status.success(),
+            "hardware validation accepted mutable required firmware ref {firmware_ref:?}\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&hardware_output.stdout),
+            String::from_utf8_lossy(&hardware_output.stderr)
+        );
+        assert!(
+            String::from_utf8_lossy(&hardware_output.stderr)
+                .contains("--require-firmware-ref must be an immutable flashed tag or commit"),
+            "hardware validation should explain the immutable required ref constraint"
+        );
+        assert!(
+            !String::from_utf8_lossy(&hardware_output.stderr).contains("Traceback"),
+            "mutable required firmware ref should be a CLI validation error, not a traceback"
+        );
+    }
 
     let migration_output = run_migration_status(&[
         "--json",
@@ -4110,6 +4118,24 @@ fn hardware_validation_and_migration_status_reject_mutable_required_firmware_ref
         "migration status rejected a legitimate immutable prerelease required ref\nstdout:\n{}\nstderr:\n{}",
         String::from_utf8_lossy(&prerelease_output.stdout),
         String::from_utf8_lossy(&prerelease_output.stderr)
+    );
+
+    let refs_tag_output = run_migration_status(&[
+        "--json",
+        "--coverage-baseline",
+        "tools/porting_coverage_baseline.toml",
+        "--hardware-baseline",
+        "tools/hardware_validation_baseline.toml",
+        "--require-software-complete",
+        "--require-hardware-classified",
+        "--require-firmware-ref",
+        "refs/tags/v0.2.65-dev.1",
+    ]);
+    assert!(
+        refs_tag_output.status.success(),
+        "migration status rejected a legitimate immutable refs/tags prerelease required ref\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&refs_tag_output.stdout),
+        String::from_utf8_lossy(&refs_tag_output.stderr)
     );
 }
 
@@ -4539,8 +4565,16 @@ fn hardware_validation_rejects_placeholder_template_bindings() {
     for firmware_ref in [
         "main",
         "origin/main",
+        "origin/release/lalapad-test",
         "refs/heads/main",
+        "refs/heads/feature/layer-fix",
         "refs/remotes/upstream/main",
+        "remotes/upstream/feature/layer-fix",
+        "HEAD~1",
+        "@{upstream}",
+        "main~1",
+        "main@{upstream}",
+        "master^{commit}",
         "remotes/upstream/develop",
         "develop",
     ] {
@@ -4571,6 +4605,18 @@ fn hardware_validation_rejects_placeholder_template_bindings() {
         "hardware validation rejected a legitimate prerelease tag containing dev\nstdout:\n{}\nstderr:\n{}",
         String::from_utf8_lossy(&prerelease_ref.stdout),
         String::from_utf8_lossy(&prerelease_ref.stderr)
+    );
+
+    let refs_tag_ref = run_hardware_validation(&[
+        "--evidence-template",
+        "--firmware-ref-template",
+        "refs/tags/v0.2.65-dev.1",
+    ]);
+    assert!(
+        refs_tag_ref.status.success(),
+        "hardware validation rejected a legitimate refs/tags prerelease tag\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&refs_tag_ref.stdout),
+        String::from_utf8_lossy(&refs_tag_ref.stderr)
     );
 
     let malformed_pair = run_hardware_validation(&[

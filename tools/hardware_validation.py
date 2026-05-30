@@ -108,6 +108,7 @@ MUTABLE_BRANCH_NAMES = frozenset(
         "trunk",
     }
 )
+MUTABLE_REMOTE_NAMES = frozenset({"origin", "upstream", "fork"})
 IMAGE_SUFFIXES = frozenset({".png", ".jpg", ".jpeg", ".webp"})
 TEXT_LOG_SUFFIXES = frozenset({".log", ".txt", ".csv", ".json"})
 VIDEO_SUFFIXES = frozenset({".mp4", ".mov", ".mkv", ".webm"})
@@ -239,19 +240,27 @@ def is_mutable_firmware_ref(value: Any) -> bool:
     text = str(value).strip()
     if is_placeholder_value(text):
         return True
-    lower = text.lower().strip("/")
-    for remote_prefix in ("refs/remotes/", "remotes/"):
-        if lower.startswith(remote_prefix):
-            remote_and_branch = lower[len(remote_prefix) :]
-            remote, separator, branch = remote_and_branch.partition("/")
-            lower = branch if separator and remote else remote_and_branch
-            break
-    else:
-        for prefix in ("refs/heads/", "origin/"):
-            if lower.startswith(prefix):
-                lower = lower[len(prefix) :]
-                break
-    return lower.strip("/") in MUTABLE_BRANCH_NAMES
+    lower = text.lower().strip()
+    if lower == "@" or lower.startswith("@{"):
+        return True
+    if re.fullmatch(r"head(?:[~^].*|@\{.*\})?", lower):
+        return True
+
+    normalized = lower.strip("/")
+    if normalized.startswith("refs/tags/"):
+        return False
+    if normalized.startswith(("refs/heads/", "refs/remotes/", "remotes/")):
+        return True
+    if normalized.startswith(("refs/pull/", "pull/", "refs/merge-requests/")):
+        return True
+
+    remote, separator, _branch = normalized.partition("/")
+    if separator and remote in MUTABLE_REMOTE_NAMES:
+        return True
+    branch_base_match = re.fullmatch(r"([^~^@]+)(?:[~^].*|@\{.*\})", normalized)
+    if branch_base_match and branch_base_match.group(1) in MUTABLE_BRANCH_NAMES:
+        return True
+    return normalized in MUTABLE_BRANCH_NAMES
 
 
 def validate_evidence_needles_schema(check_id: str, check: dict[str, Any]) -> list[str]:
