@@ -1,8 +1,8 @@
 [coverage]
-passed = 3601
-total = 3601
-result_count = 587
-result_inventory_sha256 = "4c92e6aa2c325a6a70c8a8cae87bfd037d023c7dbf73821e2f3c81d7e4644f20"
+passed = 3604
+total = 3604
+result_count = 590
+result_inventory_sha256 = "8ba1bd46d7409d16b92604a397cc39101fdfc56fe101ef67d2be730ff1164c99"
 
 [coverage.by_kind.behavior]
 passed = 10
@@ -33,8 +33,8 @@ passed = 4
 total = 4
 
 [coverage.by_kind.config]
-passed = 17
-total = 17
+passed = 20
+total = 20
 
 [coverage.by_kind.dependency]
 passed = 23

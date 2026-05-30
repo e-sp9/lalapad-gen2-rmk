@@ -760,6 +760,21 @@ path = "rmk.ble_profiles_num"
 expected = 4
 
 [[config_values]]
+id = "rmk_combo_capacity_matches_shipped_combo_inventory"
+path = "rmk.combo_max_num"
+expected = 4
+
+[[config_values]]
+id = "rmk_combo_max_length_matches_shipped_combo_shape"
+path = "rmk.combo_max_length"
+expected = 2
+
+[[config_values]]
+id = "rmk_debounce_time_matches_lalapad_tuning"
+path = "rmk.debounce_time"
+expected = 8
+
+[[config_values]]
 id = "rmk_split_central_sleep_timeout_disabled"
 path = "rmk.split_central_sleep_timeout_seconds"
 expected = 0
