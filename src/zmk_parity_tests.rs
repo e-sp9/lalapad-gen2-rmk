@@ -3035,6 +3035,23 @@ fn porting_coverage_includes_exact_rmk_inventory_gates() {
     );
     assert_eq!(keymap_shape["ok"], true);
 
+    for id in [
+        "rmk_event_channel_size_trackpad_burst_headroom",
+        "rmk_controller_channel_size_trackpad_burst_headroom",
+        "rmk_report_channel_size_trackpad_burst_headroom",
+    ] {
+        let result = results
+            .iter()
+            .find(|result| result["id"] == id)
+            .unwrap_or_else(|| {
+                panic!("RMK trackpad burst channel-size config result is missing for {id}")
+            });
+        assert_eq!(result["kind"], "config");
+        assert_eq!(result["passed"].as_i64(), Some(1));
+        assert_eq!(result["total"].as_i64(), Some(1));
+        assert_eq!(result["ok"], true);
+    }
+
     let combo_inventory = results
         .iter()
         .find(|result| result["id"] == "rmk_combo_set_matches_manifest")

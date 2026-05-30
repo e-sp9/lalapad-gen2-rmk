@@ -765,6 +765,21 @@ path = "rmk.split_central_sleep_timeout_seconds"
 expected = 0
 
 [[config_values]]
+id = "rmk_event_channel_size_trackpad_burst_headroom"
+path = "rmk.event_channel_size"
+expected = 64
+
+[[config_values]]
+id = "rmk_controller_channel_size_trackpad_burst_headroom"
+path = "rmk.controller_channel_size"
+expected = 64
+
+[[config_values]]
+id = "rmk_report_channel_size_trackpad_burst_headroom"
+path = "rmk.report_channel_size"
+expected = 64
+
+[[config_values]]
 id = "storage_start_addr"
 path = "storage.start_addr"
 expected = 917504
