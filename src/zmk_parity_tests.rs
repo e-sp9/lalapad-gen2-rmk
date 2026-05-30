@@ -129,6 +129,16 @@ fn complete_hardware_evidence_overlay(firmware_ref: &str) -> String {
                     .join("; ")
             })
             .unwrap_or_default();
+        let evidence_artifacts = check["evidence_artifacts"]
+            .as_array()
+            .map(|artifacts| {
+                artifacts
+                    .iter()
+                    .map(|artifact| artifact.as_str().unwrap())
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            })
+            .unwrap_or_default();
         evidence.push_str("\n[[evidence]]\n");
         evidence.push_str(&format!("id = \"{check_id}\"\n"));
         evidence.push_str("status = \"validated\"\n");
@@ -136,7 +146,7 @@ fn complete_hardware_evidence_overlay(firmware_ref: &str) -> String {
         evidence.push_str("tester = \"host parity test\"\n");
         evidence.push_str(&format!("firmware_ref = \"{firmware_ref}\"\n"));
         evidence.push_str(&format!(
-            "artifact_or_notes = \"log: /tmp/lalapad-host-parity-{check_id}.txt; simulated host gate evidence for {check_id}; observed {evidence_needles}\"\n",
+            "artifact_or_notes = \"log: /tmp/lalapad-host-parity-{check_id}.txt; simulated host gate evidence for {check_id}; artifact {evidence_artifacts}; observed {evidence_needles}\"\n",
         ));
     }
     evidence
@@ -1220,24 +1230,27 @@ fn migration_status_combines_software_and_hardware_progress() {
     assert!(stdout.contains("### Hardware Progress By Side"));
     assert!(stdout.contains("| right | 0 | 5 | 0.00% |"));
     assert!(stdout.contains("### Hardware Remaining"));
-    assert!(stdout.contains("| ID | Area | Side | Status | Required observations |"));
+    assert!(
+        stdout
+            .contains("| ID | Area | Side | Status | Required artifacts | Required observations |")
+    );
     assert!(stdout.contains(
-        "| iqs9151_right_i2c_identity | trackpad | right | requires_hardware | right, P0_04 SDA, P0_05 SCL, I2C activity, 0x56, product-number register, 0x1000, 0x09bc |"
+        "| iqs9151_right_i2c_identity | trackpad | right | requires_hardware | log | right, P0_04 SDA, P0_05 SCL, I2C activity, 0x56, product-number register, 0x1000, 0x09bc |"
     ));
     assert!(stdout.contains(
-        "| iqs9151_right_rdy_signal | trackpad | right | requires_hardware | right, P1_11 RDY, D6, active-low, no-touch high, touch-event low |"
+        "| iqs9151_right_rdy_signal | trackpad | right | requires_hardware | scope | right, P1_11 RDY, D6, active-low, no-touch high, touch-event low |"
     ));
     assert!(stdout.contains(
-        "| trackpad_drag_cross_side | trackpad | both | requires_hardware | cross-side drag, right hold with left move, left hold with right move, left-button hold, host drag/select, release on held-finger lift, no stuck button |"
+        "| trackpad_drag_cross_side | trackpad | both | requires_hardware | video | cross-side drag, right hold with left move, left hold with right move, left-button hold, host drag/select, release on held-finger lift, no stuck button |"
     ));
     assert!(stdout.contains(
-        "| ble_split_pairing_reconnect | ble_split | both | requires_hardware | right central, left peripheral, BLE re-pair, reconnect right first, left Q, left A, right Y, right H |"
+        "| ble_split_pairing_reconnect | ble_split | both | requires_hardware | video, BLE trace | right central, left peripheral, BLE re-pair, reconnect right first, left Q, left A, right Y, right H |"
     ));
     assert!(stdout.contains(
-        "| vial_thumb_layer_taps | vial | both | requires_hardware | Vial, Space, Enter, layer 1, layer 2, Space+Y, NumLock, Enter+Y, PageUp |"
+        "| vial_thumb_layer_taps | vial | both | requires_hardware | Vial screenshot, key-event log | Vial, Space, Enter, layer 1, layer 2, Space+Y, NumLock, Enter+Y, PageUp |"
     ));
     assert!(stdout.contains(
-        "| storage_reset_and_reflash | storage | both | requires_hardware | reset central UF2, reset peripheral UF2, normal central UF2, normal peripheral UF2, re-pair, Vial |"
+        "| storage_reset_and_reflash | storage | both | requires_hardware | video | reset central UF2, reset peripheral UF2, normal central UF2, normal peripheral UF2, re-pair, Vial |"
     ));
 
     let text = run_migration_status(&[
@@ -1254,15 +1267,15 @@ fn migration_status_combines_software_and_hardware_progress() {
     );
     assert!(
         String::from_utf8_lossy(&text.stdout).contains(
-            "[needs: right, cursor, tap, vertical scroll, horizontal scroll, no cursor during scroll, no right-click during scroll, inertia continues, inertia stops on touch]"
+            "[artifacts: video; needs: right, cursor, tap, vertical scroll, horizontal scroll, no cursor during scroll, no right-click during scroll, inertia continues, inertia stops on touch]"
         )
     );
     assert!(String::from_utf8_lossy(&text.stdout).contains(
-        "[needs: right central, left peripheral, BLE re-pair, reconnect right first, left Q, left A, right Y, right H]"
+        "[artifacts: video, BLE trace; needs: right central, left peripheral, BLE re-pair, reconnect right first, left Q, left A, right Y, right H]"
     ));
     assert!(
         String::from_utf8_lossy(&text.stdout).contains(
-            "[needs: reset central UF2, reset peripheral UF2, normal central UF2, normal peripheral UF2, re-pair, Vial]"
+            "[artifacts: video; needs: reset central UF2, reset peripheral UF2, normal central UF2, normal peripheral UF2, re-pair, Vial]"
         )
     );
 }
@@ -2043,7 +2056,7 @@ fn hardware_validation_markdown_report_lists_required_evidence() {
     assert!(stdout.contains("| right | 0 | 5 | 0.00% | `requires_hardware`=5 |"));
     assert!(stdout.contains("### Checks"));
     assert!(stdout.contains(
-        "| ID | Area | Side | Status | Requirement | Required evidence | Required observations | Validated at | Tester | Firmware ref | Artifact/notes |"
+        "| ID | Area | Side | Status | Requirement | Required evidence | Required artifacts | Required observations | Validated at | Tester | Firmware ref | Artifact/notes |"
     ));
     assert!(stdout.contains(
         "right, cursor, tap, vertical scroll, horizontal scroll, no cursor during scroll, no right-click during scroll, inertia continues, inertia stops on touch"
@@ -2174,7 +2187,7 @@ fn hardware_validation_reports_required_observations_in_json_and_text() {
             .contains("right_trackpad_cursor_tap_scroll (trackpad/right): requires_hardware")
     );
     assert!(text_stdout.contains(
-        "[needs: right, cursor, tap, vertical scroll, horizontal scroll, no cursor during scroll, no right-click during scroll, inertia continues, inertia stops on touch]"
+        "[artifacts: video; needs: right, cursor, tap, vertical scroll, horizontal scroll, no cursor during scroll, no right-click during scroll, inertia continues, inertia stops on touch]"
     ));
 }
 
@@ -2464,7 +2477,7 @@ status = "validated"
 validated_at = "2026-05-29"
 tester = "hardware bench"
 firmware_ref = "35b3f1f"
-artifact_or_notes = "right P0_04 SDA and P0_05 SCL showed I2C activity from scan, address 0x56 ACKed, and product-number register 0x1000 read 0x09bc."
+artifact_or_notes = "log: /tmp/right-i2c.log; right P0_04 SDA and P0_05 SCL showed I2C activity from scan, address 0x56 ACKed, and product-number register 0x1000 read 0x09bc."
 "#;
     let path = write_temp_file("hardware-validation-evidence", evidence);
     let output = run_hardware_validation(&["--evidence", path.to_str().unwrap(), "--json"]);
@@ -2493,6 +2506,38 @@ artifact_or_notes = "right P0_04 SDA and P0_05 SCL showed I2C activity from scan
 }
 
 #[test]
+fn hardware_validation_evidence_example_contains_valid_copyable_entry() {
+    let example_entry = HARDWARE_VALIDATION_EVIDENCE_EXAMPLE_TOML
+        .lines()
+        .skip_while(|line| line.trim() != "# [[evidence]]")
+        .map(|line| {
+            line.strip_prefix("# ")
+                .or_else(|| line.strip_prefix('#'))
+                .unwrap_or(line)
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        example_entry.contains("[[evidence]]"),
+        "hardware validation evidence example should include a commented evidence entry"
+    );
+
+    let path = write_temp_file("hardware-validation-evidence-example", &example_entry);
+    let output = run_hardware_validation(&["--evidence", path.to_str().unwrap(), "--json"]);
+    let _ = std::fs::remove_file(&path);
+
+    assert!(
+        output.status.success(),
+        "hardware validation evidence example should be copyable into a valid overlay\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(parsed["validated"].as_i64(), Some(1));
+    assert_eq!(parsed["errors"].as_array().unwrap().len(), 0);
+}
+
+#[test]
 fn hardware_validation_manifest_requires_observation_needles_for_each_check() {
     let manifest = hardware_validation_manifest_toml();
     let checks = manifest["checks"].as_array().unwrap();
@@ -2502,6 +2547,19 @@ fn hardware_validation_manifest_requires_observation_needles_for_each_check() {
         let needles = check["evidence_needles"]
             .as_array()
             .unwrap_or_else(|| panic!("{check_id} is missing evidence_needles"));
+        let artifacts = check["evidence_artifacts"]
+            .as_array()
+            .unwrap_or_else(|| panic!("{check_id} is missing evidence_artifacts"));
+        assert!(
+            !artifacts.is_empty(),
+            "{check_id} should declare concrete evidence artifact requirements"
+        );
+        assert!(
+            artifacts.iter().all(|artifact| artifact
+                .as_str()
+                .is_some_and(|text| !text.trim().is_empty())),
+            "{check_id} evidence_artifacts should be non-empty strings"
+        );
         assert!(
             !needles.is_empty(),
             "{check_id} should declare concrete observation needles"
@@ -2721,6 +2779,14 @@ artifact_or_notes = "video: /tmp/storage-reset.mp4; flashed reset central UF2 an
     assert!(
         errors.iter().any(|error| {
             error.contains(
+                "iqs9151_right_rdy_signal: artifact_or_notes must mention required evidence artifact(s)",
+            ) && error.contains("'scope'")
+        }),
+        "RDY evidence should require a scope artifact, not only a generic photo: {errors:?}"
+    );
+    assert!(
+        errors.iter().any(|error| {
+            error.contains(
                 "trackpad_drag_cross_side: artifact_or_notes must mention required observation(s)",
             ) && error.contains("'cross-side drag'")
                 && error.contains("'right hold with left move'")
@@ -2744,6 +2810,14 @@ artifact_or_notes = "video: /tmp/storage-reset.mp4; flashed reset central UF2 an
                 && error.contains("'right H'")
         }),
         "BLE split reconnect evidence should require concrete left/right key observations: {errors:?}"
+    );
+    assert!(
+        errors.iter().any(|error| {
+            error.contains(
+                "ble_split_pairing_reconnect: artifact_or_notes must mention required evidence artifact(s)",
+            ) && error.contains("'BLE trace'")
+        }),
+        "BLE split reconnect evidence should require the BLE trace artifact as well as video: {errors:?}"
     );
     assert!(
         errors.iter().any(|error| {
@@ -2782,6 +2856,14 @@ artifact_or_notes = "video: /tmp/storage-reset.mp4; flashed reset central UF2 an
     assert!(
         errors.iter().any(|error| {
             error.contains(
+                "charge_indicator_pins: artifact_or_notes must mention required evidence artifact(s)",
+            ) && error.contains("'multimeter'")
+        }),
+        "charge indicator evidence should require a multimeter artifact as well as photo: {errors:?}"
+    );
+    assert!(
+        errors.iter().any(|error| {
+            error.contains(
                 "storage_reset_and_reflash: artifact_or_notes must mention required observation(s)",
             ) && error.contains("'reset peripheral UF2'")
                 && error.contains("'normal peripheral UF2'")
@@ -2803,7 +2885,7 @@ status = "validated"
 validated_at = "2026-05-29"
 tester = "hardware bench"
 firmware_ref = "35b3f1f"
-artifact_or_notes = "right P0_04 SDA and P0_05 SCL showed I2C activity from scan, address 0x56 ACKed, and product-number register 0x1000 read 0x09bc."
+artifact_or_notes = "log: /tmp/right-i2c.log; right P0_04 SDA and P0_05 SCL showed I2C activity from scan, address 0x56 ACKed, and product-number register 0x1000 read 0x09bc."
 "#;
     let path = write_temp_file("hardware-validation-firmware-ref", evidence);
     let ok = run_hardware_validation(&[
@@ -2948,11 +3030,25 @@ fn hardware_validation_can_generate_complete_evidence_template() {
             "evidence template should include artifact_or_notes copy aid for {check_id}"
         );
         assert!(
-            stdout.contains(
-                "# artifact_or_notes = \"<photo/log/probe/Vial path or reading>; observed:"
-            ),
-            "evidence template copy aid should preserve the empty artifact_or_notes field while showing required observation text"
+            stdout.contains("# Artifact/notes must include evidence artifact(s):"),
+            "evidence template should include required evidence artifacts for {check_id}"
         );
+        assert!(
+            stdout.contains(
+                "# artifact_or_notes = \"<photo/log/probe/Vial path or reading>; artifact:"
+            ),
+            "evidence template copy aid should preserve the empty artifact_or_notes field while showing required artifact text"
+        );
+        assert!(
+            stdout.contains("; observed:"),
+            "evidence template copy aid should show required observation text"
+        );
+        for artifact in check["evidence_artifacts"].as_array().unwrap() {
+            assert!(
+                stdout.contains(artifact.as_str().unwrap()),
+                "evidence template should include required evidence artifact for {check_id}"
+            );
+        }
         for needle in check["evidence_needles"].as_array().unwrap() {
             assert!(
                 stdout.contains(needle.as_str().unwrap()),
@@ -3022,15 +3118,21 @@ fn hardware_validation_can_generate_bench_checklist() {
         );
         assert!(
             stdout.contains(
-                "artifact_or_notes: concrete photo/log/probe/Vial observation that mentions"
+                "artifact_or_notes: concrete photo/log/probe/Vial observation that mentions artifacts"
             ),
             "checklist should include artifact_or_notes capture guidance"
         );
         assert!(
             stdout
-                .contains("copy aid after pass: <photo/log/probe/Vial path or reading>; observed:"),
+                .contains("copy aid after pass: <photo/log/probe/Vial path or reading>; artifact:"),
             "checklist should include a copy aid with required observation terms"
         );
+        for artifact in check["evidence_artifacts"].as_array().unwrap() {
+            assert!(
+                stdout.contains(artifact.as_str().unwrap()),
+                "checklist should include required evidence artifact for {check_id}"
+            );
+        }
         for needle in check["evidence_needles"].as_array().unwrap() {
             assert!(
                 stdout.contains(needle.as_str().unwrap()),
@@ -3092,7 +3194,7 @@ fn hardware_validation_evidence_template_can_prefill_firmware_ref() {
     );
     assert!(
         stdout.contains(&format!(
-            "# artifact_or_notes = \"firmware artifact pair_sha256 {pair_sha256}; <photo/log/probe/Vial path or reading>; observed:"
+            "# artifact_or_notes = \"firmware artifact pair_sha256 {pair_sha256}; <photo/log/probe/Vial path or reading>; artifact:"
         )),
         "artifact-bound template should include pair SHA in the copy aid"
     );

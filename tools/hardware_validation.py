@@ -186,12 +186,27 @@ def validate_evidence_needles_schema(check_id: str, check: dict[str, Any]) -> li
     return []
 
 
+def validate_evidence_artifacts_schema(check_id: str, check: dict[str, Any]) -> list[str]:
+    evidence_artifacts = check.get("evidence_artifacts")
+    if not isinstance(evidence_artifacts, list) or not evidence_artifacts:
+        return [f"{check_id}: evidence_artifacts must be a non-empty string array"]
+    if not all(
+        isinstance(artifact, str) and artifact.strip() for artifact in evidence_artifacts
+    ):
+        return [f"{check_id}: evidence_artifacts must be a non-empty string array"]
+    return []
+
+
 def artifact_note_mentions_needle(artifact_or_notes: str, needle: str) -> bool:
     pattern = re.compile(
         rf"(?<![A-Za-z0-9_]){re.escape(needle.strip())}(?![A-Za-z0-9_])",
         re.IGNORECASE,
     )
     return pattern.search(artifact_or_notes) is not None
+
+
+def evidence_artifacts_text(check: dict[str, Any]) -> str:
+    return ", ".join(str(artifact) for artifact in check.get("evidence_artifacts", []))
 
 
 def validate_validated_evidence(check_id: str, check: dict[str, Any]) -> list[str]:
@@ -250,6 +265,21 @@ def validate_validated_evidence(check_id: str, check: dict[str, Any]) -> list[st
                 + ", ".join(repr(needle) for needle in missing_needles)
             )
 
+    evidence_artifacts = check.get("evidence_artifacts", [])
+    if isinstance(evidence_artifacts, list) and all(
+        isinstance(artifact, str) and artifact.strip() for artifact in evidence_artifacts
+    ):
+        missing_artifacts = [
+            artifact
+            for artifact in evidence_artifacts
+            if not artifact_note_mentions_needle(artifact_or_notes, artifact)
+        ]
+        if missing_artifacts:
+            errors.append(
+                f"{check_id}: artifact_or_notes must mention required evidence artifact(s): "
+                + ", ".join(repr(artifact) for artifact in missing_artifacts)
+            )
+
     return errors
 
 
@@ -263,6 +293,11 @@ def manifest_inventory_items(manifest: dict[str, Any]) -> list[dict[str, str]]:
             **{field: str(check.get(field, "")) for field in fields},
             "evidence_needles": json.dumps(
                 check.get("evidence_needles", []),
+                sort_keys=True,
+                separators=(",", ":"),
+            ),
+            "evidence_artifacts": json.dumps(
+                check.get("evidence_artifacts", []),
                 sort_keys=True,
                 separators=(",", ":"),
             ),
@@ -496,6 +531,9 @@ def summarize(
                 "evidence_needles": ", ".join(
                     str(needle) for needle in check.get("evidence_needles", [])
                 ),
+                "evidence_artifacts": ", ".join(
+                    str(artifact) for artifact in check.get("evidence_artifacts", [])
+                ),
             }
         )
 
@@ -516,6 +554,7 @@ def summarize(
         if missing:
             errors.append(f"{check_id}: missing required field(s): {', '.join(missing)}")
         errors.extend(validate_evidence_needles_schema(check_id, check))
+        errors.extend(validate_evidence_artifacts_schema(check_id, check))
         source = str(check.get("source", "")).strip()
         if source:
             errors.extend(validate_source_ref(check_id, source, source_root or Path(".")))
@@ -623,10 +662,13 @@ def evidence_needles_text(check: dict[str, Any]) -> str:
 
 def artifact_or_notes_copy_hint(check: dict[str, Any], artifact_prefix: str = "") -> str:
     required_observations = evidence_needles_text(check)
+    required_artifacts = evidence_artifacts_text(check)
     parts = []
     if artifact_prefix:
         parts.append(artifact_prefix.strip().rstrip(";").strip())
     parts.append("<photo/log/probe/Vial path or reading>")
+    if required_artifacts:
+        parts.append(f"artifact: {required_artifacts}")
     if required_observations:
         parts.append(f"observed: {required_observations}")
     return "; ".join(parts)
@@ -687,6 +729,12 @@ def as_evidence_template(
             lines.extend(toml_comment(check.get("source", "")))
             evidence_needles = check.get("evidence_needles", [])
             if evidence_needles:
+                evidence_artifacts = check.get("evidence_artifacts", [])
+                if evidence_artifacts:
+                    lines.append("# Artifact/notes must include evidence artifact(s):")
+                    lines.extend(
+                        toml_comment(", ".join(str(artifact) for artifact in evidence_artifacts))
+                    )
                 lines.append("# Artifact/notes must mention:")
                 lines.extend(toml_comment(", ".join(str(needle) for needle in evidence_needles)))
                 lines.append("# Copy aid after this item passes on hardware:")
@@ -743,21 +791,22 @@ def as_markdown(manifest: dict[str, Any], summary: HardwareValidationSummary) ->
             "",
             "### Checks",
             "",
-            "| ID | Area | Side | Status | Requirement | Required evidence | Required observations | Validated at | Tester | Firmware ref | Artifact/notes |",
-            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+            "| ID | Area | Side | Status | Requirement | Required evidence | Required artifacts | Required observations | Validated at | Tester | Firmware ref | Artifact/notes |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
         ]
     )
     for check in manifest.get("checks", []):
         if not isinstance(check, dict):
             continue
         lines.append(
-            "| {id} | {area} | {side} | `{status}` | {requirement} | {evidence} | {evidence_needles} | {validated_at} | {tester} | {firmware_ref} | {artifact_or_notes} |".format(
+            "| {id} | {area} | {side} | `{status}` | {requirement} | {evidence} | {evidence_artifacts} | {evidence_needles} | {validated_at} | {tester} | {firmware_ref} | {artifact_or_notes} |".format(
                 id=markdown_escape(check.get("id", "")),
                 area=markdown_escape(check.get("area", "")),
                 side=markdown_escape(check.get("side", "")),
                 status=markdown_escape(check.get("status", "")),
                 requirement=markdown_escape(check.get("requirement", "")),
                 evidence=markdown_escape(check.get("evidence", "")),
+                evidence_artifacts=markdown_escape(evidence_artifacts_text(check)),
                 evidence_needles=markdown_escape(evidence_needles_text(check)),
                 validated_at=markdown_escape(check.get("validated_at", "")),
                 tester=markdown_escape(check.get("tester", "")),
@@ -801,6 +850,7 @@ def as_checklist(manifest: dict[str, Any]) -> str:
             lines.append(f"  - Requirement: {check.get('requirement', '')}")
             lines.append(f"  - How to verify: {check.get('evidence', '')}")
             lines.append(f"  - Required observations: {evidence_needles_text(check)}")
+            lines.append(f"  - Required artifacts: {evidence_artifacts_text(check)}")
             lines.append(f"  - Evidence source: {check.get('source', '')}")
             lines.append("  - Evidence overlay:")
             lines.append(f"    - id: {check_id}")
@@ -810,7 +860,8 @@ def as_checklist(manifest: dict[str, Any]) -> str:
             lines.append("    - firmware_ref: flashed immutable tag or commit")
             lines.append(
                 "    - artifact_or_notes: concrete photo/log/probe/Vial observation "
-                f"that mentions {evidence_needles_text(check)}"
+                f"that mentions artifacts [{evidence_artifacts_text(check)}] and "
+                f"observations [{evidence_needles_text(check)}]"
             )
             lines.append(
                 "    - copy aid after pass: "
@@ -865,7 +916,8 @@ def print_text(summary: HardwareValidationSummary) -> None:
             print(
                 f"- {item['id']} ({item['area']}/{item['side']}): "
                 f"{item['status']} - {item['evidence']} "
-                f"[needs: {item.get('evidence_needles', '')}]"
+                f"[artifacts: {item.get('evidence_artifacts', '')}; "
+                f"needs: {item.get('evidence_needles', '')}]"
             )
     if summary.errors:
         print("Hardware validation manifest errors:", file=sys.stderr)

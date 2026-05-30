@@ -495,7 +495,13 @@ def print_text(status: MigrationStatus) -> None:
         print("Hardware remaining:")
         for item in hardware["remaining"]:
             needs = item.get("evidence_needles", "")
-            suffix = f" [needs: {needs}]" if needs else ""
+            artifacts = item.get("evidence_artifacts", "")
+            suffix_parts = []
+            if artifacts:
+                suffix_parts.append(f"artifacts: {artifacts}")
+            if needs:
+                suffix_parts.append(f"needs: {needs}")
+            suffix = f" [{'; '.join(suffix_parts)}]" if suffix_parts else ""
             print(f"- {item['id']} ({item['area']}/{item['side']}): {item['status']}{suffix}")
 
 
@@ -634,13 +640,14 @@ def print_markdown(status: MigrationStatus) -> None:
         print()
         print("### Hardware Remaining")
         print()
-        rows = [["ID", "Area", "Side", "Status", "Required observations"]]
+        rows = [["ID", "Area", "Side", "Status", "Required artifacts", "Required observations"]]
         rows.extend(
             [
                 str(item["id"]),
                 str(item["area"]),
                 str(item["side"]),
                 str(item["status"]),
+                str(item.get("evidence_artifacts", "")),
                 str(item.get("evidence_needles", "")),
             ]
             for item in hardware["remaining"]

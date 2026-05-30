@@ -17,12 +17,13 @@
 # tools/hardware_validation_manifest.toml. Keep the generated
 # metadata.hardware_check_inventory_sha256 so the evidence is tied to the
 # current check inventory. Keep artifact_or_notes specific: include a photo/log
-# path, probe reading, or Vial observation note, and include every required
-# observation listed by `evidence_needles` for that check. Set firmware_ref to
-# the release tag, commit hash, or other immutable firmware identifier that was
-# flashed during the hardware test. Do not use placeholders or moving refs such
-# as main/latest/HEAD. validated_at must be a real YYYY-MM-DD date that is not
-# in the future.
+# path, probe reading, or Vial observation note, include every required artifact
+# listed by `evidence_artifacts`, and include every required observation listed
+# by `evidence_needles` for that check. Set firmware_ref to the release tag,
+# commit hash, or other immutable firmware identifier that was flashed during
+# the hardware test. Do not use placeholders or moving refs such as
+# main/latest/HEAD. validated_at must be a real YYYY-MM-DD date that is not in
+# the future.
 
 # [metadata]
 # hardware_check_inventory_sha256 = "current tools/hardware_validation_manifest.toml inventory hash"
@@ -33,4 +34,4 @@
 # validated_at = "2026-05-29"
 # tester = "hardware bench"
 # firmware_ref = "v0.2.65"
-# artifact_or_notes = "I2C scan found 0x56 and product register 0x1000 read 0x09bc on the right half."
+# artifact_or_notes = "log: /tmp/right-i2c.log; right P0_04 SDA and P0_05 SCL showed I2C activity from scan, address 0x56 ACKed, and product-number register 0x1000 read 0x09bc."

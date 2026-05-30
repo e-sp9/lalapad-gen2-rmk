@@ -69,9 +69,12 @@ artifact files listed by the manifest under `--artifact-root` (the current
 directory by default) and rejects stale manifests whose size or SHA256 no
 longer matches the current files. The final gate also rejects evidence files
 that are missing the generated `metadata.hardware_check_inventory_sha256`, or
-whose hash no longer matches the current hardware validation manifest. `cargo make
-hardware-validation-session-current` pre-fills that hash in the local evidence
-overlay generated for a clean current-ref bench session. Direct
+whose hash no longer matches the current hardware validation manifest. Each
+validated note must also mention the per-check evidence artifact types listed by
+`evidence_artifacts`, such as `video`, `scope`, `Vial screenshot`, or
+`key-event log`. `cargo make hardware-validation-session-current` pre-fills
+that hash in the local evidence overlay generated for a clean current-ref bench
+session. Direct
 `tools/migration_status.py --require-hardware-validated` use also requires
 `--firmware-artifact-manifest`; the final validation gate cannot pass from an
 evidence file alone.
@@ -106,6 +109,7 @@ Before announcing a release to the community:
 - `cargo make migration-status-final` passes with the release evidence file, matching `FIRMWARE_REF`, and the manifest-pinned clean ZMK source commit, if the announcement claims complete hardware validation.
 - The hardware evidence file keeps the generated `metadata.hardware_check_inventory_sha256` for the current validation manifest.
 - The hardware evidence notes reference the artifact manifest SHA256 values for the flashed central/peripheral files.
+- The hardware evidence notes include every per-check artifact type listed by `evidence_artifacts`.
 - GitHub Release contains central/peripheral UF2 and DFU zip assets.
 - GitHub Release contains `lalapad-gen2-rmk-artifacts.json`.
 - Web flasher loads the latest release metadata.
