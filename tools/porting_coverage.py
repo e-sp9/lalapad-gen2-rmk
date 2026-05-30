@@ -698,6 +698,73 @@ def check_combos(manifest: dict[str, Any], config: dict[str, Any]) -> list[Resul
     return results
 
 
+def find_layer_action_positions(
+    config: dict[str, Any], layer: int, action: str
+) -> list[tuple[int, int]]:
+    positions: list[tuple[int, int]] = []
+    km = keymap(config)
+    if layer < 0 or layer >= len(km):
+        return positions
+    for row, row_actions in enumerate(km[layer]):
+        for col, actual in enumerate(row_actions):
+            if tap_action(actual) == action:
+                positions.append((row, col))
+    return positions
+
+
+def check_runtime_combo_scenario_coverage(
+    manifest: dict[str, Any], config: dict[str, Any]
+) -> list[Result]:
+    runtime_checks = [
+        check
+        for check in manifest.get("runtime_scenario_tests", [])
+        if str(check.get("file", "")).endswith("keyboard_lalapad_zmk_scenarios_test.rs")
+    ]
+    results: list[Result] = []
+    for combo in manifest.get("combos", []):
+        actions = list(combo["actions"])
+        layer = int(combo["layer"])
+        required_needles: list[str] = []
+        messages: list[str] = []
+        position_errors = False
+        for action in actions:
+            positions = find_layer_action_positions(config, layer, str(action))
+            if len(positions) != 1:
+                position_errors = True
+                messages.append(
+                    f"combo {combo['id']} action {action!r} should resolve to one layer-{layer} key position, got {positions!r}"
+                )
+                continue
+            row, col = positions[0]
+            required_needles.append(f"[{row}, {col}, true")
+        required_needles.append(f"kc_to_u8!({combo['output']})")
+
+        best_passed = 0
+        best_missing = list(required_needles)
+        for runtime_check in runtime_checks:
+            needles = list(runtime_check.get("needles", []))
+            passed = sum(1 for needle in required_needles if needle in needles)
+            missing = [needle for needle in required_needles if needle not in needles]
+            if passed > best_passed:
+                best_passed = passed
+                best_missing = missing
+            if not missing:
+                break
+        messages.extend(
+            f"missing runtime combo scenario needle {needle!r}" for needle in best_missing
+        )
+        results.append(
+            Result(
+                f"runtime_combo_scenario.{combo['id']}",
+                "runtime_combo_coverage",
+                0 if position_errors else best_passed,
+                len(required_needles),
+                "ok" if not messages else "; ".join(messages),
+            )
+        )
+    return results
+
+
 def check_scenarios(manifest: dict[str, Any], config: dict[str, Any]) -> list[Result]:
     results: list[Result] = []
     km = keymap(config)
@@ -5541,6 +5608,7 @@ def run(
     results.extend(check_runtime_keymap_mirror_coverage(manifest, keyboard))
     results.extend(check_runtime_keymap_mirror_fixture_coverage(manifest, project_root))
     results.extend(check_runtime_scenario_tests(manifest, project_root))
+    results.extend(check_runtime_combo_scenario_coverage(manifest, keyboard))
     results.extend(check_makefile_task_invariants(manifest, project_root))
     results.extend(check_trackpad_virtual_buttons(manifest, keyboard, project_root))
     results.extend(check_vial_keyboard_toml_layout(manifest, keyboard, project_root))

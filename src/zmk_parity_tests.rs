@@ -4763,6 +4763,107 @@ fn porting_coverage_rejects_duplicate_rmk_combos() {
 }
 
 #[test]
+fn porting_coverage_requires_runtime_combo_scenarios() {
+    let output = run_python(
+        r#"
+import copy
+import importlib.util
+import json
+import sys
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("porting_coverage", "tools/porting_coverage.py")
+pc = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = pc
+spec.loader.exec_module(pc)
+
+manifest = pc.load_toml(Path("tools/porting_coverage_manifest.toml"))
+keyboard = pc.load_toml(Path("keyboard.toml"))
+ok = pc.check_runtime_combo_scenario_coverage(manifest, keyboard)
+
+missing_runtime = copy.deepcopy(manifest)
+for scenario in missing_runtime["runtime_scenario_tests"]:
+    if scenario["id"] == "runtime_combo_j_k_outputs_language1":
+        scenario["needles"] = [
+            needle for needle in scenario["needles"] if needle != "kc_to_u8!(Language1)"
+        ]
+missing_runtime_result = pc.check_runtime_combo_scenario_coverage(missing_runtime, keyboard)
+
+bad_keyboard = copy.deepcopy(keyboard)
+bad_keyboard["layout"]["keymap"][0][1][8] = "No"
+bad_keyboard_result = pc.check_runtime_combo_scenario_coverage(manifest, bad_keyboard)
+
+def pack(results):
+    return [result.__dict__ | {"ok": result.ok} for result in results]
+
+print(json.dumps({
+    "ok": pack(ok),
+    "missing_runtime": pack(missing_runtime_result),
+    "bad_keyboard": pack(bad_keyboard_result),
+}))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "runtime combo scenario coverage check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let ok = parsed["ok"].as_array().unwrap();
+    let expected_combo_total = porting_coverage_manifest_toml()["combos"]
+        .as_array()
+        .unwrap()
+        .len();
+    assert_eq!(ok.len(), expected_combo_total);
+    assert!(
+        ok.iter().all(|result| result["ok"] == true),
+        "current runtime combo scenario coverage should pass"
+    );
+    for result in ok {
+        assert_eq!(result["kind"], "runtime_combo_coverage");
+        assert_eq!(result["passed"].as_i64(), Some(3));
+        assert_eq!(result["total"].as_i64(), Some(3));
+    }
+
+    let missing_runtime = parsed["missing_runtime"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "runtime_combo_scenario.combo_kana")
+        .expect("changed runtime Kana combo scenario result is missing");
+    assert_eq!(missing_runtime["kind"], "runtime_combo_coverage");
+    assert_eq!(missing_runtime["passed"].as_i64(), Some(2));
+    assert_eq!(missing_runtime["total"].as_i64(), Some(3));
+    assert_eq!(missing_runtime["ok"], false);
+    assert!(
+        missing_runtime["message"]
+            .as_str()
+            .unwrap()
+            .contains("kc_to_u8!(Language1)")
+    );
+
+    let bad_keyboard = parsed["bad_keyboard"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "runtime_combo_scenario.combo_kana")
+        .expect("changed keyboard Kana combo scenario result is missing");
+    assert_eq!(bad_keyboard["kind"], "runtime_combo_coverage");
+    assert_eq!(bad_keyboard["passed"].as_i64(), Some(0));
+    assert_eq!(bad_keyboard["total"].as_i64(), Some(2));
+    assert_eq!(bad_keyboard["ok"], false);
+    assert!(
+        bad_keyboard["message"]
+            .as_str()
+            .unwrap()
+            .contains("action 'J' should resolve to one layer-0 key position")
+    );
+}
+
+#[test]
 fn porting_coverage_rejects_vial_user_key_semantic_drift() {
     let output = run_python(
         r#"
