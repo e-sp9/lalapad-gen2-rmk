@@ -956,14 +956,31 @@ def load_firmware_artifact_manifest(path: Path) -> tuple[dict[str, Any] | None, 
 def firmware_artifact_manifest_errors(manifest: dict[str, Any]) -> list[str]:
     errors: list[str] = []
     firmware_ref = str(manifest.get("firmware_ref", "")).strip()
-    if firmware_ref and is_mutable_firmware_ref(firmware_ref):
+    if not firmware_ref:
+        errors.append("firmware artifact manifest missing firmware_ref")
+    elif is_mutable_firmware_ref(firmware_ref):
         errors.append("firmware artifact manifest firmware_ref must be immutable")
     pair_sha256 = str(manifest.get("pair_sha256", "")).strip()
-    if pair_sha256 and not SHA256_RE.fullmatch(pair_sha256):
+    if not SHA256_RE.fullmatch(pair_sha256):
         errors.append("firmware artifact manifest pair_sha256 must be a SHA256 hex string")
     artifacts = manifest.get("artifacts", [])
     if not isinstance(artifacts, list):
         return errors + ["firmware artifact manifest artifacts must be an array"]
+    artifact_count = manifest.get("artifact_count")
+    if not isinstance(artifact_count, int):
+        errors.append("firmware artifact manifest artifact_count must be an integer")
+    elif artifact_count != len(artifacts):
+        errors.append(
+            "firmware artifact manifest artifact_count "
+            f"{artifact_count} does not match artifacts length {len(artifacts)}"
+        )
+    artifacts_by_path = {
+        str(artifact.get("path", "")): artifact
+        for artifact in artifacts
+        if isinstance(artifact, dict)
+    }
+    if len(artifacts_by_path) != len(artifacts):
+        errors.append("firmware artifact manifest artifacts must be objects with unique paths")
     for index, artifact in enumerate(artifacts):
         if not isinstance(artifact, dict):
             errors.append(f"firmware artifact manifest artifacts[{index}] must be an object")
@@ -985,6 +1002,38 @@ def firmware_artifact_manifest_errors(manifest: dict[str, Any]) -> list[str]:
             errors.append(
                 f"firmware artifact manifest artifacts[{index}].sha256 must be a SHA256 hex string"
             )
+        size = artifact.get("size")
+        if not isinstance(size, int) or size <= 0:
+            errors.append(
+                f"firmware artifact manifest {path or '<missing path>'} size must be positive"
+            )
+        if path:
+            artifact_path = Path(path)
+            if artifact_path.is_absolute():
+                errors.append(f"firmware artifact manifest {path} path must be relative")
+            elif ".." in artifact_path.parts:
+                errors.append(
+                    f"firmware artifact manifest {path} path must stay inside artifact root"
+                )
+    pair_digest_payload = json.dumps(
+        [
+            {
+                "path": artifact.get("path"),
+                "size": artifact.get("size"),
+                "sha256": artifact.get("sha256"),
+            }
+            for artifact in artifacts
+            if isinstance(artifact, dict)
+        ],
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+    expected_pair_sha256 = hashlib.sha256(pair_digest_payload).hexdigest()
+    if pair_sha256 and SHA256_RE.fullmatch(pair_sha256) and pair_sha256 != expected_pair_sha256:
+        errors.append(
+            "firmware artifact manifest pair_sha256 "
+            f"{pair_sha256!r} does not match artifact entries {expected_pair_sha256!r}"
+        )
     return errors
 
 

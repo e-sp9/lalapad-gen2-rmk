@@ -4779,6 +4779,41 @@ fn hardware_validation_rejects_placeholder_template_bindings() {
         "mismatched artifact manifest pair rejection should explain the binding error"
     );
 
+    let mut stale_pair_manifest: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&artifact_manifest_path).unwrap()).unwrap();
+    let first_artifact = stale_pair_manifest["artifacts"][0].clone();
+    stale_pair_manifest["artifacts"]
+        .as_array_mut()
+        .unwrap()
+        .push(first_artifact);
+    stale_pair_manifest["pair_sha256"] = serde_json::Value::String(
+        "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee".into(),
+    );
+    let stale_pair_path =
+        artifact_manifest_path.with_file_name("stale-template-pair-firmware-artifacts.local.json");
+    std::fs::write(
+        &stale_pair_path,
+        serde_json::to_string_pretty(&stale_pair_manifest).unwrap(),
+    )
+    .unwrap();
+    let stale_pair = run_hardware_validation(&[
+        "--checklist",
+        "--firmware-artifact-manifest-template",
+        stale_pair_path.to_str().unwrap(),
+    ]);
+    let _ = std::fs::remove_file(&stale_pair_path);
+    assert!(
+        !stale_pair.status.success(),
+        "hardware validation accepted artifact manifest template with stale pair metadata\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&stale_pair.stdout),
+        String::from_utf8_lossy(&stale_pair.stderr)
+    );
+    let stale_pair_stderr = String::from_utf8_lossy(&stale_pair.stderr);
+    assert!(stale_pair_stderr.contains("artifact_count 4 does not match artifacts length 5"));
+    assert!(stale_pair_stderr.contains("artifacts must be objects with unique paths"));
+    assert!(stale_pair_stderr.contains("pair_sha256"));
+    assert!(stale_pair_stderr.contains("does not match artifact entries"));
+
     let mut wrong_metadata_manifest: serde_json::Value =
         serde_json::from_slice(&std::fs::read(&artifact_manifest_path).unwrap()).unwrap();
     let central_artifact = wrong_metadata_manifest["artifacts"]
