@@ -21,7 +21,7 @@
 - [ ] `cargo make migration-status`
 - [ ] `cargo make migration-status-report`
 - [ ] `HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-report`, if reviewing partial hardware evidence
-- [ ] `HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit FIRMWARE_ARTIFACT_MANIFEST=firmware-artifacts.local.json cargo make migration-status-final`, if claiming complete migration validation for a release with a clean ZMK source checkout
+- [ ] `HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit FIRMWARE_ARTIFACT_MANIFEST=firmware-artifacts.local.json cargo make migration-status-final`, if claiming complete migration validation for a release with the manifest-pinned clean ZMK source commit
 - [ ] `HARDWARE_EVIDENCE=hardware-validation-evidence.local.toml cargo make migration-status-final-current`, if claiming complete migration validation for the current clean commit
 - [ ] `python3 tools/hardware_validation.py --hardware-baseline tools/hardware_validation_baseline.toml --require-classified`
 - [ ] `python3 tools/hardware_validation.py --markdown`

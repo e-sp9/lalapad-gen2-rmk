@@ -56,7 +56,8 @@ HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit FIRMWARE_ARTI
 This wraps the same final migration status gate after running the RMK
 ZMK-derived runtime scenario suite. It resolves `ZMK_KEYMAP` first when it is
 set and otherwise uses the standard upstream checkout path. The final gate also
-requires that resolved ZMK source checkout to be a clean Git repository.
+requires that resolved ZMK source checkout to be a clean Git repository at the
+manifest-pinned `metadata.source_commit`.
 
 The command must report `Full validation: pass`. If it fails, the release may
 still be source-complete, but it is not yet fully validated against real
@@ -100,7 +101,7 @@ Use matching left/right firmware from the same release.
 Before announcing a release to the community:
 
 - CI firmware workflow is green for the release tag.
-- `cargo make migration-status-final` passes with the release evidence file and matching `FIRMWARE_REF`, if the announcement claims complete hardware validation.
+- `cargo make migration-status-final` passes with the release evidence file, matching `FIRMWARE_REF`, and the manifest-pinned clean ZMK source commit, if the announcement claims complete hardware validation.
 - The hardware evidence notes reference the artifact manifest SHA256 values for the flashed central/peripheral files.
 - GitHub Release contains central/peripheral UF2 and DFU zip assets.
 - GitHub Release contains `lalapad-gen2-rmk-artifacts.json`.

@@ -257,7 +257,10 @@ position on layer 1, layer 2, and the system tri-layer against the ZMK source
 keymap to catch transparent-key fallthrough drift. ZMK hold-tap timing values
 are also mirrored against the RMK Morse timing settings. Use
 `--zmk-keymap PATH --require-zmk-source` when the source-backed check must be
-mandatory in another checkout layout. The firmware CI checks out
+mandatory in another checkout layout. Final validation gates additionally use
+`--require-zmk-source-commit`, so the resolved ZMK checkout must be at the
+manifest-pinned `metadata.source_commit`, not just any clean source tree. The
+firmware CI checks out
 `e-sp9/zmk-config-LalaPadGen2`, parses `vial.json`, RMK/Cargo/manifest TOML,
 and flash layout, runs this source-backed complete-porting gate, and then runs
 the host-side parity test suite before building release binaries. The local
@@ -351,8 +354,9 @@ HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit FIRMWARE_ARTI
 It must report `Full validation: pass` before claiming source-backed and
 real-device validation are both complete for that firmware. The final gate also
 requires the resolved ZMK source checkout to be a readable, clean Git
-repository, so a release claim cannot be tied to uncommitted upstream-source
-edits. The task uses `firmware-artifacts.local.json` by default, or
+repository at the manifest-pinned `metadata.source_commit`, so a release claim
+cannot be tied to uncommitted upstream-source edits or to a different upstream
+revision. The task uses `firmware-artifacts.local.json` by default, or
 `FIRMWARE_ARTIFACT_MANIFEST` when set.
 
 For hardware evidence collected from the current clean commit, this variant

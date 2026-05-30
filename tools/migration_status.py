@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 import re
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -49,6 +50,7 @@ def software_status(
     zmk_keymap_path: Path | None,
     require_zmk_source: bool,
     require_zmk_clean_source: bool,
+    require_zmk_source_commit: bool,
     coverage_baseline_path: Path | None,
 ) -> SoftwareStatus:
     manifest = porting_coverage.load_toml(manifest_path)
@@ -105,6 +107,20 @@ def software_status(
             else []
         )
     ]
+    zmk_source_commit_failures = [
+        {
+            "id": "zmk_source_commit",
+            "kind": "zmk_source",
+            "passed": 0,
+            "total": 1,
+            "message": failure,
+        }
+        for failure in (
+            porting_coverage.zmk_source_commit_errors(manifest, zmk_source)
+            if require_zmk_source_commit
+            else []
+        )
+    ]
     failed = [
         {
             "id": result.id,
@@ -115,7 +131,7 @@ def software_status(
         }
         for result in results
         if not result.ok
-    ] + baseline_failures + zmk_source_failures
+    ] + baseline_failures + zmk_source_failures + zmk_source_commit_failures
     by_kind_json = {
         kind: {
             "passed": bucket.passed,
@@ -351,6 +367,7 @@ def build_status(args: argparse.Namespace) -> MigrationStatus:
         args.zmk_keymap,
         args.require_zmk_source,
         args.require_zmk_clean_source,
+        args.require_zmk_source_commit,
         args.coverage_baseline,
     )
     firmware_artifacts = firmware_artifact_status(
@@ -633,6 +650,7 @@ def main() -> None:
     parser.add_argument("--zmk-keymap", type=Path, default=None)
     parser.add_argument("--require-zmk-source", action="store_true")
     parser.add_argument("--require-zmk-clean-source", action="store_true")
+    parser.add_argument("--require-zmk-source-commit", action="store_true")
     parser.add_argument("--coverage-baseline", type=Path, default=None)
     parser.add_argument(
         "--hardware-manifest",
@@ -677,6 +695,14 @@ def main() -> None:
     if args.require_zmk_clean_source and any(
         failure["id"] == "zmk_source_clean" for failure in status.software.failed
     ):
+        raise SystemExit(1)
+    if args.require_zmk_source_commit and any(
+        failure["id"] == "zmk_source_commit" for failure in status.software.failed
+    ):
+        print("ZMK source commit does not match the migration contract:", file=sys.stderr)
+        for failure in status.software.failed:
+            if failure["id"] == "zmk_source_commit":
+                print(f"- {failure['message']}", file=sys.stderr)
         raise SystemExit(1)
     if args.require_hardware_classified and not status.hardware["classified"]:
         raise SystemExit(1)

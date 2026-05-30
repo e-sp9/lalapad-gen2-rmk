@@ -5687,6 +5687,28 @@ def zmk_source_clean_errors(zmk_source: dict[str, Any]) -> list[str]:
     return errors
 
 
+def manifest_zmk_source_commit(manifest: dict[str, Any]) -> str:
+    return str(manifest.get("metadata", {}).get("source_commit", "")).strip()
+
+
+def zmk_source_commit_errors(
+    manifest: dict[str, Any], zmk_source: dict[str, Any]
+) -> list[str]:
+    expected = manifest_zmk_source_commit(manifest)
+    actual = str(zmk_source.get("git_commit", "")).strip()
+    errors: list[str] = []
+    if not expected:
+        errors.append("ZMK source commit is not pinned in manifest metadata.source_commit")
+    elif not actual:
+        errors.append("ZMK source Git commit could not be resolved")
+    elif actual != expected:
+        errors.append(
+            f"ZMK source commit {actual} does not match "
+            f"manifest metadata.source_commit {expected}"
+        )
+    return errors
+
+
 def run(
     manifest_path: Path,
     keyboard_path: Path,
@@ -5800,6 +5822,11 @@ def main(argv: list[str]) -> int:
         help="Fail if the upstream ZMK keymap is missing, outside Git, or the source repository is dirty.",
     )
     parser.add_argument(
+        "--require-zmk-source-commit",
+        action="store_true",
+        help="Fail if the upstream ZMK Git commit does not match manifest metadata.source_commit.",
+    )
+    parser.add_argument(
         "--require-porting-complete",
         action="store_true",
         help="Fail if any explicit manifest status is not implemented.",
@@ -5819,6 +5846,11 @@ def main(argv: list[str]) -> int:
     results = run(args.manifest, args.keyboard_toml, zmk_keymap_path, args.require_zmk_source)
     zmk_source_failures = (
         zmk_source_clean_errors(zmk_source) if args.require_zmk_clean_source else []
+    )
+    zmk_source_commit_failures = (
+        zmk_source_commit_errors(manifest, zmk_source)
+        if args.require_zmk_source_commit
+        else []
     )
     status_summary = porting_status_summary(manifest)
     passed = sum(result.passed for result in results)
@@ -5867,6 +5899,7 @@ def main(argv: list[str]) -> int:
                     },
                     "zmk_source": zmk_source,
                     "zmk_source_errors": zmk_source_failures,
+                    "zmk_source_commit_errors": zmk_source_commit_failures,
                     "baseline_errors": baseline_failures,
                     "results": [result.__dict__ | {"ok": result.ok} for result in results],
                 },
@@ -5893,6 +5926,11 @@ def main(argv: list[str]) -> int:
     if zmk_source_failures:
         print("ZMK source is not clean enough for this gate:", file=sys.stderr)
         for failure in zmk_source_failures:
+            print(f"- {failure}", file=sys.stderr)
+        ok = False
+    if zmk_source_commit_failures:
+        print("ZMK source commit does not match the migration contract:", file=sys.stderr)
+        for failure in zmk_source_commit_failures:
             print(f"- {failure}", file=sys.stderr)
         ok = False
     return 0 if ok else 1

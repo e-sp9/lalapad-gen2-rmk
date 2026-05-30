@@ -1,6 +1,7 @@
 [metadata]
 source = "ZMK LaLaPad Gen2 config/lalapadgen2.keymap"
 source_repo_hint = "../zmk-config-LalaPadGen2"
+source_commit = "53f50084e4196482938f11b1ac1d1ddea3b63ccd"
 description = "Machine-readable porting target for the RMK migration coverage gate. Expected values describe the RMK target behavior, including documented RMK-specific deltas needed to preserve the user's established thumb layer-tap workflow."
 
 [source_inventory]
@@ -2981,6 +2982,7 @@ script_contains = [
   "--evidence hardware-validation-evidence.local.toml",
   "--firmware-artifact-manifest firmware-artifacts.local.json",
   "--require-zmk-clean-source",
+  "--require-zmk-source-commit",
   "--require-firmware-ref \"$firmware_ref\"",
   "migration-status.local.md",
 ]
@@ -2996,6 +2998,7 @@ script_contains = [
   "--evidence \"$HARDWARE_EVIDENCE\"",
   "--firmware-artifact-manifest \"${FIRMWARE_ARTIFACT_MANIFEST:-firmware-artifacts.local.json}\"",
   "--require-zmk-clean-source",
+  "--require-zmk-source-commit",
   "--require-hardware-validated",
   "--require-firmware-ref \"$FIRMWARE_REF\"",
 ]
@@ -3018,6 +3021,7 @@ script_contains = [
   "--evidence \"$HARDWARE_EVIDENCE\"",
   "--require-zmk-source",
   "--require-zmk-clean-source",
+  "--require-zmk-source-commit",
   "--require-software-complete",
   "--require-hardware-classified",
   "--require-hardware-validated",

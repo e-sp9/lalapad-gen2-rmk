@@ -290,8 +290,13 @@ fn migration_dashboards_report_zmk_source_reference() {
     let zmk_keymap = zmk_config_dir.join("lalapadgen2.keymap");
     let zmk_keymap = zmk_keymap.to_str().unwrap();
 
-    let coverage =
-        run_porting_coverage(&["--json", "--zmk-keymap", zmk_keymap, "--require-zmk-source"]);
+    let coverage = run_porting_coverage(&[
+        "--json",
+        "--zmk-keymap",
+        zmk_keymap,
+        "--require-zmk-source",
+        "--require-zmk-source-commit",
+    ]);
     assert!(
         coverage.status.success(),
         "porting coverage failed\nstdout:\n{}\nstderr:\n{}",
@@ -299,7 +304,14 @@ fn migration_dashboards_report_zmk_source_reference() {
         String::from_utf8_lossy(&coverage.stderr)
     );
     let parsed: serde_json::Value = serde_json::from_slice(&coverage.stdout).unwrap();
+    assert_eq!(
+        parsed["zmk_source_commit_errors"].as_array().unwrap().len(),
+        0,
+        "the default ZMK source checkout should match metadata.source_commit"
+    );
     let zmk_source = &parsed["zmk_source"];
+    let manifest = porting_coverage_manifest_toml();
+    let expected_source_commit = manifest["metadata"]["source_commit"].as_str().unwrap();
     assert_eq!(zmk_source["available"].as_bool(), Some(true));
     assert!(
         zmk_source["keymap_path"]
@@ -311,6 +323,10 @@ fn migration_dashboards_report_zmk_source_reference() {
         .as_str()
         .filter(|commit| !commit.is_empty())
     {
+        assert_eq!(
+            commit, expected_source_commit,
+            "ZMK source git_commit should match the manifest-pinned source commit"
+        );
         assert!(
             commit.len() == 40 && commit.chars().all(|ch| ch.is_ascii_hexdigit()),
             "ZMK source git_commit should be a full immutable commit hash, got {commit:?}"
@@ -340,6 +356,7 @@ fn migration_dashboards_report_zmk_source_reference() {
         "--zmk-keymap",
         zmk_keymap,
         "--require-zmk-source",
+        "--require-zmk-source-commit",
         "--require-software-complete",
         "--require-hardware-classified",
     ]);
@@ -387,6 +404,86 @@ fn migration_dashboards_report_zmk_source_reference() {
             && markdown_stdout.contains("git_commit=`")
             && markdown_stdout.contains("dirty_paths=`"),
         "Markdown migration dashboard should show the ZMK source repo and commit"
+    );
+}
+
+#[test]
+fn zmk_source_commit_gate_rejects_source_commit_drift() {
+    let Some(zmk_config_dir) = default_zmk_config_dir() else {
+        return;
+    };
+    let zmk_keymap = zmk_config_dir.join("lalapadgen2.keymap");
+    let zmk_keymap = zmk_keymap.to_str().unwrap();
+
+    let output = run_python(
+        r#"
+import json
+import sys
+
+sys.path.insert(0, "tools")
+import porting_coverage as pc
+
+manifest = pc.load_toml(pc.Path("tools/porting_coverage_manifest.toml"))
+expected = pc.manifest_zmk_source_commit(manifest)
+matching = {"git_commit": expected}
+wrong = {"git_commit": "0" * 40}
+missing = dict(manifest)
+missing["metadata"] = dict(missing.get("metadata", {}))
+missing["metadata"].pop("source_commit", None)
+print(json.dumps({
+    "expected": expected,
+    "matching_errors": pc.zmk_source_commit_errors(manifest, matching),
+    "wrong_errors": pc.zmk_source_commit_errors(manifest, wrong),
+    "missing_errors": pc.zmk_source_commit_errors(missing, matching),
+}, sort_keys=True))
+"#,
+    );
+    assert!(
+        output.status.success(),
+        "ZMK source commit helper fixture failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let expected = parsed["expected"].as_str().unwrap();
+    assert_eq!(expected.len(), 40);
+    assert_eq!(parsed["matching_errors"].as_array().unwrap().len(), 0);
+    assert!(
+        parsed["wrong_errors"][0]
+            .as_str()
+            .unwrap()
+            .contains("metadata.source_commit")
+    );
+    assert!(
+        parsed["missing_errors"][0]
+            .as_str()
+            .unwrap()
+            .contains("metadata.source_commit")
+    );
+
+    let bad_manifest = write_temp_file(
+        "bad-zmk-source-commit",
+        &PORTING_COVERAGE_MANIFEST_TOML.replace(expected, &"1".repeat(40)),
+    );
+    let bad_manifest = bad_manifest.to_str().unwrap().to_owned();
+    let migration = run_migration_status(&[
+        "--porting-manifest",
+        &bad_manifest,
+        "--zmk-keymap",
+        zmk_keymap,
+        "--require-zmk-source",
+        "--require-zmk-source-commit",
+    ]);
+    assert!(
+        !migration.status.success(),
+        "migration status should reject source commit drift\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&migration.stdout),
+        String::from_utf8_lossy(&migration.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&migration.stdout).contains("zmk_source_commit")
+            && String::from_utf8_lossy(&migration.stderr)
+                .contains("ZMK source commit does not match")
     );
 }
 
@@ -3067,6 +3164,7 @@ fn local_validation_entrypoints_match_ci_gates() {
                 .contains("--hardware-baseline tools/hardware_validation_baseline.toml")
             && migration_status_final_task.contains("--require-zmk-source")
             && migration_status_final_task.contains("--require-zmk-clean-source")
+            && migration_status_final_task.contains("--require-zmk-source-commit")
             && migration_status_final_task.contains("--zmk-keymap")
             && migration_status_final_task
                 .contains("zmk-config-LalaPadGen2/config/lalapadgen2.keymap")
@@ -3098,6 +3196,7 @@ fn local_validation_entrypoints_match_ci_gates() {
             && migration_status_final_current_task.contains("--evidence \"$HARDWARE_EVIDENCE\"")
             && migration_status_final_current_task.contains("--require-zmk-source")
             && migration_status_final_current_task.contains("--require-zmk-clean-source")
+            && migration_status_final_current_task.contains("--require-zmk-source-commit")
             && migration_status_final_current_task.contains("--require-software-complete")
             && migration_status_final_current_task.contains("--require-hardware-classified")
             && migration_status_final_current_task.contains("--require-hardware-validated")
@@ -3190,6 +3289,7 @@ fn local_validation_entrypoints_match_ci_gates() {
             && hardware_validation_session_current_task
                 .contains("--firmware-artifact-manifest firmware-artifacts.local.json")
             && hardware_validation_session_current_task.contains("--require-zmk-clean-source")
+            && hardware_validation_session_current_task.contains("--require-zmk-source-commit")
             && hardware_validation_session_current_task
                 .contains("--require-firmware-ref \"$firmware_ref\"")
             && hardware_validation_session_current_task.contains("migration-status.local.md"),
@@ -3284,6 +3384,7 @@ fn local_validation_entrypoints_match_ci_gates() {
             && README_MD.contains("cargo make hardware-validation-session-current")
             && README_MD.contains("--artifact-pair-sha256-template <sha256>")
             && README_MD.contains("requires the resolved ZMK source checkout")
+            && README_MD.contains("manifest-pinned `metadata.source_commit`")
             && README_MD.contains("HARDWARE_EVIDENCE=hardware-validation-evidence.local.toml cargo make migration-status-final-current")
             && README_MD.contains("FIRMWARE_ARTIFACT_MANIFEST")
             && README_MD.contains("HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-report")
@@ -3297,6 +3398,7 @@ fn local_validation_entrypoints_match_ci_gates() {
             && PORTING_MD.contains("cargo make hardware-validation-session-current")
             && PORTING_MD.contains("--artifact-pair-sha256-template <sha256>")
             && PORTING_MD.contains("--require-zmk-clean-source")
+            && PORTING_MD.contains("--require-zmk-source-commit")
             && PORTING_MD.contains("FIRMWARE_ARTIFACT_MANIFEST")
             && PORTING_MD.contains("HARDWARE_EVIDENCE=hardware-validation-evidence.local.toml cargo make migration-status-final-current"),
         "README and porting notes should document the local Markdown migration dashboard, RMK behavior regression suite, artifact manifest, current-ref evidence template, and current-ref final gate"
@@ -3344,6 +3446,7 @@ fn local_validation_entrypoints_match_ci_gates() {
             && RELEASE_MD.contains("RMK\nZMK-derived runtime scenario suite")
             && RELEASE_MD.contains("ZMK_KEYMAP")
             && RELEASE_MD.contains("clean Git repository")
+            && RELEASE_MD.contains("manifest-pinned `metadata.source_commit`")
             && RELEASE_MD.contains("FIRMWARE_ARTIFACT_MANIFEST")
             && RELEASE_MD.contains("Full validation: pass")
             && RELEASE_MD.contains("if the announcement claims complete hardware validation"),

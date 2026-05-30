@@ -289,6 +289,9 @@ settings, conditional layer rule, shield
 `*.dtsi` / `*.overlay` pins, ZMK `*.conf` values, and RMK Rust constants. Use
 `--zmk-keymap PATH --require-zmk-source` to make that source-backed check
 mandatory in a different checkout layout.
+Final validation gates also use `--require-zmk-source-commit`, so the resolved
+source checkout must match the manifest-pinned `metadata.source_commit` before
+a complete migration claim can pass.
 
 Run:
 
@@ -413,9 +416,11 @@ evaluated:
 HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit FIRMWARE_ARTIFACT_MANIFEST=firmware-artifacts.local.json cargo make migration-status-final
 ```
 
-The final gate adds `--require-zmk-clean-source`, so the resolved ZMK source
-keymap must be available inside a readable Git repository with no uncommitted
-changes before a complete validation claim can pass.
+The final gate adds `--require-zmk-clean-source` and
+`--require-zmk-source-commit`, so the resolved ZMK source keymap must be
+available inside a readable Git repository with no uncommitted changes, and
+that repository must be at the manifest-pinned `metadata.source_commit`, before
+a complete validation claim can pass.
 
 For evidence captured from the current clean commit, the current-ref variant
 derives the exact tag or short commit automatically and refuses tracked or
