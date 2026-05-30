@@ -121,6 +121,7 @@ jobs:
             --hardware-baseline tools/hardware_validation_baseline.toml \
             --zmk-keymap zmk-config-LalaPadGen2/config/lalapadgen2.keymap \
             --require-zmk-source \
+            --require-zmk-source-commit \
             --require-software-complete \
             --require-hardware-classified \
             --markdown >> "$GITHUB_STEP_SUMMARY"

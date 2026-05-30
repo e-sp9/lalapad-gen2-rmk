@@ -289,9 +289,9 @@ settings, conditional layer rule, shield
 `*.dtsi` / `*.overlay` pins, ZMK `*.conf` values, and RMK Rust constants. Use
 `--zmk-keymap PATH --require-zmk-source` to make that source-backed check
 mandatory in a different checkout layout.
-Final validation gates also use `--require-zmk-source-commit`, so the resolved
-source checkout must match the manifest-pinned `metadata.source_commit` before
-a complete migration claim can pass.
+Source-backed monitoring gates also use `--require-zmk-source-commit`, so the
+resolved source checkout must match the manifest-pinned
+`metadata.source_commit` before a complete migration claim can pass.
 
 Run:
 

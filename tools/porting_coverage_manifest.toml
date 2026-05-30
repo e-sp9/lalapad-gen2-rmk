@@ -2782,6 +2782,7 @@ args_contains = [
   "--coverage-baseline",
   "tools/porting_coverage_baseline.toml",
   "--require-zmk-source",
+  "--require-zmk-source-commit",
   "--require-porting-complete",
 ]
 dependencies_include = ["rmk-zmk-scenario-tests", "host-parity-tests", "rmk-behavior-tests"]
@@ -2797,6 +2798,7 @@ args_contains = [
   "--hardware-baseline",
   "tools/hardware_validation_baseline.toml",
   "--require-zmk-source",
+  "--require-zmk-source-commit",
   "--require-software-complete",
   "--require-hardware-classified",
 ]
@@ -2811,6 +2813,7 @@ script_contains = [
   "--coverage-baseline tools/porting_coverage_baseline.toml",
   "--hardware-baseline tools/hardware_validation_baseline.toml",
   "--require-zmk-source",
+  "--require-zmk-source-commit",
   "--require-software-complete",
   "--require-hardware-classified",
   "--markdown",

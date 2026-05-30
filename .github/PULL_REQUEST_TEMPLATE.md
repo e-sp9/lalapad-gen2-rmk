@@ -17,9 +17,9 @@
 - [ ] `python3 -c 'import tomllib; [tomllib.load(open(path, "rb")) for path in ("keyboard.toml", "Cargo.toml", "Makefile.toml", "tools/porting_coverage_manifest.toml", "tools/porting_coverage_baseline.toml", "tools/hardware_validation_manifest.toml", "tools/hardware_validation_baseline.toml", "tools/hardware_validation_evidence.example.toml")]; print("toml ok")'`
 - [ ] `rmkit get-chip --keyboard-toml-path keyboard.toml`
 - [ ] `rmkit get-project-name --keyboard-toml-path keyboard.toml`
-- [ ] `cargo make porting-coverage`
-- [ ] `cargo make migration-status`
-- [ ] `cargo make migration-status-report`
+- [ ] `cargo make porting-coverage` with the manifest-pinned ZMK source commit
+- [ ] `cargo make migration-status` with the manifest-pinned ZMK source commit
+- [ ] `cargo make migration-status-report` with the manifest-pinned ZMK source commit
 - [ ] `HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-report`, if reviewing partial hardware evidence
 - [ ] `HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit FIRMWARE_ARTIFACT_MANIFEST=firmware-artifacts.local.json cargo make migration-status-final`, if claiming complete migration validation for a release with the manifest-pinned clean ZMK source commit
 - [ ] `HARDWARE_EVIDENCE=hardware-validation-evidence.local.toml cargo make migration-status-final-current`, if claiming complete migration validation for the current clean commit

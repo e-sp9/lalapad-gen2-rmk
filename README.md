@@ -257,9 +257,9 @@ position on layer 1, layer 2, and the system tri-layer against the ZMK source
 keymap to catch transparent-key fallthrough drift. ZMK hold-tap timing values
 are also mirrored against the RMK Morse timing settings. Use
 `--zmk-keymap PATH --require-zmk-source` when the source-backed check must be
-mandatory in another checkout layout. Final validation gates additionally use
+mandatory in another checkout layout. Source-backed monitoring gates also use
 `--require-zmk-source-commit`, so the resolved ZMK checkout must be at the
-manifest-pinned `metadata.source_commit`, not just any clean source tree. The
+manifest-pinned `metadata.source_commit`, not just any source tree. The
 firmware CI checks out
 `e-sp9/zmk-config-LalaPadGen2`, parses `vial.json`, RMK/Cargo/manifest TOML,
 and flash layout, runs this source-backed complete-porting gate, and then runs

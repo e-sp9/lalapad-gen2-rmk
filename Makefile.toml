@@ -31,6 +31,7 @@ args = [
     "--coverage-baseline",
     "tools/porting_coverage_baseline.toml",
     "--require-zmk-source",
+    "--require-zmk-source-commit",
     "--require-porting-complete",
 ]
 dependencies = ["rmk-zmk-scenario-tests", "host-parity-tests", "rmk-behavior-tests"]
@@ -180,6 +181,7 @@ args = [
     "--hardware-baseline",
     "tools/hardware_validation_baseline.toml",
     "--require-zmk-source",
+    "--require-zmk-source-commit",
     "--require-software-complete",
     "--require-hardware-classified",
 ]
@@ -202,6 +204,7 @@ set -- \
   --coverage-baseline tools/porting_coverage_baseline.toml \
   --hardware-baseline tools/hardware_validation_baseline.toml \
   --require-zmk-source \
+  --require-zmk-source-commit \
   --require-software-complete \
   --require-hardware-classified \
   --markdown

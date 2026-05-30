@@ -904,6 +904,7 @@ fn firmware_ci_runs_complete_porting_gate_before_builds() {
     let migration_status_command = "python3 tools/migration_status.py";
     let baseline_arg = "--coverage-baseline";
     let zmk_required_flag = "--require-zmk-source";
+    let zmk_commit_required_flag = "--require-zmk-source-commit";
     let complete_required_flag = "--require-porting-complete";
     let software_required_flag = "--require-software-complete";
     let host_tests = "cargo make host-parity-tests";
@@ -915,6 +916,7 @@ fn firmware_ci_runs_complete_porting_gate_before_builds() {
         baseline_arg,
         "tools/porting_coverage_baseline.toml",
         zmk_required_flag,
+        zmk_commit_required_flag,
         software_required_flag,
     ] {
         assert!(
@@ -946,6 +948,7 @@ fn firmware_ci_runs_complete_porting_gate_before_builds() {
     let porting_coverage_task = makefile_task_block("porting-coverage");
     assert!(
         porting_coverage_task.contains(complete_required_flag)
+            && porting_coverage_task.contains(zmk_commit_required_flag)
             && porting_coverage_task
                 .contains("dependencies = [\"rmk-zmk-scenario-tests\", \"host-parity-tests\", \"rmk-behavior-tests\"]"),
         "cargo make porting-coverage should require the complete porting gate, runtime scenarios, host parity tests, and RMK behavior tests"
@@ -3081,6 +3084,7 @@ fn local_validation_entrypoints_match_ci_gates() {
     assert!(
         porting_coverage_task.contains("--coverage-baseline")
             && porting_coverage_task.contains("tools/porting_coverage_baseline.toml")
+            && porting_coverage_task.contains("--require-zmk-source-commit")
             && porting_coverage_task.contains("--require-porting-complete")
             && porting_coverage_task
                 .contains("dependencies = [\"rmk-zmk-scenario-tests\", \"host-parity-tests\", \"rmk-behavior-tests\"]"),
@@ -3125,6 +3129,7 @@ fn local_validation_entrypoints_match_ci_gates() {
             && migration_status_task.contains("--coverage-baseline")
             && migration_status_task.contains("--hardware-baseline")
             && migration_status_task.contains("tools/hardware_validation_baseline.toml")
+            && migration_status_task.contains("--require-zmk-source-commit")
             && migration_status_task.contains("--require-software-complete")
             && migration_status_task.contains("--require-hardware-classified")
             && migration_status_task
@@ -3138,6 +3143,7 @@ fn local_validation_entrypoints_match_ci_gates() {
             && migration_status_report_task.contains("--coverage-baseline")
             && migration_status_report_task.contains("--hardware-baseline")
             && migration_status_report_task.contains("--require-zmk-source")
+            && migration_status_report_task.contains("--require-zmk-source-commit")
             && migration_status_report_task.contains("--require-software-complete")
             && migration_status_report_task.contains("--require-hardware-classified")
             && migration_status_report_task.contains("--markdown")
@@ -3356,6 +3362,7 @@ fn local_validation_entrypoints_match_ci_gates() {
     assert!(
         FIRMWARE_WORKFLOW_YAML.contains("tools/migration_status.py")
             && FIRMWARE_WORKFLOW_YAML.contains("--hardware-baseline")
+            && FIRMWARE_WORKFLOW_YAML.contains("--require-zmk-source-commit")
             && FIRMWARE_WORKFLOW_YAML.contains("--require-software-complete")
             && FIRMWARE_WORKFLOW_YAML.contains("--require-hardware-classified")
             && FIRMWARE_WORKFLOW_YAML.contains("--markdown >> \"$GITHUB_STEP_SUMMARY\""),
