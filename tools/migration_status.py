@@ -189,14 +189,15 @@ def hardware_status(
                 hardware_baseline,
                 manifest_doc,
             )
+    evidence_docs, evidence_load_errors = hardware_validation.load_evidence_docs(evidence_paths)
     manifest, evidence_errors = hardware_validation.merge_evidence(
         manifest_doc,
-        [hardware_validation.load_toml(path) for path in evidence_paths],
+        evidence_docs,
         require_evidence_inventory,
     )
     summary = hardware_validation.summarize(
         manifest,
-        evidence_errors + baseline_failures + (extra_errors or []),
+        evidence_load_errors + evidence_errors + baseline_failures + (extra_errors or []),
         Path("."),
         evidence_artifact_root,
         required_firmware_ref,

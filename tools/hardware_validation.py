@@ -157,6 +157,19 @@ def load_toml(path: Path) -> dict[str, Any]:
         return tomllib.load(f)
 
 
+def load_evidence_docs(paths: list[Path]) -> tuple[list[dict[str, Any]], list[str]]:
+    docs: list[dict[str, Any]] = []
+    errors: list[str] = []
+    for path in paths:
+        try:
+            docs.append(load_toml(path))
+        except OSError as e:
+            errors.append(f"failed to read evidence {path}: {e}")
+        except tomllib.TOMLDecodeError as e:
+            errors.append(f"failed to parse evidence {path}: {e}")
+    return docs, errors
+
+
 def markdown_anchor(heading: str) -> str:
     text = re.sub(r"`([^`]*)`", r"\1", heading)
     text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
@@ -1446,14 +1459,15 @@ def main() -> None:
         else:
             baseline_failures = hardware_baseline_errors(baseline, manifest_doc)
 
+    evidence_docs, evidence_load_errors = load_evidence_docs(args.evidence)
     manifest, evidence_errors = merge_evidence(
         manifest_doc,
-        [load_toml(path) for path in args.evidence],
+        evidence_docs,
         args.require_evidence_inventory or args.require_validated,
     )
     summary = summarize(
         manifest,
-        evidence_errors + baseline_failures,
+        evidence_load_errors + evidence_errors + baseline_failures,
         Path("."),
         args.evidence_artifact_root,
         args.require_firmware_ref,

@@ -4908,6 +4908,70 @@ artifact_or_notes = "duplicate"
 }
 
 #[test]
+fn hardware_validation_and_migration_status_report_missing_evidence_files() {
+    let missing_path = std::env::temp_dir().join(format!(
+        "lalapad-missing-hardware-evidence-{}.toml",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_file(&missing_path);
+    let missing_path_text = missing_path.to_str().unwrap();
+
+    let hardware_output = run_hardware_validation(&[
+        "--evidence",
+        missing_path_text,
+        "--json",
+        "--require-classified",
+    ]);
+    assert!(
+        !hardware_output.status.success(),
+        "missing hardware evidence file unexpectedly passed hardware validation\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&hardware_output.stdout),
+        String::from_utf8_lossy(&hardware_output.stderr)
+    );
+    assert!(
+        !String::from_utf8_lossy(&hardware_output.stderr).contains("Traceback"),
+        "missing hardware evidence should be reported as validation data, not a Python traceback"
+    );
+    let hardware_json: serde_json::Value = serde_json::from_slice(&hardware_output.stdout)
+        .expect("hardware validation should still render JSON for missing evidence files");
+    assert!(
+        hardware_json["errors"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|error| { error.as_str().unwrap().contains("failed to read evidence") }),
+        "hardware validation JSON should report the missing evidence file"
+    );
+
+    let migration_output = run_migration_status(&[
+        "--evidence",
+        missing_path_text,
+        "--json",
+        "--require-hardware-classified",
+    ]);
+    assert!(
+        !migration_output.status.success(),
+        "missing hardware evidence file unexpectedly passed migration status\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&migration_output.stdout),
+        String::from_utf8_lossy(&migration_output.stderr)
+    );
+    assert!(
+        !String::from_utf8_lossy(&migration_output.stderr).contains("Traceback"),
+        "missing migration evidence should be reported as validation data, not a Python traceback"
+    );
+    let migration_json: serde_json::Value = serde_json::from_slice(&migration_output.stdout)
+        .expect("migration status should still render JSON for missing evidence files");
+    assert!(
+        migration_json["hardware"]["errors"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|error| error.as_str().unwrap().contains("failed to read evidence")),
+        "migration status JSON should report the missing evidence file"
+    );
+}
+
+#[test]
 fn local_validation_entrypoints_match_ci_gates() {
     let clean_current_git_ref_task = makefile_task_block("clean-current-git-ref");
     let porting_coverage_task = makefile_task_block("porting-coverage");
