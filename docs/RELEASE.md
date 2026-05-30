@@ -67,7 +67,9 @@ mention the artifact manifest `pair_sha256`, so the observation is bound to the
 exact central/peripheral UF2 pair that was flashed. It also re-reads the local
 artifact files listed by the manifest under `--artifact-root` (the current
 directory by default) and rejects stale manifests whose size or SHA256 no
-longer matches the current files. `cargo make
+longer matches the current files. The final gate also rejects evidence files
+that are missing the generated `metadata.hardware_check_inventory_sha256`, or
+whose hash no longer matches the current hardware validation manifest. `cargo make
 hardware-validation-session-current` pre-fills that hash in the local evidence
 overlay generated for a clean current-ref bench session. Direct
 `tools/migration_status.py --require-hardware-validated` use also requires
@@ -102,6 +104,7 @@ Before announcing a release to the community:
 
 - CI firmware workflow is green for the release tag.
 - `cargo make migration-status-final` passes with the release evidence file, matching `FIRMWARE_REF`, and the manifest-pinned clean ZMK source commit, if the announcement claims complete hardware validation.
+- The hardware evidence file keeps the generated `metadata.hardware_check_inventory_sha256` for the current validation manifest.
 - The hardware evidence notes reference the artifact manifest SHA256 values for the flashed central/peripheral files.
 - GitHub Release contains central/peripheral UF2 and DFU zip assets.
 - GitHub Release contains `lalapad-gen2-rmk-artifacts.json`.

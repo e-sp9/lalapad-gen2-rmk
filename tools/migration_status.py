@@ -169,6 +169,7 @@ def hardware_status(
     evidence_paths: list[Path],
     required_firmware_ref: str | None,
     required_artifact_pair_sha256: str | None,
+    require_evidence_inventory: bool,
     extra_errors: list[str] | None = None,
 ) -> dict[str, Any]:
     manifest_doc = hardware_validation.load_toml(manifest_path)
@@ -186,6 +187,7 @@ def hardware_status(
     manifest, evidence_errors = hardware_validation.merge_evidence(
         manifest_doc,
         [hardware_validation.load_toml(path) for path in evidence_paths],
+        require_evidence_inventory,
     )
     summary = hardware_validation.summarize(
         manifest,
@@ -399,6 +401,7 @@ def build_status(args: argparse.Namespace) -> MigrationStatus:
         args.evidence,
         required_firmware_ref,
         required_artifact_pair_sha256,
+        args.require_hardware_validated,
         artifact_errors,
     )
     hardware_classified = bool(hardware["classified"])

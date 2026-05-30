@@ -27,6 +27,7 @@ VALID_STATUSES = frozenset(
 VALIDATED_STATUSES = frozenset({"validated"})
 REQUIRED_FIELDS = ("id", "area", "side", "requirement", "evidence", "source", "status")
 VALIDATED_EVIDENCE_FIELDS = ("validated_at", "tester", "firmware_ref", "artifact_or_notes")
+EVIDENCE_INVENTORY_FIELD = "hardware_check_inventory_sha256"
 PLACEHOLDER_VALUES = frozenset(
     {
         "<tag-or-commit>",
@@ -375,13 +376,16 @@ def hardware_baseline_errors(baseline: dict[str, Any], manifest: dict[str, Any])
 
 
 def merge_evidence(
-    manifest: dict[str, Any], evidence_docs: list[dict[str, Any]]
+    manifest: dict[str, Any],
+    evidence_docs: list[dict[str, Any]],
+    require_inventory_match: bool = False,
 ) -> tuple[dict[str, Any], list[str]]:
     merged = copy.deepcopy(manifest)
     checks = merged.get("checks", [])
     errors: list[str] = []
     if not isinstance(checks, list):
         return merged, errors
+    _, expected_inventory_sha256 = manifest_inventory_digest(manifest)
 
     by_id: dict[str, dict[str, Any]] = {}
     for check in checks:
@@ -389,7 +393,25 @@ def merge_evidence(
             by_id[check["id"]] = check
 
     seen_evidence: set[str] = set()
-    for evidence_doc in evidence_docs:
+    for doc_index, evidence_doc in enumerate(evidence_docs):
+        metadata = evidence_doc.get("metadata", {})
+        actual_inventory_sha256 = ""
+        if isinstance(metadata, dict):
+            actual_inventory_sha256 = str(metadata.get(EVIDENCE_INVENTORY_FIELD, "")).strip()
+        elif metadata:
+            errors.append(f"evidence document #{doc_index + 1}: metadata must be a table")
+        if actual_inventory_sha256:
+            if actual_inventory_sha256 != expected_inventory_sha256:
+                errors.append(
+                    f"evidence document #{doc_index + 1}: {EVIDENCE_INVENTORY_FIELD} "
+                    f"{actual_inventory_sha256!r} does not match current manifest "
+                    f"{expected_inventory_sha256!r}"
+                )
+        elif require_inventory_match:
+            errors.append(
+                f"evidence document #{doc_index + 1}: missing metadata.{EVIDENCE_INVENTORY_FIELD}"
+            )
+
         evidence_entries = evidence_doc.get("evidence", [])
         if not isinstance(evidence_entries, list):
             errors.append("evidence must be an array")
@@ -611,6 +633,7 @@ def toml_comment(value: Any) -> list[str]:
 def as_evidence_template(
     manifest: dict[str, Any], firmware_ref: str = "", artifact_pair_sha256: str = ""
 ) -> str:
+    _, inventory_sha256 = manifest_inventory_digest(manifest)
     lines = [
         "# Hardware validation evidence overlay.",
         "# Fill this file after testing real hardware, then run:",
@@ -620,8 +643,12 @@ def as_evidence_template(
         "#   python3 tools/hardware_validation.py --evidence path/to/evidence.toml --require-firmware-ref <tag-or-commit>",
         "#",
         "# Entries are keyed by id from tools/hardware_validation_manifest.toml.",
+        "# The metadata hash binds this evidence file to the current hardware validation manifest.",
         "# Change status to \"validated\" only when validated_at, tester, firmware_ref, and artifact_or_notes are filled.",
         "# If artifact_or_notes is prefilled with firmware artifact pair_sha256, keep it and append the observed evidence after it.",
+        "",
+        "[metadata]",
+        f"{EVIDENCE_INVENTORY_FIELD} = {toml_string(inventory_sha256)}",
         "",
     ]
     checks = manifest.get("checks", [])
@@ -887,6 +914,11 @@ def main() -> None:
         help="fail until every real-hardware check has status validated",
     )
     parser.add_argument(
+        "--require-evidence-inventory",
+        action="store_true",
+        help="fail unless every evidence file declares the current hardware check inventory SHA256",
+    )
+    parser.add_argument(
         "--require-firmware-ref",
         metavar="REF",
         help="fail if any validated hardware evidence was captured against a different firmware tag or commit",
@@ -923,7 +955,9 @@ def main() -> None:
             baseline_failures = hardware_baseline_errors(baseline, manifest_doc)
 
     manifest, evidence_errors = merge_evidence(
-        manifest_doc, [load_toml(path) for path in args.evidence]
+        manifest_doc,
+        [load_toml(path) for path in args.evidence],
+        args.require_evidence_inventory,
     )
     summary = summarize(
         manifest,
