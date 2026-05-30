@@ -1,8 +1,8 @@
 [coverage]
-passed = 3615
-total = 3615
+passed = 3616
+total = 3616
 result_count = 598
-result_inventory_sha256 = "aed80282d945de07c6753bb171a7045d095d4020727d6c39f7ae225e2b4e8248"
+result_inventory_sha256 = "04ffe5925174f1dc9998e4ed3a4b2332cb8cf35f086dc5ca9b1cb12c51ab54ea"
 
 [coverage.by_kind.behavior]
 passed = 10
@@ -37,8 +37,8 @@ passed = 28
 total = 28
 
 [coverage.by_kind.dependency]
-passed = 26
-total = 26
+passed = 27
+total = 27
 
 [coverage.by_kind.gpio_flag_mirror]
 passed = 36
