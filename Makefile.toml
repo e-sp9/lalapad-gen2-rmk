@@ -147,6 +147,8 @@ python3 tools/hardware_validation.py \
 
 python3 tools/hardware_validation.py \
   --checklist \
+  --firmware-ref-template "$firmware_ref" \
+  --artifact-pair-sha256-template "$artifact_pair_sha256" \
   > hardware-validation-checklist.local.md
 
 set -- \

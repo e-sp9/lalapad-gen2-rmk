@@ -3725,6 +3725,13 @@ fn hardware_validation_can_generate_complete_evidence_template() {
 #[test]
 fn hardware_validation_can_generate_bench_checklist() {
     let output = run_hardware_validation(&["--checklist"]);
+    let bound_output = run_hardware_validation(&[
+        "--checklist",
+        "--firmware-ref-template",
+        "v0.4.0-test",
+        "--artifact-pair-sha256-template",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    ]);
 
     assert!(
         output.status.success(),
@@ -3732,7 +3739,14 @@ fn hardware_validation_can_generate_bench_checklist() {
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
+    assert!(
+        bound_output.status.success(),
+        "bound hardware validation checklist generation failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&bound_output.stdout),
+        String::from_utf8_lossy(&bound_output.stderr)
+    );
     let stdout = String::from_utf8_lossy(&output.stdout);
+    let bound_stdout = String::from_utf8_lossy(&bound_output.stdout);
     let manifest = hardware_validation_manifest_toml();
     let checks = manifest["checks"].as_array().unwrap();
     assert!(stdout.contains("# LaLaPad Gen2 RMK Hardware Validation Checklist"));
@@ -3795,6 +3809,15 @@ fn hardware_validation_can_generate_bench_checklist() {
             );
         }
     }
+    assert!(bound_stdout.contains("## Session Binding"));
+    assert!(bound_stdout.contains("- Firmware ref: `v0.4.0-test`"));
+    assert!(bound_stdout.contains(
+        "- Firmware artifact pair SHA256: `aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`"
+    ));
+    assert!(bound_stdout.contains("firmware_ref: v0.4.0-test"));
+    assert!(bound_stdout.contains(
+        "copy aid after pass: firmware artifact pair_sha256 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;"
+    ));
 
     let bad_mix = run_hardware_validation(&["--checklist", "--markdown"]);
     assert!(
@@ -4560,6 +4583,10 @@ fn local_validation_entrypoints_match_ci_gates() {
             && hardware_validation_session_current_task
                 .contains("hardware-validation-evidence.local.toml")
             && hardware_validation_session_current_task.contains("--checklist")
+            && hardware_validation_session_current_task
+                .contains("--firmware-ref-template \"$firmware_ref\"")
+            && hardware_validation_session_current_task
+                .contains("--artifact-pair-sha256-template \"$artifact_pair_sha256\"")
             && hardware_validation_session_current_task
                 .contains("hardware-validation-checklist.local.md")
             && hardware_validation_session_current_task.contains("tools/migration_status.py")

@@ -583,4 +583,5 @@ Use `cargo make hardware-validation-session-current` to prepare a complete
 current-ref bench packet in one step: RMK ZMK-derived runtime scenario results,
 project host parity and RMK behavior regression results, rebuilt UF2 artifact
 hashes, a firmware-ref and pair-SHA-prefilled evidence overlay, a hardware
-checklist, and a local Markdown migration status report.
+checklist that repeats the same firmware ref and pair SHA, and a local
+Markdown migration status report.

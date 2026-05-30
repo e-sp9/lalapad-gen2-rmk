@@ -164,12 +164,25 @@ For manual or release-specific evidence preparation, the equivalent individual
 steps are:
 
 ```shell
-cargo make hardware-validation-evidence-template-current > hardware-validation-evidence.local.toml
-python3 tools/hardware_validation.py --checklist > hardware-validation-checklist.local.md
-python3 tools/firmware_artifact_manifest.py --require-uf2 --require-reset-uf2 > firmware-artifacts.local.json
 cargo make firmware-artifact-manifest-current
+firmware_ref="$(git describe --tags --exact-match 2>/dev/null || git rev-parse --short=12 HEAD)"
+artifact_pair_sha256="$(python3 -c 'import json; print(json.load(open("firmware-artifacts.local.json"))["pair_sha256"])')"
+python3 tools/hardware_validation.py --evidence-template \
+  --firmware-ref-template "$firmware_ref" \
+  --artifact-pair-sha256-template "$artifact_pair_sha256" \
+  > hardware-validation-evidence.local.toml
+python3 tools/hardware_validation.py --checklist \
+  --firmware-ref-template "$firmware_ref" \
+  --artifact-pair-sha256-template "$artifact_pair_sha256" \
+  > hardware-validation-checklist.local.md
 python3 tools/hardware_validation.py --evidence hardware-validation-evidence.local.toml --markdown
 ```
+
+For a manually supplied firmware ref instead of the current clean commit, use
+`python3 tools/firmware_artifact_manifest.py --require-uf2 --require-reset-uf2 > firmware-artifacts.local.json`
+and pass the same immutable ref through the template commands.
+`cargo make hardware-validation-evidence-template-current` remains available
+when a firmware-ref-only evidence template is useful before artifact hashing.
 
 `cargo make porting-coverage` first runs the RMK host-runtime thumb layer-tap
 scenario suite, the project host parity test suite, and the vendored RMK
@@ -353,7 +366,9 @@ current-ref firmware artifact manifest task, then writes
 `hardware-validation-evidence.local.toml`,
 `hardware-validation-checklist.local.md`, and `migration-status.local.md` for a
 single hardware bench session; its evidence overlay is prefilled with both the
-current firmware ref and the generated artifact `pair_sha256`. Generated
+current firmware ref and the generated artifact `pair_sha256`, and its
+checklist repeats the same identifiers so bench notes stay tied to the exact
+artifact set. Generated
 `hardware-validation-evidence*.toml`,
 `hardware-validation-checklist*.md`, `migration-status*.md`, and
 `firmware-artifacts*.json` files are ignored by default.

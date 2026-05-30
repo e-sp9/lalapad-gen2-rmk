@@ -901,7 +901,9 @@ def as_markdown(manifest: dict[str, Any], summary: HardwareValidationSummary) ->
     return "\n".join(lines) + "\n"
 
 
-def as_checklist(manifest: dict[str, Any]) -> str:
+def as_checklist(
+    manifest: dict[str, Any], firmware_ref: str = "", artifact_pair_sha256: str = ""
+) -> str:
     lines = [
         "# LaLaPad Gen2 RMK Hardware Validation Checklist",
         "",
@@ -915,6 +917,13 @@ def as_checklist(manifest: dict[str, Any]) -> str:
         "observation after it.",
         "",
     ]
+    if firmware_ref or artifact_pair_sha256:
+        lines.extend(["## Session Binding", ""])
+        if firmware_ref:
+            lines.append(f"- Firmware ref: `{firmware_ref}`")
+        if artifact_pair_sha256:
+            lines.append(f"- Firmware artifact pair SHA256: `{artifact_pair_sha256}`")
+        lines.append("")
     checks = manifest.get("checks", [])
     current_area: str | None = None
     if isinstance(checks, list):
@@ -938,7 +947,10 @@ def as_checklist(manifest: dict[str, Any]) -> str:
             lines.append("    - status: validated only after this item passes on hardware")
             lines.append("    - validated_at: YYYY-MM-DD test date")
             lines.append("    - tester: person or bench that ran the check")
-            lines.append("    - firmware_ref: flashed immutable tag or commit")
+            if firmware_ref:
+                lines.append(f"    - firmware_ref: {firmware_ref}")
+            else:
+                lines.append("    - firmware_ref: flashed immutable tag or commit")
             lines.append(
                 "    - artifact_paths: paths to the captured video/log/photo/scope files"
             )
@@ -947,9 +959,14 @@ def as_checklist(manifest: dict[str, Any]) -> str:
                 f"that mentions artifacts [{evidence_artifacts_text(check)}] and "
                 f"observations [{evidence_needles_text(check)}]"
             )
+            artifact_prefix = (
+                f"firmware artifact pair_sha256 {artifact_pair_sha256}; "
+                if artifact_pair_sha256
+                else ""
+            )
             lines.append(
                 "    - copy aid after pass: "
-                f"{artifact_or_notes_copy_hint(check)}"
+                f"{artifact_or_notes_copy_hint(check, artifact_prefix)}"
             )
             lines.append("")
     return "\n".join(lines)
@@ -1051,13 +1068,16 @@ def main() -> None:
         "--firmware-ref-template",
         default="",
         metavar="REF",
-        help="pre-fill firmware_ref in --evidence-template output",
+        help="pre-fill firmware_ref in --evidence-template or --checklist output",
     )
     parser.add_argument(
         "--artifact-pair-sha256-template",
         default="",
         metavar="SHA256",
-        help="pre-fill the firmware artifact pair_sha256 prefix in --evidence-template artifact_or_notes",
+        help=(
+            "pre-fill the firmware artifact pair_sha256 prefix in "
+            "--evidence-template artifact_or_notes or --checklist copy aids"
+        ),
     )
     parser.add_argument(
         "--evidence-artifact-root",
@@ -1100,11 +1120,13 @@ def main() -> None:
         parser.error(
             "--json, --markdown, --evidence-template, and --checklist are mutually exclusive"
         )
-    if args.firmware_ref_template and not args.evidence_template:
-        parser.error("--firmware-ref-template can only be used with --evidence-template")
-    if args.artifact_pair_sha256_template and not args.evidence_template:
+    if args.firmware_ref_template and not (args.evidence_template or args.checklist):
         parser.error(
-            "--artifact-pair-sha256-template can only be used with --evidence-template"
+            "--firmware-ref-template can only be used with --evidence-template or --checklist"
+        )
+    if args.artifact_pair_sha256_template and not (args.evidence_template or args.checklist):
+        parser.error(
+            "--artifact-pair-sha256-template can only be used with --evidence-template or --checklist"
         )
     if args.artifact_pair_sha256_template and not re.fullmatch(
         r"[0-9a-f]{64}", args.artifact_pair_sha256_template
@@ -1149,7 +1171,14 @@ def main() -> None:
             end="",
         )
     elif args.checklist:
-        print(as_checklist(manifest), end="")
+        print(
+            as_checklist(
+                manifest,
+                args.firmware_ref_template,
+                args.artifact_pair_sha256_template,
+            ),
+            end="",
+        )
     else:
         print_text(summary)
 
