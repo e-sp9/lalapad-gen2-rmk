@@ -60,6 +60,51 @@ vertical scroll, horizontal scroll, no cursor during scroll, no right-click
 during scroll, inertia continues, and inertia stops on touch observations. Left
 trackpad evidence must also name the split path.
 
+## RGB Status Widget Check
+
+Use this check on the right central half. The XIAO BLE RGB LED channels are
+active-low and wired as red `P1_03`, green `P1_05`, and blue `P1_07`.
+
+1. Confirm the RGB pins are active-low: an on channel drives low, and an off
+   channel drives high.
+2. After firmware/widget reset, send or observe battery level 30 as the first
+   battery report and confirm green.
+3. After another firmware/widget reset, send or observe battery level 20 as the
+   first battery report and confirm yellow.
+4. Send or observe battery level 10 and confirm the critical battery report
+   blinks red.
+5. Confirm BLE connected blinks blue.
+6. Confirm BLE advertising blinks yellow.
+7. Confirm BLE disconnected/no-profile state blinks red.
+8. Connect and disconnect the split side and confirm split connected blinks
+   blue and split disconnected blinks red.
+9. Change to a non-default central layer and confirm the layer indication blinks
+   cyan.
+
+Hardware evidence for this check must name the right half, RGB, `P1_03 red`,
+`P1_05 green`, `P1_07 blue`, active-low polarity, battery 30 green after reset,
+battery 20 yellow after reset, battery 10 red critical blink, BLE connected
+blue, BLE advertising yellow, BLE disconnected red, split connected blue, split
+disconnected red, and layer cyan observations.
+
+## Charge Indicator Pin Check
+
+Use this check on the right central half. RMK is configured with charge-state
+input `P0_17` active-low and charge LED output `P0_10` active-low.
+
+1. With a charge source connected, measure or log `P0_17` and confirm the
+   charge-state input is low.
+2. With the charge source disconnected or not charging, measure or log `P0_17`
+   and confirm the charge-state input is high.
+3. Observe or measure the charge LED output `P0_10` while the LED is on and
+   confirm the output is low.
+4. Observe or measure the charge LED output `P0_10` while the LED is off and
+   confirm the output is high.
+
+Hardware evidence for this check must name the right half, `P0_17
+charge-state`, active-low polarity, USB charging low, not charging high, `P0_10
+charge LED`, LED on low, and LED off high observations.
+
 ## Thumb Layer-Tap Check
 
 Use a host key-event viewer after flashing the current firmware and re-pairing

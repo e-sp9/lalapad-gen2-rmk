@@ -98,8 +98,8 @@ area = "status_led"
 side = "right"
 requirement = "The XIAO BLE RGB LED polarity and colors match battery, BLE/split connection, and central layer-change indications."
 evidence = "Observe the right-half RGB LED through battery, connection, and layer-change states on real hardware."
-evidence_needles = ["right", "RGB", "battery", "connection", "layer"]
-source = "docs/PORTING.md#trackpad-gap"
+evidence_needles = ["right", "RGB", "P1_03 red", "P1_05 green", "P1_07 blue", "active-low", "battery 30 green after reset", "battery 20 yellow after reset", "battery 10 red critical blink", "BLE connected blue", "BLE advertising yellow", "BLE disconnected red", "split connected blue", "split disconnected red", "layer cyan"]
+source = "docs/TRACKPAD_HARDWARE_CHECK.md#rgb-status-widget-check"
 status = "requires_hardware"
 
 [[checks]]
@@ -108,8 +108,8 @@ area = "battery"
 side = "right"
 requirement = "Charge-state input P0_17 active-low and charge LED output P0_10 active-low match the XIAO BLE board behavior."
 evidence = "Connect USB/battery charge states and observe the charge input and LED behavior."
-evidence_needles = ["right", "P0_17", "P0_10", "active-low"]
-source = "docs/PORTING.md#trackpad-gap"
+evidence_needles = ["right", "P0_17 charge-state", "active-low", "USB charging low", "not charging high", "P0_10 charge LED", "LED on low", "LED off high"]
+source = "docs/TRACKPAD_HARDWARE_CHECK.md#charge-indicator-pin-check"
 status = "requires_hardware"
 
 [[checks]]

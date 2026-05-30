@@ -1980,6 +1980,12 @@ fn hardware_validation_markdown_report_lists_required_evidence() {
         stdout.contains("Vial, Space, Enter, layer 1, layer 2, Space+Y, NumLock, Enter+Y, PageUp")
     );
     assert!(stdout.contains(
+        "right, RGB, P1_03 red, P1_05 green, P1_07 blue, active-low, battery 30 green after reset, battery 20 yellow after reset, battery 10 red critical blink, BLE connected blue, BLE advertising yellow, BLE disconnected red, split connected blue, split disconnected red, layer cyan"
+    ));
+    assert!(stdout.contains(
+        "right, P0_17 charge-state, active-low, USB charging low, not charging high, P0_10 charge LED, LED on low, LED off high"
+    ));
+    assert!(stdout.contains(
         "reset central UF2, reset peripheral UF2, normal central UF2, normal peripheral UF2, re-pair, Vial"
     ));
     for required in [
@@ -2509,6 +2515,22 @@ firmware_ref = "35b3f1f"
 artifact_or_notes = "video: /tmp/ble-split.mp4; BLE pair and reconnect worked with right central key input only."
 
 [[evidence]]
+id = "rgb_battery_connection_layer_indicators"
+status = "validated"
+validated_at = "2026-05-29"
+tester = "hardware bench"
+firmware_ref = "35b3f1f"
+artifact_or_notes = "video: /tmp/rgb.mp4; right RGB battery and connection colors blinked."
+
+[[evidence]]
+id = "charge_indicator_pins"
+status = "validated"
+validated_at = "2026-05-29"
+tester = "hardware bench"
+firmware_ref = "35b3f1f"
+artifact_or_notes = "photo: /tmp/charge.jpg; right P0_17 and P0_10 were checked with USB attached."
+
+[[evidence]]
 id = "storage_reset_and_reflash"
 status = "validated"
 validated_at = "2026-05-29"
@@ -2584,6 +2606,40 @@ artifact_or_notes = "video: /tmp/storage-reset.mp4; flashed reset central UF2 an
                 && error.contains("'right H'")
         }),
         "BLE split reconnect evidence should require concrete left/right key observations: {errors:?}"
+    );
+    assert!(
+        errors.iter().any(|error| {
+            error.contains(
+                "rgb_battery_connection_layer_indicators: artifact_or_notes must mention required observation(s)",
+            ) && error.contains("'P1_03 red'")
+                && error.contains("'P1_05 green'")
+                && error.contains("'P1_07 blue'")
+                && error.contains("'active-low'")
+                && error.contains("'battery 30 green after reset'")
+                && error.contains("'battery 20 yellow after reset'")
+                && error.contains("'battery 10 red critical blink'")
+                && error.contains("'BLE connected blue'")
+                && error.contains("'BLE advertising yellow'")
+                && error.contains("'BLE disconnected red'")
+                && error.contains("'split connected blue'")
+                && error.contains("'split disconnected red'")
+                && error.contains("'layer cyan'")
+        }),
+        "RGB evidence should require pin polarity and concrete battery/connection/layer colors: {errors:?}"
+    );
+    assert!(
+        errors.iter().any(|error| {
+            error.contains(
+                "charge_indicator_pins: artifact_or_notes must mention required observation(s)",
+            ) && error.contains("'P0_17 charge-state'")
+                && error.contains("'active-low'")
+                && error.contains("'USB charging low'")
+                && error.contains("'not charging high'")
+                && error.contains("'P0_10 charge LED'")
+                && error.contains("'LED on low'")
+                && error.contains("'LED off high'")
+        }),
+        "charge indicator evidence should require exact active-low pin states: {errors:?}"
     );
     assert!(
         errors.iter().any(|error| {
