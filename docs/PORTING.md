@@ -206,10 +206,10 @@ register-address inventory, upstream IQS9151 register and bit-flag porting
 classifications, product/register address values, reset/gesture bits,
 IQS9151 feature-enable flags, dynamic-scale bounds, initialization byte-array
 checksums, and selected ZMK driver thresholds.
-It also pins the RMK internal combo capacity, combo length, debounce time, and
-event/controller/report channel sizes. The channel sizes were raised for split
-trackpad burst headroom, so a later RMK configuration cleanup cannot silently
-fall back to the smaller default buffers.
+It also pins the RMK keyboard device identity plus the internal combo capacity,
+combo length, debounce time, and event/controller/report channel sizes. The
+channel sizes were raised for split trackpad burst headroom, so a later RMK
+configuration cleanup cannot silently fall back to the smaller default buffers.
 For source constants that are intentionally marked `ported_by_behavior` or
 `ported_by_config_image`, the manifest must also point at concrete passing
 coverage results. A reason string alone is not enough for those classifications

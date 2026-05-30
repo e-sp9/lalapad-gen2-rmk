@@ -3036,6 +3036,12 @@ fn porting_coverage_includes_exact_rmk_inventory_gates() {
     assert_eq!(keymap_shape["ok"], true);
 
     for id in [
+        "keyboard_name",
+        "keyboard_product_name",
+        "keyboard_manufacturer",
+        "keyboard_vendor_id",
+        "keyboard_product_id",
+        "keyboard_serial_number",
         "rmk_combo_capacity_matches_shipped_combo_inventory",
         "rmk_combo_max_length_matches_shipped_combo_shape",
         "rmk_debounce_time_matches_lalapad_tuning",
@@ -3046,7 +3052,7 @@ fn porting_coverage_includes_exact_rmk_inventory_gates() {
         let result = results
             .iter()
             .find(|result| result["id"] == id)
-            .unwrap_or_else(|| panic!("RMK internal config result is missing for {id}"));
+            .unwrap_or_else(|| panic!("RMK config result is missing for {id}"));
         assert_eq!(result["kind"], "config");
         assert_eq!(result["passed"].as_i64(), Some(1));
         assert_eq!(result["total"].as_i64(), Some(1));

@@ -710,6 +710,36 @@ path = "keyboard.chip"
 expected = "nrf52840"
 
 [[config_values]]
+id = "keyboard_name"
+path = "keyboard.name"
+expected = "LaLaPad Gen2 RMK"
+
+[[config_values]]
+id = "keyboard_product_name"
+path = "keyboard.product_name"
+expected = "LaLaPad Gen2 RMK"
+
+[[config_values]]
+id = "keyboard_manufacturer"
+path = "keyboard.manufacturer"
+expected = "ShiniNet"
+
+[[config_values]]
+id = "keyboard_vendor_id"
+path = "keyboard.vendor_id"
+expected = 0x4c4b
+
+[[config_values]]
+id = "keyboard_product_id"
+path = "keyboard.product_id"
+expected = 0x4c32
+
+[[config_values]]
+id = "keyboard_serial_number"
+path = "keyboard.serial_number"
+expected = "vial:f64c2b3c:000001"
+
+[[config_values]]
 id = "ble_enabled"
 path = "ble.enabled"
 expected = true
