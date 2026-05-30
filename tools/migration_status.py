@@ -170,9 +170,11 @@ def hardware_status(
     manifest_path: Path,
     hardware_baseline_path: Path | None,
     evidence_paths: list[Path],
+    evidence_artifact_root: Path,
     required_firmware_ref: str | None,
     required_artifact_pair_sha256: str | None,
     require_evidence_inventory: bool,
+    require_evidence_artifact_paths: bool,
     extra_errors: list[str] | None = None,
 ) -> dict[str, Any]:
     manifest_doc = hardware_validation.load_toml(manifest_path)
@@ -196,8 +198,10 @@ def hardware_status(
         manifest,
         evidence_errors + baseline_failures + (extra_errors or []),
         Path("."),
+        evidence_artifact_root,
         required_firmware_ref,
         required_artifact_pair_sha256,
+        require_evidence_artifact_paths,
     )
     return hardware_validation.as_json(summary)
 
@@ -402,9 +406,11 @@ def build_status(args: argparse.Namespace) -> MigrationStatus:
         args.hardware_manifest,
         args.hardware_baseline,
         args.evidence,
+        args.evidence_artifact_root,
         required_firmware_ref,
         required_artifact_pair_sha256,
         args.require_hardware_validated,
+        args.require_evidence_artifact_paths or args.require_hardware_validated,
         artifact_errors,
     )
     hardware_classified = bool(hardware["classified"])
@@ -704,10 +710,17 @@ def main() -> None:
         default=Path("."),
         help="directory used to resolve relative paths in --firmware-artifact-manifest",
     )
+    parser.add_argument(
+        "--evidence-artifact-root",
+        type=Path,
+        default=Path("."),
+        help="directory used to resolve relative artifact_paths entries in evidence overlays",
+    )
     parser.add_argument("--require-firmware-ref", metavar="REF")
     parser.add_argument("--require-software-complete", action="store_true")
     parser.add_argument("--require-hardware-classified", action="store_true")
     parser.add_argument("--require-release-ready", action="store_true")
+    parser.add_argument("--require-evidence-artifact-paths", action="store_true")
     parser.add_argument("--require-hardware-validated", action="store_true")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--markdown", action="store_true")

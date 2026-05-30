@@ -355,6 +355,11 @@ hardware observation tied to the exact central/peripheral UF2 pair that was
 flashed. Plain report commands render these problems in the error list; use
 `--require-hardware-classified` or the final cargo-make gates when the command
 must fail on stale or incomplete artifact evidence.
+For final validation, each validated evidence entry must also list at least one
+real file in `artifact_paths`; relative paths are resolved under
+`EVIDENCE_ARTIFACT_ROOT` when that environment variable is set, or the current
+directory otherwise. Use those files for the captured videos, photos, logs, or
+scope traces referenced by `artifact_or_notes`.
 For the combined final gate, run the cargo-make task so the RMK runtime
 scenario suite runs before the migration dashboard is evaluated:
 

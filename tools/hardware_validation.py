@@ -77,6 +77,7 @@ EVIDENCE_UPDATE_FIELDS = (
     "tester",
     "firmware_ref",
     "artifact_or_notes",
+    "artifact_paths",
 )
 MARKDOWN_HEADING_RE = re.compile(r"^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$")
 ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -294,6 +295,47 @@ def validate_validated_evidence(check_id: str, check: dict[str, Any]) -> list[st
     return errors
 
 
+def validate_evidence_artifact_paths(
+    check_id: str,
+    check: dict[str, Any],
+    artifact_root: Path,
+    require_artifact_paths: bool,
+) -> list[str]:
+    errors: list[str] = []
+    artifact_paths = check.get("artifact_paths")
+    if artifact_paths is None:
+        if require_artifact_paths:
+            return [f"{check_id}: artifact_paths must list at least one evidence artifact file"]
+        return []
+    if not isinstance(artifact_paths, list):
+        return [f"{check_id}: artifact_paths must be a string array"]
+    if require_artifact_paths and not artifact_paths:
+        errors.append(f"{check_id}: artifact_paths must list at least one evidence artifact file")
+
+    root = artifact_root.resolve()
+    for index, artifact_path in enumerate(artifact_paths):
+        if not isinstance(artifact_path, str) or not artifact_path.strip():
+            errors.append(f"{check_id}: artifact_paths[{index}] must be a non-empty path string")
+            continue
+        if is_placeholder_value(artifact_path):
+            errors.append(f"{check_id}: artifact_paths[{index}] must not be a placeholder")
+            continue
+        raw_path = Path(artifact_path)
+        resolved_path = (raw_path if raw_path.is_absolute() else root / raw_path).resolve()
+        try:
+            resolved_path.relative_to(root)
+        except ValueError:
+            errors.append(
+                f"{check_id}: artifact_paths[{index}] must stay inside {artifact_root}"
+            )
+            continue
+        if not resolved_path.is_file():
+            errors.append(
+                f"{check_id}: artifact_paths[{index}] file does not exist: {artifact_path}"
+            )
+    return errors
+
+
 def manifest_inventory_items(manifest: dict[str, Any]) -> list[dict[str, str]]:
     checks = manifest.get("checks", [])
     if not isinstance(checks, list):
@@ -492,8 +534,10 @@ def summarize(
     manifest: dict[str, Any],
     initial_errors: list[str] | None = None,
     source_root: Path | None = None,
+    evidence_artifact_root: Path | None = None,
     required_firmware_ref: str | None = None,
     required_artifact_pair_sha256: str | None = None,
+    require_evidence_artifact_paths: bool = False,
 ) -> HardwareValidationSummary:
     checks = manifest.get("checks", [])
     _, check_inventory_sha256 = manifest_inventory_digest(manifest)
@@ -598,6 +642,14 @@ def summarize(
                     evidence_errors = validate_validated_evidence(check_id, check)
                     if evidence_errors:
                         validation_errors.extend(evidence_errors)
+                    artifact_path_errors = validate_evidence_artifact_paths(
+                        check_id,
+                        check,
+                        evidence_artifact_root or Path("."),
+                        require_evidence_artifact_paths,
+                    )
+                    if artifact_path_errors:
+                        validation_errors.extend(artifact_path_errors)
                     elif (
                         required_firmware_ref is not None
                         and str(check.get("firmware_ref", "")) != required_firmware_ref
@@ -709,6 +761,7 @@ def as_evidence_template(
         "# Entries are keyed by id from tools/hardware_validation_manifest.toml.",
         "# The metadata hash binds this evidence file to the current hardware validation manifest.",
         "# Change status to \"validated\" only when validated_at, tester, firmware_ref, and artifact_or_notes are filled.",
+        "# Final validation also requires artifact_paths to list real evidence files under the evidence artifact root.",
         "# If artifact_or_notes is prefilled with firmware artifact pair_sha256, keep it and append the observed evidence after it.",
         "",
         "[metadata]",
@@ -726,6 +779,7 @@ def as_evidence_template(
             lines.append('validated_at = ""')
             lines.append('tester = ""')
             lines.append(f"firmware_ref = {toml_string(firmware_ref)}")
+            lines.append("artifact_paths = []")
             artifact_prefix = (
                 f"firmware artifact pair_sha256 {artifact_pair_sha256}; "
                 if artifact_pair_sha256
@@ -838,7 +892,7 @@ def as_checklist(manifest: dict[str, Any]) -> str:
         "Record the flashed firmware tag or commit before testing. After each item "
         "passes, copy the check id into an evidence overlay generated with "
         "`--evidence-template` and include the required observations in "
-        "`artifact_or_notes`.",
+        "`artifact_or_notes` plus real evidence files in `artifact_paths`.",
         "",
         "When using `firmware-artifacts.local.json`, keep the generated "
         "`pair_sha256` in each `artifact_or_notes` entry and append the bench "
@@ -869,6 +923,9 @@ def as_checklist(manifest: dict[str, Any]) -> str:
             lines.append("    - validated_at: YYYY-MM-DD test date")
             lines.append("    - tester: person or bench that ran the check")
             lines.append("    - firmware_ref: flashed immutable tag or commit")
+            lines.append(
+                "    - artifact_paths: paths to the captured video/log/photo/scope files"
+            )
             lines.append(
                 "    - artifact_or_notes: concrete photo/log/probe/Vial observation "
                 f"that mentions artifacts [{evidence_artifacts_text(check)}] and "
@@ -981,6 +1038,17 @@ def main() -> None:
         help="pre-fill the firmware artifact pair_sha256 prefix in --evidence-template artifact_or_notes",
     )
     parser.add_argument(
+        "--evidence-artifact-root",
+        type=Path,
+        default=Path("."),
+        help="directory used to resolve relative artifact_paths entries in evidence overlays",
+    )
+    parser.add_argument(
+        "--require-evidence-artifact-paths",
+        action="store_true",
+        help="fail unless each validated evidence entry lists at least one existing artifact_paths file",
+    )
+    parser.add_argument(
         "--require-classified",
         action="store_true",
         help="fail if any hardware validation check is malformed or unclassified",
@@ -1040,7 +1108,10 @@ def main() -> None:
         manifest,
         evidence_errors + baseline_failures,
         Path("."),
+        args.evidence_artifact_root,
         args.require_firmware_ref,
+        None,
+        args.require_evidence_artifact_paths or args.require_validated,
     )
     if args.json:
         print(json.dumps(as_json(summary), indent=2, sort_keys=True))

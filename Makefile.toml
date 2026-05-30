@@ -266,11 +266,13 @@ set -- \
   --hardware-baseline tools/hardware_validation_baseline.toml \
   --evidence "$HARDWARE_EVIDENCE" \
   --firmware-artifact-manifest "${FIRMWARE_ARTIFACT_MANIFEST:-firmware-artifacts.local.json}" \
+  --evidence-artifact-root "${EVIDENCE_ARTIFACT_ROOT:-.}" \
   --require-zmk-source \
   --require-zmk-clean-source \
   --require-zmk-source-commit \
   --require-software-complete \
   --require-hardware-classified \
+  --require-evidence-artifact-paths \
   --require-hardware-validated \
   --require-firmware-ref "$FIRMWARE_REF"
 
@@ -306,11 +308,13 @@ set -- \
   --hardware-baseline tools/hardware_validation_baseline.toml \
   --evidence "$HARDWARE_EVIDENCE" \
   --firmware-artifact-manifest "${FIRMWARE_ARTIFACT_MANIFEST:-firmware-artifacts.local.json}" \
+  --evidence-artifact-root "${EVIDENCE_ARTIFACT_ROOT:-.}" \
   --require-zmk-source \
   --require-zmk-clean-source \
   --require-zmk-source-commit \
   --require-software-complete \
   --require-hardware-classified \
+  --require-evidence-artifact-paths \
   --require-hardware-validated \
   --require-firmware-ref "$firmware_ref"
 

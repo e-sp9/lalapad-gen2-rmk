@@ -108,7 +108,10 @@ fn assert_task_prefers_sibling_zmk_checkout(task: &str, block: &str) {
     );
 }
 
-fn complete_hardware_evidence_overlay(firmware_ref: &str) -> String {
+fn complete_hardware_evidence_overlay_inner(
+    firmware_ref: &str,
+    artifact_root: Option<&std::path::Path>,
+) -> String {
     let manifest = hardware_validation_manifest_toml();
     let baseline = hardware_validation_baseline_toml();
     let inventory_sha256 = baseline["hardware_validation"]["check_inventory_sha256"]
@@ -145,6 +148,17 @@ fn complete_hardware_evidence_overlay(firmware_ref: &str) -> String {
         evidence.push_str("validated_at = \"2026-05-29\"\n");
         evidence.push_str("tester = \"hardware bench fixture\"\n");
         evidence.push_str(&format!("firmware_ref = \"{firmware_ref}\"\n"));
+        if let Some(root) = artifact_root {
+            let artifact_path = format!("hardware-evidence/{check_id}.txt");
+            let full_artifact_path = root.join(&artifact_path);
+            std::fs::create_dir_all(full_artifact_path.parent().unwrap()).unwrap();
+            std::fs::write(
+                &full_artifact_path,
+                format!("hardware evidence fixture for {check_id}\n"),
+            )
+            .unwrap();
+            evidence.push_str(&format!("artifact_paths = [\"{artifact_path}\"]\n"));
+        }
         evidence.push_str(&format!(
             "artifact_or_notes = \"log: /tmp/lalapad-hardware-bench-{check_id}.txt; bench hardware evidence for {check_id}; artifact {evidence_artifacts}; observed {evidence_needles}\"\n",
         ));
@@ -152,11 +166,33 @@ fn complete_hardware_evidence_overlay(firmware_ref: &str) -> String {
     evidence
 }
 
+fn complete_hardware_evidence_overlay(firmware_ref: &str) -> String {
+    complete_hardware_evidence_overlay_inner(firmware_ref, None)
+}
+
+fn complete_hardware_evidence_overlay_with_artifact_paths(
+    firmware_ref: &str,
+    artifact_root: &std::path::Path,
+) -> String {
+    complete_hardware_evidence_overlay_inner(firmware_ref, Some(artifact_root))
+}
+
 fn complete_hardware_evidence_overlay_with_pair_sha(
     firmware_ref: &str,
     pair_sha256: &str,
 ) -> String {
     complete_hardware_evidence_overlay(firmware_ref).replace(
+        "observed",
+        &format!("firmware artifact pair_sha256 {pair_sha256}; observed"),
+    )
+}
+
+fn complete_hardware_evidence_overlay_with_pair_sha_and_artifact_paths(
+    firmware_ref: &str,
+    pair_sha256: &str,
+    artifact_root: &std::path::Path,
+) -> String {
+    complete_hardware_evidence_overlay_with_artifact_paths(firmware_ref, artifact_root).replace(
         "observed",
         &format!("firmware artifact pair_sha256 {pair_sha256}; observed"),
     )
@@ -1505,7 +1541,11 @@ right = 1
 fn migration_status_accepts_complete_hardware_evidence_for_final_gate() {
     let firmware_ref = "test-firmware-ref";
     let (artifact_root, artifact_path, pair_sha256) = test_firmware_artifact_fixture(firmware_ref);
-    let evidence = complete_hardware_evidence_overlay_with_pair_sha(firmware_ref, &pair_sha256);
+    let evidence = complete_hardware_evidence_overlay_with_pair_sha_and_artifact_paths(
+        firmware_ref,
+        &pair_sha256,
+        &artifact_root,
+    );
     let path = write_temp_file("migration-status-complete-evidence", &evidence);
     let (clean_zmk_root, zmk_keymap_path) =
         clean_zmk_keymap_fixture().expect("complete final gate requires upstream ZMK source");
@@ -1524,6 +1564,8 @@ fn migration_status_accepts_complete_hardware_evidence_for_final_gate() {
         "--firmware-artifact-manifest",
         artifact_path.to_str().unwrap(),
         "--artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--evidence-artifact-root",
         artifact_root.to_str().unwrap(),
         "--require-zmk-source",
         "--require-firmware-ref",
@@ -1549,6 +1591,47 @@ fn migration_status_accepts_complete_hardware_evidence_for_final_gate() {
         Some(true)
     );
     assert_eq!(parsed["fully_validated"].as_bool(), Some(true));
+
+    let no_artifact_paths_evidence =
+        complete_hardware_evidence_overlay_with_pair_sha(firmware_ref, &pair_sha256);
+    let no_artifact_paths_path = write_temp_file(
+        "migration-status-complete-evidence-no-artifact-paths",
+        &no_artifact_paths_evidence,
+    );
+    let no_artifact_paths_output = run_migration_status(&[
+        "--coverage-baseline",
+        "tools/porting_coverage_baseline.toml",
+        "--hardware-baseline",
+        "tools/hardware_validation_baseline.toml",
+        "--zmk-keymap",
+        zmk_keymap,
+        "--evidence",
+        no_artifact_paths_path.to_str().unwrap(),
+        "--firmware-artifact-manifest",
+        artifact_path.to_str().unwrap(),
+        "--artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--evidence-artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--require-zmk-source",
+        "--require-firmware-ref",
+        firmware_ref,
+        "--require-software-complete",
+        "--require-hardware-classified",
+        "--require-hardware-validated",
+    ]);
+    let _ = std::fs::remove_file(&no_artifact_paths_path);
+    assert!(
+        !no_artifact_paths_output.status.success(),
+        "complete migration status accepted final evidence without artifact_paths\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&no_artifact_paths_output.stdout),
+        String::from_utf8_lossy(&no_artifact_paths_output.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&no_artifact_paths_output.stdout)
+            .contains("artifact_paths must list at least one evidence artifact file"),
+        "missing-artifact-path failure should explain the final-gate artifact path requirement"
+    );
 
     let (dirty_zmk_root, dirty_zmk_keymap_path) = clean_zmk_keymap_fixture()
         .expect("dirty-source release readiness regression requires upstream ZMK source");
@@ -1578,6 +1661,8 @@ fn migration_status_accepts_complete_hardware_evidence_for_final_gate() {
         "--firmware-artifact-manifest",
         artifact_path.to_str().unwrap(),
         "--artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--evidence-artifact-root",
         artifact_root.to_str().unwrap(),
         "--require-zmk-source",
         "--require-firmware-ref",
@@ -1614,6 +1699,8 @@ fn migration_status_accepts_complete_hardware_evidence_for_final_gate() {
         "--firmware-artifact-manifest",
         artifact_path.to_str().unwrap(),
         "--artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--evidence-artifact-root",
         artifact_root.to_str().unwrap(),
         "--require-zmk-source",
         "--require-firmware-ref",
@@ -1657,6 +1744,8 @@ fn migration_status_accepts_complete_hardware_evidence_for_final_gate() {
         "--firmware-artifact-manifest",
         artifact_path.to_str().unwrap(),
         "--artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--evidence-artifact-root",
         artifact_root.to_str().unwrap(),
         "--require-zmk-source",
         "--require-firmware-ref",
@@ -1719,6 +1808,8 @@ fn migration_status_accepts_complete_hardware_evidence_for_final_gate() {
         artifact_path.to_str().unwrap(),
         "--artifact-root",
         artifact_root.to_str().unwrap(),
+        "--evidence-artifact-root",
+        artifact_root.to_str().unwrap(),
         "--require-zmk-source",
         "--require-firmware-ref",
         firmware_ref,
@@ -1750,6 +1841,8 @@ fn migration_status_accepts_complete_hardware_evidence_for_final_gate() {
         artifact_path.to_str().unwrap(),
         "--artifact-root",
         artifact_root.to_str().unwrap(),
+        "--evidence-artifact-root",
+        artifact_root.to_str().unwrap(),
         "--require-zmk-source",
         "--require-firmware-ref",
         "stale-firmware-ref",
@@ -1771,8 +1864,13 @@ fn migration_status_accepts_complete_hardware_evidence_for_final_gate() {
 fn migration_status_ties_hardware_evidence_to_firmware_artifact_manifest() {
     let firmware_ref = "artifact-backed-firmware-ref";
     let (artifact_root, artifact_path, pair_sha256) = test_firmware_artifact_fixture(firmware_ref);
-    let evidence_without_pair_sha = complete_hardware_evidence_overlay(firmware_ref);
-    let evidence = complete_hardware_evidence_overlay_with_pair_sha(firmware_ref, &pair_sha256);
+    let evidence_without_pair_sha =
+        complete_hardware_evidence_overlay_with_artifact_paths(firmware_ref, &artifact_root);
+    let evidence = complete_hardware_evidence_overlay_with_pair_sha_and_artifact_paths(
+        firmware_ref,
+        &pair_sha256,
+        &artifact_root,
+    );
     let evidence_one_missing_pair_sha = evidence.replacen(
         &format!("firmware artifact pair_sha256 {pair_sha256}; "),
         "",
@@ -1804,6 +1902,8 @@ fn migration_status_ties_hardware_evidence_to_firmware_artifact_manifest() {
         "--firmware-artifact-manifest",
         artifact_path.to_str().unwrap(),
         "--artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--evidence-artifact-root",
         artifact_root.to_str().unwrap(),
         "--require-zmk-source",
         "--require-software-complete",
@@ -1838,6 +1938,8 @@ fn migration_status_ties_hardware_evidence_to_firmware_artifact_manifest() {
         artifact_path.to_str().unwrap(),
         "--artifact-root",
         artifact_root.to_str().unwrap(),
+        "--evidence-artifact-root",
+        artifact_root.to_str().unwrap(),
         "--require-hardware-validated",
     ]);
     assert!(
@@ -1861,6 +1963,8 @@ fn migration_status_ties_hardware_evidence_to_firmware_artifact_manifest() {
         "--firmware-artifact-manifest",
         artifact_path.to_str().unwrap(),
         "--artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--evidence-artifact-root",
         artifact_root.to_str().unwrap(),
     ]);
     assert!(
@@ -1904,6 +2008,8 @@ fn migration_status_ties_hardware_evidence_to_firmware_artifact_manifest() {
         artifact_path.to_str().unwrap(),
         "--artifact-root",
         artifact_root.to_str().unwrap(),
+        "--evidence-artifact-root",
+        artifact_root.to_str().unwrap(),
         "--require-hardware-classified",
     ]);
     assert!(
@@ -1926,6 +2032,8 @@ fn migration_status_ties_hardware_evidence_to_firmware_artifact_manifest() {
         "--firmware-artifact-manifest",
         artifact_path.to_str().unwrap(),
         "--artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--evidence-artifact-root",
         artifact_root.to_str().unwrap(),
         "--require-hardware-validated",
     ]);
@@ -1953,6 +2061,8 @@ fn migration_status_ties_hardware_evidence_to_firmware_artifact_manifest() {
         "--firmware-artifact-manifest",
         stale_artifact_path.to_str().unwrap(),
         "--artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--evidence-artifact-root",
         artifact_root.to_str().unwrap(),
         "--require-hardware-validated",
     ]);
@@ -1986,6 +2096,8 @@ fn migration_status_ties_hardware_evidence_to_firmware_artifact_manifest() {
         "--firmware-artifact-manifest",
         tampered_artifact_path.to_str().unwrap(),
         "--artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--evidence-artifact-root",
         artifact_root.to_str().unwrap(),
         "--require-hardware-classified",
     ]);
@@ -2045,6 +2157,8 @@ fn migration_status_ties_hardware_evidence_to_firmware_artifact_manifest() {
         "--firmware-artifact-manifest",
         escaping_artifact_path.to_str().unwrap(),
         "--artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--evidence-artifact-root",
         artifact_root.to_str().unwrap(),
         "--require-hardware-classified",
     ]);
@@ -3202,7 +3316,16 @@ fn hardware_validation_can_generate_complete_evidence_template() {
         assert_eq!(entry["validated_at"].as_str(), Some(""));
         assert_eq!(entry["tester"].as_str(), Some(""));
         assert_eq!(entry["firmware_ref"].as_str(), Some(""));
+        assert_eq!(
+            entry["artifact_paths"].as_array().unwrap().len(),
+            0,
+            "evidence template should include an empty artifact_paths list for {check_id}"
+        );
         assert_eq!(entry["artifact_or_notes"].as_str(), Some(""));
+        assert!(
+            stdout.contains("artifact_paths = []"),
+            "evidence template should include artifact_paths placeholders"
+        );
         assert!(
             stdout.contains(check["requirement"].as_str().unwrap()),
             "evidence template should include requirement comments for {check_id}"
@@ -3305,6 +3428,10 @@ fn hardware_validation_can_generate_bench_checklist() {
         assert!(
             stdout.contains("firmware_ref: flashed immutable tag or commit"),
             "checklist should include firmware_ref capture guidance"
+        );
+        assert!(
+            stdout.contains("artifact_paths: paths to the captured video/log/photo/scope files"),
+            "checklist should include artifact_paths capture guidance"
         );
         assert!(
             stdout.contains(
@@ -3923,6 +4050,9 @@ fn local_validation_entrypoints_match_ci_gates() {
             && migration_status_final_task
                 .contains("../zmk-config-LalaPadGen2/config/lalapadgen2.keymap")
             && migration_status_final_task.contains("--require-hardware-validated")
+            && migration_status_final_task.contains("--require-evidence-artifact-paths")
+            && migration_status_final_task
+                .contains("--evidence-artifact-root \"${EVIDENCE_ARTIFACT_ROOT:-.}\"")
             && migration_status_final_task.contains("--require-firmware-ref \"$FIRMWARE_REF\"")
             && migration_status_final_task.contains("FIRMWARE_ARTIFACT_MANIFEST")
             && migration_status_final_task
@@ -3952,10 +4082,13 @@ fn local_validation_entrypoints_match_ci_gates() {
             && migration_status_final_current_task.contains("--require-software-complete")
             && migration_status_final_current_task.contains("--require-hardware-classified")
             && migration_status_final_current_task.contains("--require-hardware-validated")
+            && migration_status_final_current_task.contains("--require-evidence-artifact-paths")
             && migration_status_final_current_task
                 .contains("--require-firmware-ref \"$firmware_ref\"")
             && migration_status_final_current_task
-                .contains("--firmware-artifact-manifest \"${FIRMWARE_ARTIFACT_MANIFEST:-firmware-artifacts.local.json}\""),
+                .contains("--firmware-artifact-manifest \"${FIRMWARE_ARTIFACT_MANIFEST:-firmware-artifacts.local.json}\"")
+            && migration_status_final_current_task
+                .contains("--evidence-artifact-root \"${EVIDENCE_ARTIFACT_ROOT:-.}\""),
         "cargo make migration-status-final-current should derive the final hardware gate firmware_ref from a clean current git ref and check artifact hashes"
     );
     assert!(
@@ -4145,6 +4278,8 @@ fn local_validation_entrypoints_match_ci_gates() {
             && README_MD.contains("manifest-pinned `metadata.source_commit`")
             && README_MD.contains("HARDWARE_EVIDENCE=hardware-validation-evidence.local.toml cargo make migration-status-final-current")
             && README_MD.contains("FIRMWARE_ARTIFACT_MANIFEST")
+            && README_MD.contains("EVIDENCE_ARTIFACT_ROOT")
+            && README_MD.contains("artifact_paths")
             && README_MD.contains("HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-report")
             && PORTING_MD.contains("cargo make migration-status-report")
             && PORTING_MD.contains("cargo make migration-status")
@@ -4159,6 +4294,8 @@ fn local_validation_entrypoints_match_ci_gates() {
             && PORTING_MD.contains("--require-zmk-clean-source")
             && PORTING_MD.contains("--require-zmk-source-commit")
             && PORTING_MD.contains("FIRMWARE_ARTIFACT_MANIFEST")
+            && PORTING_MD.contains("EVIDENCE_ARTIFACT_ROOT")
+            && PORTING_MD.contains("artifact_paths")
             && PORTING_MD.contains("HARDWARE_EVIDENCE=hardware-validation-evidence.local.toml cargo make migration-status-final-current"),
         "README and porting notes should document the local Markdown migration dashboard, RMK behavior regression suite, artifact manifest, current-ref evidence template, and current-ref final gate"
     );
@@ -4207,6 +4344,8 @@ fn local_validation_entrypoints_match_ci_gates() {
             && RELEASE_MD.contains("clean Git repository")
             && RELEASE_MD.contains("manifest-pinned `metadata.source_commit`")
             && RELEASE_MD.contains("FIRMWARE_ARTIFACT_MANIFEST")
+            && RELEASE_MD.contains("EVIDENCE_ARTIFACT_ROOT")
+            && RELEASE_MD.contains("artifact_paths")
             && RELEASE_MD.contains("Full validation: pass")
             && RELEASE_MD.contains("if the announcement claims complete hardware validation"),
         "release guide should require the final migration status gate before complete hardware-validation claims"

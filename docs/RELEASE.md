@@ -72,8 +72,11 @@ that are missing the generated `metadata.hardware_check_inventory_sha256`, or
 whose hash no longer matches the current hardware validation manifest. Each
 validated note must also mention the per-check evidence artifact types listed by
 `evidence_artifacts`, such as `video`, `scope`, `Vial screenshot`, or
-`key-event log`. Simulated, synthetic, mock, or host-only output is not valid
-hardware evidence. `cargo make hardware-validation-session-current` pre-fills
+`key-event log`, and each validated entry must list at least one existing file
+in `artifact_paths`. Relative evidence artifact paths are resolved under
+`EVIDENCE_ARTIFACT_ROOT` when set, or from the current directory otherwise.
+Simulated, synthetic, mock, or host-only output is not valid hardware evidence.
+`cargo make hardware-validation-session-current` pre-fills
 that hash in the local evidence overlay generated for a clean current-ref bench
 session. Direct
 `tools/migration_status.py --require-hardware-validated` use also requires
@@ -114,6 +117,7 @@ Before announcing a release to the community:
 - The hardware evidence file keeps the generated `metadata.hardware_check_inventory_sha256` for the current validation manifest.
 - The hardware evidence notes reference the artifact manifest SHA256 values for the flashed central/peripheral files.
 - The hardware evidence notes include every per-check artifact type listed by `evidence_artifacts`.
+- The hardware evidence entries include `artifact_paths` pointing at retained photos, videos, logs, screenshots, or scope traces under the chosen `EVIDENCE_ARTIFACT_ROOT`.
 - GitHub Release contains central/peripheral UF2 and DFU zip assets.
 - GitHub Release contains `lalapad-gen2-rmk-artifacts.json`.
 - Web flasher loads the latest release metadata.

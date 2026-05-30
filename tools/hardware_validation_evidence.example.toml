@@ -11,7 +11,10 @@
 # The generated overlay includes a commented artifact_or_notes copy aid for
 # each check. Keep the generated pair_sha256 prefix when present, then replace
 # the path/reading placeholder with real bench evidence and leave every
-# required observation term in the completed note.
+# required observation term in the completed note. For final validation, also
+# fill artifact_paths with real evidence files under the chosen
+# EVIDENCE_ARTIFACT_ROOT, such as captured videos, logs, photos, screenshots, or
+# scope traces.
 #
 # Evidence entries are overlays keyed by check id from
 # tools/hardware_validation_manifest.toml. Keep the generated
@@ -35,4 +38,5 @@
 # validated_at = "2026-05-29"
 # tester = "hardware bench"
 # firmware_ref = "v0.2.65"
+# artifact_paths = []
 # artifact_or_notes = "log: /tmp/right-i2c.log; right P0_04 SDA and P0_05 SCL showed I2C activity from scan, address 0x56 ACKed, and product-number register 0x1000 read 0x09bc."
