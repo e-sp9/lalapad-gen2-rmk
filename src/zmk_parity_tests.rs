@@ -247,7 +247,7 @@ fn porting_coverage_complete_gate_accepts_explicit_status_completion() {
     assert!(stdout.contains("- code_topology: 54/54 = 100.00%"));
     assert!(stdout.contains("- dependency: 23/23 = 100.00%"));
     assert!(stdout.contains("- gpio_flag_mirror: 36/36 = 100.00%"));
-    assert!(stdout.contains("- release_workflow: 32/32 = 100.00%"));
+    assert!(stdout.contains("- release_workflow: 45/45 = 100.00%"));
     assert!(stdout.contains("- rmk_patch: 59/59 = 100.00%"));
     assert!(stdout.contains("- scenario:"));
     assert!(stdout.contains("- split: 100/100 = 100.00%"));
@@ -3903,7 +3903,7 @@ print(json.dumps({
 #[test]
 fn porting_coverage_scopes_runtime_scenario_needles_to_declared_function() {
     let output = run_python(
-        r#"
+        r##"
 import importlib.util
 import json
 import sys
@@ -3917,6 +3917,7 @@ spec.loader.exec_module(pc)
 
 root = Path(tempfile.mkdtemp(prefix="lalapad-runtime-scenario-scope-"))
 (root / "scenario.rs").write_text(
+    "#[test]\n"
     "fn target_runtime_scenario() {\\n"
     "    key_sequence_no_keyboard_reports_test! {\\n"
     "        expected_action: [3, 0, 7] => k!(User7),\\n"
@@ -3943,7 +3944,7 @@ manifest = {
 
 result = pc.check_runtime_scenario_tests(manifest, root)[0]
 print(json.dumps(result.__dict__ | {"ok": result.ok}))
-"#,
+"##,
     );
 
     assert!(
@@ -3954,10 +3955,121 @@ print(json.dumps(result.__dict__ | {"ok": result.ok}))
     );
     let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(parsed["kind"], "runtime_scenario");
-    assert_eq!(parsed["passed"].as_i64(), Some(2));
-    assert_eq!(parsed["total"].as_i64(), Some(3));
+    assert_eq!(parsed["passed"].as_i64(), Some(4));
+    assert_eq!(parsed["total"].as_i64(), Some(5));
     assert_eq!(parsed["ok"], false);
     assert!(parsed["message"].as_str().unwrap().contains("k!(Reboot)"));
+}
+
+#[test]
+fn porting_coverage_requires_active_runtime_scenario_tests() {
+    let output = run_python(
+        r#"
+import importlib.util
+import json
+import sys
+import tempfile
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("porting_coverage", "tools/porting_coverage.py")
+pc = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = pc
+spec.loader.exec_module(pc)
+
+manifest = pc.load_toml(Path("tools/porting_coverage_manifest.toml"))
+ok = pc.check_runtime_scenario_tests(manifest, Path("."))
+
+with tempfile.TemporaryDirectory() as root_dir:
+    root = Path(root_dir)
+    scenario_dir = root / "vendor/rmk-0.8.2/tests"
+    scenario_dir.mkdir(parents=True)
+    scenario = Path("vendor/rmk-0.8.2/tests/keyboard_lalapad_zmk_scenarios_test.rs").read_text(
+        encoding="utf-8"
+    )
+    scenario = scenario.replace(
+        "    #[test]\n    fn space_hold_y_selects_secondary_layer()",
+        "    #[test]\n    #[ignore]\n    fn space_hold_y_selects_secondary_layer()",
+        1,
+    )
+    (scenario_dir / "keyboard_lalapad_zmk_scenarios_test.rs").write_text(
+        scenario, encoding="utf-8"
+    )
+    ignored = pc.check_runtime_scenario_tests(manifest, root)
+
+with tempfile.TemporaryDirectory() as root_dir:
+    root = Path(root_dir)
+    scenario_dir = root / "vendor/rmk-0.8.2/tests"
+    scenario_dir.mkdir(parents=True)
+    scenario = Path("vendor/rmk-0.8.2/tests/keyboard_lalapad_zmk_scenarios_test.rs").read_text(
+        encoding="utf-8"
+    )
+    scenario = scenario.replace(
+        "    #[test]\n    fn enter_hold_y_selects_tertiary_layer()",
+        "    fn enter_hold_y_selects_tertiary_layer()",
+        1,
+    )
+    (scenario_dir / "keyboard_lalapad_zmk_scenarios_test.rs").write_text(
+        scenario, encoding="utf-8"
+    )
+    missing_test_attr = pc.check_runtime_scenario_tests(manifest, root)
+
+def pack(results):
+    return [result.__dict__ | {"ok": result.ok} for result in results]
+
+print(json.dumps({
+    "ok": pack(ok),
+    "ignored": pack(ignored),
+    "missing_test_attr": pack(missing_test_attr),
+}))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "runtime scenario activity check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(
+        parsed["ok"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|result| result["ok"] == true),
+        "current runtime scenario tests should be active"
+    );
+
+    let ignored = parsed["ignored"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "runtime_space_hold_y_selects_secondary_layer")
+        .expect("changed ignored runtime scenario result is missing");
+    assert_eq!(ignored["kind"], "runtime_scenario");
+    assert_eq!(ignored["ok"], false);
+    assert!(
+        ignored["message"]
+            .as_str()
+            .unwrap()
+            .contains("must not be ignored")
+    );
+
+    let missing_test_attr = parsed["missing_test_attr"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "runtime_enter_hold_y_selects_tertiary_layer")
+        .expect("changed missing-test runtime scenario result is missing");
+    assert_eq!(missing_test_attr["kind"], "runtime_scenario");
+    assert_eq!(missing_test_attr["ok"], false);
+    assert!(
+        missing_test_attr["message"]
+            .as_str()
+            .unwrap()
+            .contains("must be marked #[test]")
+    );
 }
 
 #[test]
@@ -6169,6 +6281,15 @@ with tempfile.TemporaryDirectory() as tempdir:
 
 with tempfile.TemporaryDirectory() as tempdir:
     root = Path(tempdir)
+    firmware = Path(".github/workflows/firmware.yml").read_text().replace(
+        "cargo make porting-coverage",
+        "python3 tools/porting_coverage.py",
+    )
+    write_release_files(root, firmware_text=firmware)
+    bad_migration_gate = pc.check_file_contains_invariants(manifest, root)
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
     pages = Path(".github/workflows/pages.yml").read_text().replace(
         "--pattern 'lalapad-gen2-rmk-peripheral-dfu.zip'",
         "--pattern 'lalapad-gen2-rmk-left-dfu.zip'",
@@ -6191,6 +6312,7 @@ def pack(results):
 print(json.dumps({
     "ok": pack(ok),
     "bad_firmware": pack(bad_firmware),
+    "bad_migration_gate": pack(bad_migration_gate),
     "bad_pages": pack(bad_pages),
     "bad_app": pack(bad_app),
 }))
@@ -6206,19 +6328,36 @@ print(json.dumps({
 
     let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     let ok = parsed["ok"].as_array().unwrap();
-    assert_eq!(ok.len(), 3);
+    assert_eq!(ok.len(), 4);
     assert!(ok.iter().all(|result| result["kind"] == "release_workflow"));
     assert_eq!(
         ok.iter()
             .map(|result| result["passed"].as_i64().unwrap())
             .sum::<i64>(),
-        32
+        45
     );
     assert_eq!(
         ok.iter()
             .map(|result| result["total"].as_i64().unwrap())
             .sum::<i64>(),
-        32
+        45
+    );
+
+    let bad_migration_gate = parsed["bad_migration_gate"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| {
+            result["id"] == "firmware_workflow_runs_complete_migration_gate_before_build"
+        })
+        .expect("changed firmware migration gate result is missing");
+    assert_eq!(bad_migration_gate["kind"], "release_workflow");
+    assert_eq!(bad_migration_gate["ok"], false);
+    assert!(
+        bad_migration_gate["message"]
+            .as_str()
+            .unwrap()
+            .contains("cargo make porting-coverage")
     );
 
     let bad_firmware = parsed["bad_firmware"]

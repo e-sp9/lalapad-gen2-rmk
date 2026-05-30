@@ -306,6 +306,10 @@ Release-workflow checks keep the CI-generated DFU zip names, GitHub Release
 asset list, generated artifact hash manifest, Pages bundling workflow, and
 web-flasher bundled URLs aligned so a renamed artifact cannot pass software
 migration while breaking browser flashing.
+They also pin the firmware workflow's source-backed migration gate, host
+parity tests, RMK behavior tests, and release build command in the migration
+coverage denominator so CI cannot silently stop exercising the ZMK-derived RMK
+runtime scenarios before firmware generation.
 The same command also prints an explicit IQS9151 symbol porting status summary:
 `ported`, `ported_by_behavior`, and `ported_by_config_image` count as
 implemented, while `not_ported` entries are the remaining software-porting
@@ -352,6 +356,10 @@ visible Vial keys whose compiled default actions are `LT(1, Space, FAST_LAYER)`
 and `LT(2, Enter, FAST_LAYER)`, including the tap key, hold layer, and Morse
 profile name. This makes a later move back to `LCtrl`, `MO(...)`, or a hidden
 Vial position visible as a software migration failure before flashing.
+Runtime scenario coverage also requires each registered RMK scenario function
+to remain an active `#[test]` and not be `#[ignore]`, and includes LaLaPad's
+Q+W/Escape, A+S/Tab, J+K/Language1, and D+F/Language2 combo outputs as RMK
+host-runtime HID checks rather than only static combo inventory entries.
 
 `tools/migration_status.py` is the combined dashboard for release review. It
 runs the same source-backed software checks, the coverage-denominator baseline,

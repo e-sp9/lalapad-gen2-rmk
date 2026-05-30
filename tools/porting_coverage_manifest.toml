@@ -2919,6 +2919,25 @@ script_contains = [
 ]
 
 [[file_contains_invariants]]
+id = "firmware_workflow_runs_complete_migration_gate_before_build"
+file = ".github/workflows/firmware.yml"
+needles = [
+  "Checkout upstream ZMK config",
+  "repository: e-sp9/zmk-config-LalaPadGen2",
+  "cargo make porting-coverage",
+  "python3 tools/migration_status.py",
+  "--coverage-baseline tools/porting_coverage_baseline.toml",
+  "--hardware-baseline tools/hardware_validation_baseline.toml",
+  "--zmk-keymap zmk-config-LalaPadGen2/config/lalapadgen2.keymap",
+  "--require-zmk-source",
+  "--require-software-complete",
+  "--require-hardware-classified",
+  "cargo test --lib --target x86_64-unknown-linux-gnu",
+  "cargo make rmk-behavior-tests",
+  "cargo make build",
+]
+
+[[file_contains_invariants]]
 id = "firmware_workflow_dfu_and_release_artifacts"
 file = ".github/workflows/firmware.yml"
 needles = [
@@ -3290,6 +3309,50 @@ needles = [
   "[3, 7, true",
   "[3, 7, false",
   "kc_to_u8!(Enter)",
+]
+
+[[runtime_scenario_tests]]
+id = "runtime_combo_q_w_outputs_escape"
+file = "vendor/rmk-0.8.2/tests/keyboard_lalapad_zmk_scenarios_test.rs"
+function = "combo_q_w_outputs_escape"
+needles = [
+  "fn combo_q_w_outputs_escape()",
+  "[0, 0, true",
+  "[0, 1, true",
+  "kc_to_u8!(Escape)",
+]
+
+[[runtime_scenario_tests]]
+id = "runtime_combo_a_s_outputs_tab"
+file = "vendor/rmk-0.8.2/tests/keyboard_lalapad_zmk_scenarios_test.rs"
+function = "combo_a_s_outputs_tab"
+needles = [
+  "fn combo_a_s_outputs_tab()",
+  "[1, 0, true",
+  "[1, 1, true",
+  "kc_to_u8!(Tab)",
+]
+
+[[runtime_scenario_tests]]
+id = "runtime_combo_j_k_outputs_language1"
+file = "vendor/rmk-0.8.2/tests/keyboard_lalapad_zmk_scenarios_test.rs"
+function = "combo_j_k_outputs_language1"
+needles = [
+  "fn combo_j_k_outputs_language1()",
+  "[1, 8, true",
+  "[1, 9, true",
+  "kc_to_u8!(Language1)",
+]
+
+[[runtime_scenario_tests]]
+id = "runtime_combo_d_f_outputs_language2"
+file = "vendor/rmk-0.8.2/tests/keyboard_lalapad_zmk_scenarios_test.rs"
+function = "combo_d_f_outputs_language2"
+needles = [
+  "fn combo_d_f_outputs_language2()",
+  "[1, 2, true",
+  "[1, 3, true",
+  "kc_to_u8!(Language2)",
 ]
 
 [[runtime_scenario_tests]]

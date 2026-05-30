@@ -2,7 +2,8 @@ pub mod common;
 
 use embassy_time::{Duration, Timer};
 use rmk::channel::{KEY_EVENT_CHANNEL, KEYBOARD_REPORT_CHANNEL};
-use rmk::config::{BehaviorConfig, MorsesConfig, PositionalConfig};
+use rmk::combo::{Combo, ComboConfig};
+use rmk::config::{BehaviorConfig, CombosConfig, MorsesConfig, PositionalConfig};
 use rmk::event::KeyboardEvent;
 use rmk::hid::Report;
 use rmk::keyboard::Keyboard;
@@ -31,8 +32,8 @@ const fn lt(layer: u8, key: KeyCode) -> KeyAction {
 fn lalapad_keymap() -> [[[KeyAction; 12]; 7]; 4] {
     [
         layer!([
-            [a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), k!(Y), a!(No), a!(No), a!(No), a!(No)],
-            [a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), k!(H), a!(No), a!(No), a!(No), a!(No)],
+            [k!(Q), k!(W), a!(No), a!(No), a!(No), a!(No), a!(No), k!(Y), a!(No), a!(No), a!(No), a!(No)],
+            [k!(A), k!(S), k!(D), k!(F), a!(No), a!(No), a!(No), k!(H), k!(J), k!(K), a!(No), a!(No)],
             [a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), k!(N), a!(No), a!(No), a!(No), a!(No)],
             [a!(No), a!(No), a!(No), a!(No), lt(1, KeyCode::Space), a!(No), a!(No), lt(2, KeyCode::Enter), a!(No), a!(No), a!(No), a!(No)],
             [a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No)],
@@ -80,6 +81,7 @@ fn create_lalapad_keyboard() -> Keyboard<'static, 7, 12, 4> {
             default_profile: FAST_LAYER,
             ..Default::default()
         },
+        combo: lalapad_combos_config(),
         ..Default::default()
     });
     static KEY_CONFIG: static_cell::StaticCell<PositionalConfig<7, 12>> =
@@ -90,6 +92,38 @@ fn create_lalapad_keyboard() -> Keyboard<'static, 7, 12, 4> {
         per_key_config,
         behavior_config,
     ))
+}
+
+fn lalapad_combos_config() -> CombosConfig {
+    CombosConfig {
+        combos: [
+            Some(Combo::new(ComboConfig::new(
+                [k!(Q), k!(W)].to_vec(),
+                k!(Escape),
+                Some(0),
+            ))),
+            Some(Combo::new(ComboConfig::new(
+                [k!(A), k!(S)].to_vec(),
+                k!(Tab),
+                Some(0),
+            ))),
+            Some(Combo::new(ComboConfig::new(
+                [k!(J), k!(K)].to_vec(),
+                k!(Language1),
+                Some(0),
+            ))),
+            Some(Combo::new(ComboConfig::new(
+                [k!(D), k!(F)].to_vec(),
+                k!(Language2),
+                Some(0),
+            ))),
+            None,
+            None,
+            None,
+            None,
+        ],
+        timeout: Duration::from_millis(50),
+    }
 }
 
 fn assert_no_pending_hid_reports() {
@@ -203,6 +237,74 @@ rusty_fork_test! {
             ],
             expected_reports: [
                 [0, [kc_to_u8!(Enter), 0, 0, 0, 0, 0]],
+                [0, [0, 0, 0, 0, 0, 0]],
+            ]
+        };
+    }
+
+    #[test]
+    fn combo_q_w_outputs_escape() {
+        key_sequence_test! {
+            keyboard: create_lalapad_keyboard(),
+            sequence: [
+                [0, 0, true, 10],
+                [0, 1, true, 10],
+                [0, 0, false, 10],
+                [0, 1, false, 10],
+            ],
+            expected_reports: [
+                [0, [kc_to_u8!(Escape), 0, 0, 0, 0, 0]],
+                [0, [0, 0, 0, 0, 0, 0]],
+            ]
+        };
+    }
+
+    #[test]
+    fn combo_a_s_outputs_tab() {
+        key_sequence_test! {
+            keyboard: create_lalapad_keyboard(),
+            sequence: [
+                [1, 0, true, 10],
+                [1, 1, true, 10],
+                [1, 0, false, 10],
+                [1, 1, false, 10],
+            ],
+            expected_reports: [
+                [0, [kc_to_u8!(Tab), 0, 0, 0, 0, 0]],
+                [0, [0, 0, 0, 0, 0, 0]],
+            ]
+        };
+    }
+
+    #[test]
+    fn combo_j_k_outputs_language1() {
+        key_sequence_test! {
+            keyboard: create_lalapad_keyboard(),
+            sequence: [
+                [1, 8, true, 10],
+                [1, 9, true, 10],
+                [1, 8, false, 10],
+                [1, 9, false, 10],
+            ],
+            expected_reports: [
+                [0, [kc_to_u8!(Language1), 0, 0, 0, 0, 0]],
+                [0, [0, 0, 0, 0, 0, 0]],
+            ]
+        };
+    }
+
+    #[test]
+    fn combo_d_f_outputs_language2() {
+        key_sequence_test! {
+            keyboard: create_lalapad_keyboard(),
+            sequence: [
+                [1, 2, true, 10],
+                [1, 3, true, 10],
+                [1, 2, false, 10],
+                [1, 3, false, 10],
+            ],
+            expected_reports: [
+                [0, [kc_to_u8!(Language2), 0, 0, 0, 0, 0]],
                 [0, [0, 0, 0, 0, 0, 0]],
             ]
         };

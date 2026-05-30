@@ -3979,37 +3979,51 @@ def check_runtime_scenario_tests(manifest: dict[str, Any], project_root: Path) -
         target_file = str(check["file"])
         needles = list(check["needles"])
         function_name = check.get("function")
+        total = len(needles) + (2 if function_name else 0)
         try:
             text = (project_root / target_file).read_text()
         except OSError as e:
-            results.append(Result(check["id"], "runtime_scenario", 0, len(needles), str(e)))
+            results.append(Result(check["id"], "runtime_scenario", 0, total, str(e)))
             continue
         scope = text
         scope_description = target_file
+        passed = 0
+        messages: list[str] = []
         if function_name:
-            function_scope = extract_rust_function_scope(text, str(function_name))
+            function_name = str(function_name)
+            function_scope = extract_rust_function_scope(text, function_name)
+            attributes = extract_rust_function_attributes(text, function_name)
             if function_scope is None:
                 results.append(
                     Result(
                         check["id"],
                         "runtime_scenario",
                         0,
-                        len(needles),
+                        total,
                         f"{target_file} missing function {function_name!r}",
                     )
                 )
                 continue
             scope = function_scope
             scope_description = f"{target_file}::{function_name}"
-        passed = sum(1 for needle in needles if needle in scope)
+            if rust_attributes_contain_test(attributes):
+                passed += 1
+            else:
+                messages.append(f"{scope_description} must be marked #[test]")
+            if not rust_attributes_contain_ignore(attributes):
+                passed += 1
+            else:
+                messages.append(f"{scope_description} must not be ignored")
+        passed += sum(1 for needle in needles if needle in scope)
         missing = [needle for needle in needles if needle not in scope]
+        messages.extend(f"{scope_description} missing {needle!r}" for needle in missing)
         results.append(
             Result(
                 check["id"],
                 "runtime_scenario",
                 passed,
-                len(needles),
-                "ok" if not missing else f"{scope_description} missing {missing!r}",
+                total,
+                "ok" if not messages else "; ".join(messages),
             )
         )
     return results
