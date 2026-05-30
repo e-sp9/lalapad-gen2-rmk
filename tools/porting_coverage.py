@@ -4215,6 +4215,48 @@ def check_runtime_keymap_mirror_coverage(
     ]
 
 
+def runtime_keymap_mirror_fixture_positions(
+    manifest: dict[str, Any], project_root: Path
+) -> set[tuple[int, int, int]]:
+    positions: set[tuple[int, int, int]] = set()
+    for check in manifest.get("runtime_keymap_mirrors", []):
+        try:
+            text = (project_root / str(check["file"])).read_text()
+        except OSError:
+            continue
+        function_scope = extract_rust_function_scope(text, str(check["function"]))
+        if function_scope is None:
+            continue
+        for layer, rows in enumerate(parse_rust_keymap_layers(function_scope)):
+            for row, cols in enumerate(rows):
+                for col, action in enumerate(cols):
+                    if normalize_rust_key_action(action) != "a!(No)":
+                        positions.add((layer, row, col))
+    return positions
+
+
+def check_runtime_keymap_mirror_fixture_coverage(
+    manifest: dict[str, Any], project_root: Path
+) -> list[Result]:
+    expected = runtime_keymap_mirror_fixture_positions(manifest, project_root)
+    actual = manifest_runtime_keymap_mirror_positions(manifest)
+    missing = sorted(expected - actual)
+    passed = len(expected) - len(missing)
+    messages = [
+        f"missing non-No runtime fixture mirror position L{layer}R{row}C{col}"
+        for layer, row, col in missing
+    ]
+    return [
+        Result(
+            "runtime_keymap_mirror_covers_non_no_fixture_cells",
+            "runtime_keymap_mirror",
+            passed,
+            len(expected),
+            "ok" if not messages else "; ".join(messages),
+        )
+    ]
+
+
 def check_runtime_scenario_tests(manifest: dict[str, Any], project_root: Path) -> list[Result]:
     results: list[Result] = []
     for check in manifest.get("runtime_scenario_tests", []):
@@ -5368,6 +5410,7 @@ def run(
     results.extend(check_rust_unit_tests(manifest, project_root))
     results.extend(check_runtime_keymap_mirrors(manifest, keyboard, project_root))
     results.extend(check_runtime_keymap_mirror_coverage(manifest, keyboard))
+    results.extend(check_runtime_keymap_mirror_fixture_coverage(manifest, project_root))
     results.extend(check_runtime_scenario_tests(manifest, project_root))
     results.extend(check_makefile_task_invariants(manifest, project_root))
     results.extend(check_trackpad_virtual_buttons(manifest, keyboard, project_root))

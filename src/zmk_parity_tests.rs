@@ -3102,6 +3102,20 @@ fn porting_coverage_includes_exact_rmk_inventory_gates() {
         runtime_keymap_mirror_coverage_result["total"]
     );
 
+    let runtime_keymap_mirror_fixture_coverage_result = results
+        .iter()
+        .find(|result| result["id"] == "runtime_keymap_mirror_covers_non_no_fixture_cells")
+        .expect("runtime keymap mirror fixture coverage result is missing");
+    assert_eq!(
+        runtime_keymap_mirror_fixture_coverage_result["kind"],
+        "runtime_keymap_mirror"
+    );
+    assert_eq!(runtime_keymap_mirror_fixture_coverage_result["ok"], true);
+    assert_eq!(
+        runtime_keymap_mirror_fixture_coverage_result["passed"],
+        runtime_keymap_mirror_fixture_coverage_result["total"]
+    );
+
     if default_zmk_config_dir().is_some() {
         let source_scenarios: Vec<_> = results
             .iter()
@@ -4135,6 +4149,7 @@ manifest = pc.load_toml(Path("tools/porting_coverage_manifest.toml"))
 keyboard = pc.load_toml(Path("keyboard.toml"))
 ok = pc.check_runtime_keymap_mirrors(manifest, keyboard, Path("."))[0]
 coverage_ok = pc.check_runtime_keymap_mirror_coverage(manifest, keyboard)[0]
+fixture_coverage_ok = pc.check_runtime_keymap_mirror_fixture_coverage(manifest, Path("."))[0]
 
 bad_keyboard = copy.deepcopy(keyboard)
 bad_keyboard["layout"]["keymap"][0][3][4] = "LCtrl"
@@ -4153,6 +4168,9 @@ missing_position_manifest["runtime_keymap_mirrors"][0]["positions"] = [
 ]
 missing_position = pc.check_runtime_keymap_mirror_coverage(
     missing_position_manifest, keyboard
+)[0]
+missing_fixture_position = pc.check_runtime_keymap_mirror_fixture_coverage(
+    missing_position_manifest, Path(".")
 )[0]
 
 new_runtime_manifest = copy.deepcopy(manifest)
@@ -4185,8 +4203,10 @@ def pack(result):
 print(json.dumps({
     "ok": pack(ok),
     "coverage_ok": pack(coverage_ok),
+    "fixture_coverage_ok": pack(fixture_coverage_ok),
     "keyboard_drift": pack(keyboard_drift),
     "missing_position": pack(missing_position),
+    "missing_fixture_position": pack(missing_fixture_position),
     "new_runtime_coordinate": pack(new_runtime_coordinate),
     "fixture_drift": pack(fixture_drift),
 }))
@@ -4202,13 +4222,20 @@ print(json.dumps({
 
     let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(parsed["ok"]["kind"], "runtime_keymap_mirror");
-    assert_eq!(parsed["ok"]["total"].as_i64(), Some(36));
-    assert_eq!(parsed["ok"]["passed"].as_i64(), Some(36));
+    assert_eq!(parsed["ok"]["total"].as_i64(), Some(60));
+    assert_eq!(parsed["ok"]["passed"].as_i64(), Some(60));
     assert_eq!(parsed["ok"]["ok"], true);
     assert_eq!(parsed["coverage_ok"]["kind"], "runtime_keymap_mirror");
     assert_eq!(parsed["coverage_ok"]["total"].as_i64(), Some(29));
     assert_eq!(parsed["coverage_ok"]["passed"].as_i64(), Some(29));
     assert_eq!(parsed["coverage_ok"]["ok"], true);
+    assert_eq!(
+        parsed["fixture_coverage_ok"]["kind"],
+        "runtime_keymap_mirror"
+    );
+    assert_eq!(parsed["fixture_coverage_ok"]["total"].as_i64(), Some(60));
+    assert_eq!(parsed["fixture_coverage_ok"]["passed"].as_i64(), Some(60));
+    assert_eq!(parsed["fixture_coverage_ok"]["ok"], true);
 
     assert_eq!(parsed["keyboard_drift"]["kind"], "runtime_keymap_mirror");
     assert_eq!(parsed["keyboard_drift"]["ok"], false);
@@ -4229,6 +4256,18 @@ print(json.dumps({
     assert_eq!(parsed["missing_position"]["ok"], false);
     assert!(
         parsed["missing_position"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("L0R3C9")
+    );
+
+    assert_eq!(
+        parsed["missing_fixture_position"]["kind"],
+        "runtime_keymap_mirror"
+    );
+    assert_eq!(parsed["missing_fixture_position"]["ok"], false);
+    assert!(
+        parsed["missing_fixture_position"]["message"]
             .as_str()
             .unwrap()
             .contains("L0R3C9")

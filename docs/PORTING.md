@@ -263,7 +263,10 @@ shipped `keyboard.toml`, so a runtime test cannot keep passing against a stale
 fixture after the real firmware keymap changes. A companion gate derives the
 required mirror coordinates from the runtime scenario inventory and the
 scenario layer-resolution manifest, so adding a new runtime scenario without
-covering its coordinates also fails the migration denominator.
+covering its coordinates also fails the migration denominator. The mirror
+coverage gate also scans the runtime fixture itself and requires every non-`No`
+cell, including transparent fallthrough cells, to be mirrored against
+`keyboard.toml`.
 The gate additionally resolves every position on layer 1, layer 2, and the
 system tri-layer against the ZMK source keymap to catch transparent-key
 fallthrough drift beyond the hand-written representative scenarios.
