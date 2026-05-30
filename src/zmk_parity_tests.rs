@@ -4925,6 +4925,15 @@ fn porting_coverage_includes_exact_rmk_inventory_gates() {
             "RMK runtime scenario coverage is missing for source-backed scenario {scenario_id}"
         );
     }
+    for timeout_scenario_id in [
+        "runtime_space_timeout_hold_y_selects_secondary_layer",
+        "runtime_enter_timeout_hold_y_selects_tertiary_layer",
+    ] {
+        assert!(
+            runtime_scenario_ids.contains(timeout_scenario_id),
+            "RMK runtime coverage must include hold_timeout-driven thumb-layer scenario {timeout_scenario_id}"
+        );
+    }
 
     let keymap_shape = results
         .iter()

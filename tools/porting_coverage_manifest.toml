@@ -3600,6 +3600,17 @@ needles = [
 ]
 
 [[runtime_scenario_tests]]
+id = "runtime_space_timeout_hold_y_selects_secondary_layer"
+file = "vendor/rmk-0.8.2/tests/keyboard_lalapad_zmk_scenarios_test.rs"
+function = "space_timeout_hold_y_selects_secondary_layer"
+needles = [
+  "fn space_timeout_hold_y_selects_secondary_layer()",
+  "[3, 4, true, 10]",
+  "[0, 7, true, 250]",
+  "kc_to_u8!(NumLock)",
+]
+
+[[runtime_scenario_tests]]
 id = "runtime_space_hold_u_selects_keypad_7"
 file = "vendor/rmk-0.8.2/tests/keyboard_lalapad_zmk_scenarios_test.rs"
 function = "space_hold_u_selects_keypad_7"
@@ -3640,6 +3651,17 @@ needles = [
   "fn enter_hold_y_selects_tertiary_layer()",
   "[3, 7, true",
   "[0, 7, true",
+  "kc_to_u8!(PageUp)",
+]
+
+[[runtime_scenario_tests]]
+id = "runtime_enter_timeout_hold_y_selects_tertiary_layer"
+file = "vendor/rmk-0.8.2/tests/keyboard_lalapad_zmk_scenarios_test.rs"
+function = "enter_timeout_hold_y_selects_tertiary_layer"
+needles = [
+  "fn enter_timeout_hold_y_selects_tertiary_layer()",
+  "[3, 7, true, 10]",
+  "[0, 7, true, 250]",
   "kc_to_u8!(PageUp)",
 ]
 

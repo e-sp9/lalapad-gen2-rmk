@@ -262,6 +262,10 @@ actions are checked by asserting that the sequence does not fall through to a
 keyboard HID report from a lower layer. The runtime inventory gate scopes its
 needles to the declared Rust test function, preventing an expected action in one
 test from satisfying another scenario's coverage entry.
+Space and Enter also have timeout-driven RMK runtime scenarios: each thumb key
+is held past the documented `FAST_LAYER` `hold_timeout` before pressing `Y`, so
+both the hold-on-other-press path and the long-hold path must select the
+ZMK-derived layer output.
 It also parses the hand-written RMK runtime-test `lalapad_keymap()` fixture and
 checks its layer/row/column shape against the shipped `keyboard.toml`, and then
 compares every scenario-relevant cell by layer, row, and column against that

@@ -329,6 +329,23 @@ rusty_fork_test! {
     }
 
     #[test]
+    fn space_timeout_hold_y_selects_secondary_layer() {
+        key_sequence_test! {
+            keyboard: create_lalapad_keyboard(),
+            sequence: [
+                [3, 4, true, 10],
+                [0, 7, true, 250],
+                [0, 7, false, 10],
+                [3, 4, false, 10],
+            ],
+            expected_reports: [
+                [0, [kc_to_u8!(NumLock), 0, 0, 0, 0, 0]],
+                [0, [0, 0, 0, 0, 0, 0]],
+            ]
+        };
+    }
+
+    #[test]
     fn space_hold_u_selects_keypad_7() {
         key_sequence_test! {
             keyboard: create_lalapad_keyboard(),
@@ -387,6 +404,23 @@ rusty_fork_test! {
                 [3, 7, true, 10],
                 [0, 7, true, 10],
                 [0, 7, false, 100],
+                [3, 7, false, 10],
+            ],
+            expected_reports: [
+                [0, [kc_to_u8!(PageUp), 0, 0, 0, 0, 0]],
+                [0, [0, 0, 0, 0, 0, 0]],
+            ]
+        };
+    }
+
+    #[test]
+    fn enter_timeout_hold_y_selects_tertiary_layer() {
+        key_sequence_test! {
+            keyboard: create_lalapad_keyboard(),
+            sequence: [
+                [3, 7, true, 10],
+                [0, 7, true, 250],
+                [0, 7, false, 10],
                 [3, 7, false, 10],
             ],
             expected_reports: [
