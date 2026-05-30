@@ -165,6 +165,7 @@ def hardware_status(
 def firmware_artifact_status(
     artifact_manifest_path: Path | None,
     required_firmware_ref: str | None,
+    artifact_root: Path,
 ) -> dict[str, Any] | None:
     if artifact_manifest_path is None:
         return None
@@ -247,6 +248,31 @@ def firmware_artifact_status(
             errors.append(
                 f"firmware artifact manifest {path or '<missing path>'} sha256 must be a SHA256 hex string"
             )
+        if path:
+            artifact_path = Path(path)
+            if artifact_path.is_absolute():
+                errors.append(f"firmware artifact manifest {path} path must be relative")
+            else:
+                artifact_path = artifact_root / artifact_path
+                try:
+                    actual_size = artifact_path.stat().st_size
+                except OSError as e:
+                    errors.append(
+                        f"firmware artifact manifest {path} file is not readable: {e}"
+                    )
+                else:
+                    if isinstance(size, int) and actual_size != size:
+                        errors.append(
+                            f"firmware artifact manifest {path} size {size} "
+                            f"does not match file size {actual_size}"
+                        )
+                    if SHA256_RE.fullmatch(sha256):
+                        actual_sha256 = firmware_artifact_manifest.sha256_file(artifact_path)
+                        if actual_sha256 != sha256:
+                            errors.append(
+                                f"firmware artifact manifest {path} sha256 {sha256!r} "
+                                f"does not match file {actual_sha256!r}"
+                            )
 
     pair_digest_payload = json.dumps(
         [
@@ -302,6 +328,7 @@ def build_status(args: argparse.Namespace) -> MigrationStatus:
     firmware_artifacts = firmware_artifact_status(
         args.firmware_artifact_manifest,
         args.require_firmware_ref,
+        args.artifact_root,
     )
     artifact_errors = firmware_artifacts["errors"] if firmware_artifacts else []
     if args.require_hardware_validated and firmware_artifacts is None:
@@ -562,6 +589,12 @@ def main() -> None:
         type=Path,
         default=None,
         help="validate hardware evidence against a generated firmware artifact hash manifest",
+    )
+    parser.add_argument(
+        "--artifact-root",
+        type=Path,
+        default=Path("."),
+        help="directory used to resolve relative paths in --firmware-artifact-manifest",
     )
     parser.add_argument("--require-firmware-ref", metavar="REF")
     parser.add_argument("--require-software-complete", action="store_true")

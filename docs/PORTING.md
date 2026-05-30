@@ -521,8 +521,11 @@ The combined migration gate requires `--firmware-artifact-manifest` whenever
 `--require-hardware-validated` is used. Whenever a firmware artifact manifest
 is supplied, every validated hardware evidence note must mention that
 manifest's `pair_sha256`, so both partial hardware dashboards and final
-hardware claims stay tied to the exact generated UF2 artifact hashes. Plain
-report commands still render these as dashboard errors; add
+hardware claims stay tied to the exact generated UF2 artifact hashes. The
+dashboard also re-reads the artifact files under `--artifact-root` (default:
+the current directory) and checks their recorded size and SHA256, so a stale
+`firmware-artifacts.local.json` cannot silently validate a different local UF2
+pair. Plain report commands still render these as dashboard errors; add
 `--require-hardware-classified` or use the final cargo-make gates when stale or
 incomplete artifact evidence should make the command fail.
 Use `--evidence-template > hardware-validation-evidence.local.toml` to generate

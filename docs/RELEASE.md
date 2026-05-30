@@ -62,7 +62,10 @@ still be source-complete, but it is not yet fully validated against real
 hardware for that firmware reference. When `--firmware-artifact-manifest` is
 present, the final gate also requires each validated hardware evidence note to
 mention the artifact manifest `pair_sha256`, so the observation is bound to the
-exact central/peripheral UF2 pair that was flashed. `cargo make
+exact central/peripheral UF2 pair that was flashed. It also re-reads the local
+artifact files listed by the manifest under `--artifact-root` (the current
+directory by default) and rejects stale manifests whose size or SHA256 no
+longer matches the current files. `cargo make
 hardware-validation-session-current` pre-fills that hash in the local evidence
 overlay generated for a clean current-ref bench session. Direct
 `tools/migration_status.py --require-hardware-validated` use also requires

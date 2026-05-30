@@ -146,33 +146,51 @@ fn complete_hardware_evidence_overlay_with_pair_sha(
     )
 }
 
-fn test_firmware_artifact_manifest(firmware_ref: &str, pair_sha256: &str) -> String {
-    format!(
-        r#"{{
-  "artifact_count": 2,
-  "artifacts": [
-    {{
-      "kind": "uf2",
-      "path": "firmware/normal/lalapad-gen2-rmk-central.uf2",
-      "role": "central",
-      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      "side": "right",
-      "size": 123
-    }},
-    {{
-      "kind": "uf2",
-      "path": "firmware/normal/lalapad-gen2-rmk-peripheral.uf2",
-      "role": "peripheral",
-      "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      "side": "left",
-      "size": 456
-    }}
-  ],
-  "firmware_ref": "{firmware_ref}",
-  "pair_sha256": "{pair_sha256}"
-}}
-"#,
-    )
+fn test_firmware_artifact_fixture(
+    firmware_ref: &str,
+) -> (std::path::PathBuf, std::path::PathBuf, String) {
+    let root = std::env::temp_dir().join(format!(
+        "lalapad-firmware-artifacts-{}-{firmware_ref}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&root);
+    for (path, contents) in [
+        (
+            "firmware/normal/lalapad-gen2-rmk-central.uf2",
+            b"central uf2".as_slice(),
+        ),
+        (
+            "firmware/normal/lalapad-gen2-rmk-peripheral.uf2",
+            b"peripheral uf2".as_slice(),
+        ),
+    ] {
+        let target = root.join(path);
+        std::fs::create_dir_all(target.parent().unwrap()).unwrap();
+        std::fs::write(target, contents).unwrap();
+    }
+    let manifest_path = root.join("firmware-artifacts.local.json");
+    let output = Command::new("python3")
+        .arg("tools/firmware_artifact_manifest.py")
+        .arg("--root")
+        .arg(&root)
+        .arg("--firmware-ref")
+        .arg(firmware_ref)
+        .arg("--require-uf2")
+        .arg("--output")
+        .arg(&manifest_path)
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "failed to generate test firmware artifact manifest\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let parsed: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&manifest_path).unwrap()).unwrap();
+    let pair_sha256 = parsed["pair_sha256"].as_str().unwrap().to_string();
+    (root, manifest_path, pair_sha256)
 }
 
 fn run_python(script: &str) -> std::process::Output {
@@ -1037,14 +1055,9 @@ right = 1
 #[test]
 fn migration_status_accepts_complete_hardware_evidence_for_final_gate() {
     let firmware_ref = "test-firmware-ref";
-    let pair_sha256 = "177853881150ba3f48109a796c7ac539c2d5d4c73a1491bd198c76fc8ee3c786";
-    let evidence = complete_hardware_evidence_overlay_with_pair_sha(firmware_ref, pair_sha256);
+    let (artifact_root, artifact_path, pair_sha256) = test_firmware_artifact_fixture(firmware_ref);
+    let evidence = complete_hardware_evidence_overlay_with_pair_sha(firmware_ref, &pair_sha256);
     let path = write_temp_file("migration-status-complete-evidence", &evidence);
-    let artifact_manifest = test_firmware_artifact_manifest(firmware_ref, pair_sha256);
-    let artifact_path = write_temp_file(
-        "migration-status-complete-firmware-artifacts",
-        &artifact_manifest,
-    );
     let zmk_keymap_path = default_zmk_config_dir()
         .expect("complete final gate requires upstream ZMK source")
         .join("lalapadgen2.keymap");
@@ -1062,6 +1075,8 @@ fn migration_status_accepts_complete_hardware_evidence_for_final_gate() {
         path.to_str().unwrap(),
         "--firmware-artifact-manifest",
         artifact_path.to_str().unwrap(),
+        "--artifact-root",
+        artifact_root.to_str().unwrap(),
         "--require-zmk-source",
         "--require-firmware-ref",
         firmware_ref,
@@ -1126,6 +1141,8 @@ fn migration_status_accepts_complete_hardware_evidence_for_final_gate() {
         path.to_str().unwrap(),
         "--firmware-artifact-manifest",
         artifact_path.to_str().unwrap(),
+        "--artifact-root",
+        artifact_root.to_str().unwrap(),
         "--require-zmk-source",
         "--require-firmware-ref",
         firmware_ref,
@@ -1155,13 +1172,15 @@ fn migration_status_accepts_complete_hardware_evidence_for_final_gate() {
         path.to_str().unwrap(),
         "--firmware-artifact-manifest",
         artifact_path.to_str().unwrap(),
+        "--artifact-root",
+        artifact_root.to_str().unwrap(),
         "--require-zmk-source",
         "--require-firmware-ref",
         "stale-firmware-ref",
         "--require-hardware-validated",
     ]);
     let _ = std::fs::remove_file(&path);
-    let _ = std::fs::remove_file(&artifact_path);
+    let _ = std::fs::remove_dir_all(&artifact_root);
 
     assert!(
         !stale_output.status.success(),
@@ -1174,9 +1193,9 @@ fn migration_status_accepts_complete_hardware_evidence_for_final_gate() {
 #[test]
 fn migration_status_ties_hardware_evidence_to_firmware_artifact_manifest() {
     let firmware_ref = "artifact-backed-firmware-ref";
-    let pair_sha256 = "177853881150ba3f48109a796c7ac539c2d5d4c73a1491bd198c76fc8ee3c786";
+    let (artifact_root, artifact_path, pair_sha256) = test_firmware_artifact_fixture(firmware_ref);
     let evidence_without_pair_sha = complete_hardware_evidence_overlay(firmware_ref);
-    let evidence = complete_hardware_evidence_overlay_with_pair_sha(firmware_ref, pair_sha256);
+    let evidence = complete_hardware_evidence_overlay_with_pair_sha(firmware_ref, &pair_sha256);
     let evidence_one_missing_pair_sha = evidence.replacen(
         &format!("firmware artifact pair_sha256 {pair_sha256}; "),
         "",
@@ -1191,8 +1210,6 @@ fn migration_status_ties_hardware_evidence_to_firmware_artifact_manifest() {
         &evidence_one_missing_pair_sha,
     );
     let evidence_path = write_temp_file("migration-status-artifact-backed-evidence", &evidence);
-    let artifact_manifest = test_firmware_artifact_manifest(firmware_ref, pair_sha256);
-    let artifact_path = write_temp_file("migration-status-firmware-artifacts", &artifact_manifest);
 
     let output = run_migration_status(&[
         "--json",
@@ -1204,6 +1221,8 @@ fn migration_status_ties_hardware_evidence_to_firmware_artifact_manifest() {
         evidence_path.to_str().unwrap(),
         "--firmware-artifact-manifest",
         artifact_path.to_str().unwrap(),
+        "--artifact-root",
+        artifact_root.to_str().unwrap(),
         "--require-software-complete",
         "--require-hardware-classified",
         "--require-hardware-validated",
@@ -1221,7 +1240,7 @@ fn migration_status_ties_hardware_evidence_to_firmware_artifact_manifest() {
     );
     assert_eq!(
         parsed["firmware_artifacts"]["pair_sha256"].as_str(),
-        Some(pair_sha256)
+        Some(pair_sha256.as_str())
     );
     assert_eq!(parsed["fully_validated"].as_bool(), Some(true));
 
@@ -1234,6 +1253,8 @@ fn migration_status_ties_hardware_evidence_to_firmware_artifact_manifest() {
         evidence_without_pair_sha_path.to_str().unwrap(),
         "--firmware-artifact-manifest",
         artifact_path.to_str().unwrap(),
+        "--artifact-root",
+        artifact_root.to_str().unwrap(),
         "--require-hardware-validated",
     ]);
     assert!(
@@ -1244,7 +1265,7 @@ fn migration_status_ties_hardware_evidence_to_firmware_artifact_manifest() {
     );
     let stdout = String::from_utf8_lossy(&missing_pair_sha.stdout);
     assert!(stdout.contains("pair_sha256"));
-    assert!(stdout.contains(pair_sha256));
+    assert!(stdout.contains(&pair_sha256));
 
     let missing_pair_sha_json = run_migration_status(&[
         "--json",
@@ -1256,6 +1277,8 @@ fn migration_status_ties_hardware_evidence_to_firmware_artifact_manifest() {
         evidence_without_pair_sha_path.to_str().unwrap(),
         "--firmware-artifact-manifest",
         artifact_path.to_str().unwrap(),
+        "--artifact-root",
+        artifact_root.to_str().unwrap(),
     ]);
     assert!(
         missing_pair_sha_json.status.success(),
@@ -1283,7 +1306,7 @@ fn migration_status_ties_hardware_evidence_to_firmware_artifact_manifest() {
             .as_array()
             .unwrap()
             .iter()
-            .all(|error| error.as_str().unwrap().contains(pair_sha256)),
+            .all(|error| error.as_str().unwrap().contains(&pair_sha256)),
         "artifact-backed report should reject every validated check missing the pair hash: {parsed:?}"
     );
 
@@ -1296,6 +1319,8 @@ fn migration_status_ties_hardware_evidence_to_firmware_artifact_manifest() {
         evidence_without_pair_sha_path.to_str().unwrap(),
         "--firmware-artifact-manifest",
         artifact_path.to_str().unwrap(),
+        "--artifact-root",
+        artifact_root.to_str().unwrap(),
         "--require-hardware-classified",
     ]);
     assert!(
@@ -1306,7 +1331,7 @@ fn migration_status_ties_hardware_evidence_to_firmware_artifact_manifest() {
     );
     let stdout = String::from_utf8_lossy(&missing_pair_sha_partial_gate.stdout);
     assert!(stdout.contains("pair_sha256"));
-    assert!(stdout.contains(pair_sha256));
+    assert!(stdout.contains(&pair_sha256));
 
     let one_missing_pair_sha = run_migration_status(&[
         "--coverage-baseline",
@@ -1317,6 +1342,8 @@ fn migration_status_ties_hardware_evidence_to_firmware_artifact_manifest() {
         evidence_one_missing_pair_sha_path.to_str().unwrap(),
         "--firmware-artifact-manifest",
         artifact_path.to_str().unwrap(),
+        "--artifact-root",
+        artifact_root.to_str().unwrap(),
         "--require-hardware-validated",
     ]);
     assert!(
@@ -1327,13 +1354,12 @@ fn migration_status_ties_hardware_evidence_to_firmware_artifact_manifest() {
     );
     let stdout = String::from_utf8_lossy(&one_missing_pair_sha.stdout);
     assert!(stdout.contains("iqs9151_right_i2c_identity"));
-    assert!(stdout.contains(pair_sha256));
+    assert!(stdout.contains(&pair_sha256));
 
+    let artifact_manifest = std::fs::read_to_string(&artifact_path).unwrap();
     let stale_artifact_manifest = artifact_manifest.replace(firmware_ref, "stale-artifact-ref");
-    let stale_artifact_path = write_temp_file(
-        "migration-status-stale-firmware-artifacts",
-        &stale_artifact_manifest,
-    );
+    let stale_artifact_path = artifact_path.with_file_name("stale-firmware-artifacts.local.json");
+    std::fs::write(&stale_artifact_path, stale_artifact_manifest).unwrap();
     let stale = run_migration_status(&[
         "--coverage-baseline",
         "tools/porting_coverage_baseline.toml",
@@ -1343,12 +1369,13 @@ fn migration_status_ties_hardware_evidence_to_firmware_artifact_manifest() {
         evidence_path.to_str().unwrap(),
         "--firmware-artifact-manifest",
         stale_artifact_path.to_str().unwrap(),
+        "--artifact-root",
+        artifact_root.to_str().unwrap(),
         "--require-hardware-validated",
     ]);
     let _ = std::fs::remove_file(&evidence_without_pair_sha_path);
     let _ = std::fs::remove_file(&evidence_one_missing_pair_sha_path);
     let _ = std::fs::remove_file(&evidence_path);
-    let _ = std::fs::remove_file(&artifact_path);
     let _ = std::fs::remove_file(&stale_artifact_path);
 
     assert!(
@@ -1362,13 +1389,12 @@ fn migration_status_ties_hardware_evidence_to_firmware_artifact_manifest() {
     assert!(stdout.contains("does not match required"));
 
     let tampered_artifact_manifest = artifact_manifest.replace(
-        pair_sha256,
+        &pair_sha256,
         "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
     );
-    let tampered_artifact_path = write_temp_file(
-        "migration-status-tampered-firmware-artifacts",
-        &tampered_artifact_manifest,
-    );
+    let tampered_artifact_path =
+        artifact_path.with_file_name("tampered-firmware-artifacts.local.json");
+    std::fs::write(&tampered_artifact_path, tampered_artifact_manifest).unwrap();
     let tampered = run_migration_status(&[
         "--coverage-baseline",
         "tools/porting_coverage_baseline.toml",
@@ -1376,6 +1402,8 @@ fn migration_status_ties_hardware_evidence_to_firmware_artifact_manifest() {
         "tools/hardware_validation_baseline.toml",
         "--firmware-artifact-manifest",
         tampered_artifact_path.to_str().unwrap(),
+        "--artifact-root",
+        artifact_root.to_str().unwrap(),
         "--require-hardware-classified",
     ]);
     let _ = std::fs::remove_file(&tampered_artifact_path);
@@ -1386,6 +1414,38 @@ fn migration_status_ties_hardware_evidence_to_firmware_artifact_manifest() {
         String::from_utf8_lossy(&tampered.stderr)
     );
     assert!(String::from_utf8_lossy(&tampered.stdout).contains("does not match artifact entries"));
+
+    let (stale_file_artifact_root, stale_file_artifact_path, _stale_file_pair_sha) =
+        test_firmware_artifact_fixture("artifact-file-drift-ref");
+    std::fs::write(
+        stale_file_artifact_path
+            .parent()
+            .unwrap()
+            .join("firmware/normal/lalapad-gen2-rmk-central.uf2"),
+        b"changed central uf2",
+    )
+    .unwrap();
+    let stale_file = run_migration_status(&[
+        "--coverage-baseline",
+        "tools/porting_coverage_baseline.toml",
+        "--hardware-baseline",
+        "tools/hardware_validation_baseline.toml",
+        "--firmware-artifact-manifest",
+        stale_file_artifact_path.to_str().unwrap(),
+        "--artifact-root",
+        stale_file_artifact_root.to_str().unwrap(),
+        "--require-hardware-classified",
+    ]);
+    let _ = std::fs::remove_dir_all(&stale_file_artifact_root);
+    assert!(
+        !stale_file.status.success(),
+        "migration status accepted artifact files that no longer match the manifest\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&stale_file.stdout),
+        String::from_utf8_lossy(&stale_file.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&stale_file.stdout);
+    assert!(stdout.contains("lalapad-gen2-rmk-central.uf2"));
+    assert!(stdout.contains("does not match file"));
 
     let bad_shape_path = write_temp_file("migration-status-bad-artifact-shape", "[]");
     let bad_shape = run_migration_status(&[
@@ -1398,6 +1458,7 @@ fn migration_status_ties_hardware_evidence_to_firmware_artifact_manifest() {
         "--require-hardware-classified",
     ]);
     let _ = std::fs::remove_file(&bad_shape_path);
+    let _ = std::fs::remove_dir_all(&artifact_root);
     assert!(
         !bad_shape.status.success(),
         "migration status accepted malformed artifact manifest shape\nstdout:\n{}\nstderr:\n{}",
