@@ -238,6 +238,9 @@ rather than regex-only checks.
 The thumb tap/hold layer-resolution scenarios are also cross-checked against
 the ZMK source keymap after documented RMK deltas are applied, so scenario
 expectations must stay source-backed instead of becoming RMK-only assertions.
+RMK runtime tests cover the thumb-layer order both ways: Space then Enter and
+Enter then Space must both activate the ZMK `1 + 2 => 3` system layer without
+leaking ordinary keyboard reports from system actions.
 The same golden scenarios are registered as RMK host-runtime tests, including
 the system tri-layer `User7`, `User0`, and `Reboot` positions. Those non-HID
 actions are checked by asserting that the sequence does not fall through to a

@@ -390,6 +390,51 @@ rusty_fork_test! {
     }
 
     #[test]
+    fn enter_space_hold_y_selects_system_layer_user7_without_keyboard_report() {
+        key_sequence_no_keyboard_reports_test! {
+            expected_action: [3, 0, 7] => k!(User7),
+            sequence: [
+                [3, 7, true, 10],
+                [3, 4, true, 10],
+                [0, 7, true, 10],
+                [0, 7, false, 100],
+                [3, 4, false, 10],
+                [3, 7, false, 10],
+            ]
+        };
+    }
+
+    #[test]
+    fn enter_space_hold_u_selects_bt_profile_0_without_keyboard_report() {
+        key_sequence_no_keyboard_reports_test! {
+            expected_action: [3, 0, 8] => k!(User0),
+            sequence: [
+                [3, 7, true, 10],
+                [3, 4, true, 10],
+                [0, 8, true, 10],
+                [0, 8, false, 100],
+                [3, 4, false, 10],
+                [3, 7, false, 10],
+            ]
+        };
+    }
+
+    #[test]
+    fn enter_space_hold_h_selects_reboot_without_keyboard_report() {
+        key_sequence_no_keyboard_reports_test! {
+            expected_action: [3, 1, 7] => k!(Reboot),
+            sequence: [
+                [3, 7, true, 10],
+                [3, 4, true, 10],
+                [1, 7, true, 10],
+                [1, 7, false, 100],
+                [3, 4, false, 10],
+                [3, 7, false, 10],
+            ]
+        };
+    }
+
+    #[test]
     fn space_enter_hold_keypad_zero_falls_through_system_transparency() {
         key_sequence_test! {
             keyboard: create_lalapad_keyboard(),
