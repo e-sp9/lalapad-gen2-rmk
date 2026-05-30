@@ -4737,7 +4737,7 @@ fn hardware_validation_rejects_placeholder_template_bindings() {
         "malformed artifact pair template rejection should describe the SHA256 requirement"
     );
 
-    let (_artifact_root, artifact_manifest_path, _pair_sha256) =
+    let (artifact_root, artifact_manifest_path, _pair_sha256) =
         test_firmware_artifact_fixture("artifact-template-ref");
     let mismatched_ref = run_hardware_validation(&[
         "--checklist",
@@ -4778,6 +4778,42 @@ fn hardware_validation_rejects_placeholder_template_bindings() {
         ),
         "mismatched artifact manifest pair rejection should explain the binding error"
     );
+
+    let mut wrong_metadata_manifest: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&artifact_manifest_path).unwrap()).unwrap();
+    let central_artifact = wrong_metadata_manifest["artifacts"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|artifact| artifact["path"] == "firmware/normal/lalapad-gen2-rmk-central.uf2")
+        .expect("central UF2 artifact is missing");
+    central_artifact["role"] = serde_json::Value::String("peripheral".into());
+    central_artifact["side"] = serde_json::Value::String("left".into());
+    central_artifact["kind"] = serde_json::Value::String("reset-uf2".into());
+    let wrong_metadata_path = artifact_manifest_path
+        .with_file_name("wrong-template-metadata-firmware-artifacts.local.json");
+    std::fs::write(
+        &wrong_metadata_path,
+        serde_json::to_string_pretty(&wrong_metadata_manifest).unwrap(),
+    )
+    .unwrap();
+    let wrong_metadata = run_hardware_validation(&[
+        "--checklist",
+        "--firmware-artifact-manifest-template",
+        wrong_metadata_path.to_str().unwrap(),
+    ]);
+    let _ = std::fs::remove_file(&wrong_metadata_path);
+    let _ = std::fs::remove_dir_all(&artifact_root);
+    assert!(
+        !wrong_metadata.status.success(),
+        "hardware validation accepted artifact manifest template with swapped central role/side/kind metadata\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&wrong_metadata.stdout),
+        String::from_utf8_lossy(&wrong_metadata.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&wrong_metadata.stderr);
+    assert!(stderr.contains("firmware/normal/lalapad-gen2-rmk-central.uf2 role must be central"));
+    assert!(stderr.contains("firmware/normal/lalapad-gen2-rmk-central.uf2 side must be right"));
+    assert!(stderr.contains("firmware/normal/lalapad-gen2-rmk-central.uf2 kind must be uf2"));
 }
 
 #[test]
