@@ -1246,6 +1246,56 @@ fn migration_status_ties_hardware_evidence_to_firmware_artifact_manifest() {
     assert!(stdout.contains("pair_sha256"));
     assert!(stdout.contains(pair_sha256));
 
+    let missing_pair_sha_json = run_migration_status(&[
+        "--json",
+        "--coverage-baseline",
+        "tools/porting_coverage_baseline.toml",
+        "--hardware-baseline",
+        "tools/hardware_validation_baseline.toml",
+        "--evidence",
+        evidence_without_pair_sha_path.to_str().unwrap(),
+        "--firmware-artifact-manifest",
+        artifact_path.to_str().unwrap(),
+    ]);
+    assert!(
+        missing_pair_sha_json.status.success(),
+        "plain artifact-backed status report should render errors without becoming a hard gate\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&missing_pair_sha_json.stdout),
+        String::from_utf8_lossy(&missing_pair_sha_json.stderr)
+    );
+    let parsed: serde_json::Value = serde_json::from_slice(&missing_pair_sha_json.stdout).unwrap();
+    assert_eq!(parsed["hardware"]["validated"].as_i64(), Some(0));
+    assert_eq!(parsed["hardware"]["classified"].as_bool(), Some(false));
+    assert!(
+        parsed["hardware"]["errors"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|error| error.as_str().unwrap().contains(pair_sha256)),
+        "artifact-backed report should reject every validated check missing the pair hash: {parsed:?}"
+    );
+
+    let missing_pair_sha_partial_gate = run_migration_status(&[
+        "--coverage-baseline",
+        "tools/porting_coverage_baseline.toml",
+        "--hardware-baseline",
+        "tools/hardware_validation_baseline.toml",
+        "--evidence",
+        evidence_without_pair_sha_path.to_str().unwrap(),
+        "--firmware-artifact-manifest",
+        artifact_path.to_str().unwrap(),
+        "--require-hardware-classified",
+    ]);
+    assert!(
+        !missing_pair_sha_partial_gate.status.success(),
+        "migration status accepted artifact-backed partial hardware evidence that did not mention the artifact pair hash\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&missing_pair_sha_partial_gate.stdout),
+        String::from_utf8_lossy(&missing_pair_sha_partial_gate.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&missing_pair_sha_partial_gate.stdout);
+    assert!(stdout.contains("pair_sha256"));
+    assert!(stdout.contains(pair_sha256));
+
     let one_missing_pair_sha = run_migration_status(&[
         "--coverage-baseline",
         "tools/porting_coverage_baseline.toml",

@@ -232,28 +232,6 @@ def validate_validated_evidence(check_id: str, check: dict[str, Any]) -> list[st
     return errors
 
 
-def validate_artifact_pair_evidence(
-    manifest: dict[str, Any], required_pair_sha256: str
-) -> list[str]:
-    errors: list[str] = []
-    checks = manifest.get("checks", [])
-    if not isinstance(checks, list):
-        return errors
-    for index, check in enumerate(checks):
-        if not isinstance(check, dict):
-            continue
-        if str(check.get("status", "")) not in VALIDATED_STATUSES:
-            continue
-        check_id = str(check.get("id", f"#{index + 1}"))
-        artifact_or_notes = str(check.get("artifact_or_notes", ""))
-        if required_pair_sha256 not in artifact_or_notes:
-            errors.append(
-                f"{check_id}: artifact_or_notes must mention firmware artifact "
-                f"pair_sha256 {required_pair_sha256}"
-            )
-    return errors
-
-
 def manifest_inventory_items(manifest: dict[str, Any]) -> list[dict[str, str]]:
     checks = manifest.get("checks", [])
     if not isinstance(checks, list):
@@ -427,6 +405,7 @@ def summarize(
     initial_errors: list[str] | None = None,
     source_root: Path | None = None,
     required_firmware_ref: str | None = None,
+    required_artifact_pair_sha256: str | None = None,
 ) -> HardwareValidationSummary:
     checks = manifest.get("checks", [])
     by_status = {status: 0 for status in sorted(VALID_STATUSES)}
@@ -512,6 +491,15 @@ def summarize(
                             f"{check_id}: validated firmware_ref "
                             f"{str(check.get('firmware_ref', ''))!r} does not match "
                             f"required {required_firmware_ref!r}"
+                        )
+                    elif (
+                        required_artifact_pair_sha256 is not None
+                        and required_artifact_pair_sha256
+                        not in str(check.get("artifact_or_notes", ""))
+                    ):
+                        errors.append(
+                            f"{check_id}: artifact_or_notes must mention firmware artifact "
+                            f"pair_sha256 {required_artifact_pair_sha256}"
                         )
                     else:
                         validated += 1

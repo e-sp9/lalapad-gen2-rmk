@@ -325,6 +325,13 @@ current firmware ref and the generated artifact `pair_sha256`. Generated
 `hardware-validation-evidence*.toml`,
 `hardware-validation-checklist*.md`, `migration-status*.md`, and
 `firmware-artifacts*.json` files are ignored by default.
+When `--firmware-artifact-manifest` is supplied to a migration-status command,
+every validated hardware evidence note must mention that manifest's
+`pair_sha256`, even for partial evidence dashboards. This keeps each counted
+hardware observation tied to the exact central/peripheral UF2 pair that was
+flashed. Plain report commands render these problems in the error list; use
+`--require-hardware-classified` or the final cargo-make gates when the command
+must fail on stale or incomplete artifact evidence.
 For the combined final gate, run the cargo-make task so the RMK runtime
 scenario suite runs before the migration dashboard is evaluated:
 

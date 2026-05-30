@@ -152,19 +152,12 @@ def hardware_status(
         manifest_doc,
         [hardware_validation.load_toml(path) for path in evidence_paths],
     )
-    artifact_pair_errors = (
-        hardware_validation.validate_artifact_pair_evidence(
-            manifest,
-            required_artifact_pair_sha256,
-        )
-        if required_artifact_pair_sha256 is not None
-        else []
-    )
     summary = hardware_validation.summarize(
         manifest,
-        evidence_errors + artifact_pair_errors + baseline_failures + (extra_errors or []),
+        evidence_errors + baseline_failures + (extra_errors or []),
         Path("."),
         required_firmware_ref,
+        required_artifact_pair_sha256,
     )
     return hardware_validation.as_json(summary)
 
@@ -325,9 +318,7 @@ def build_status(args: argparse.Namespace) -> MigrationStatus:
         required_firmware_ref = firmware_artifacts["firmware_ref"]
     required_artifact_pair_sha256 = (
         firmware_artifacts["pair_sha256"]
-        if args.require_hardware_validated
-        and firmware_artifacts is not None
-        and not artifact_errors
+        if firmware_artifacts is not None and not artifact_errors
         else None
     )
     hardware = hardware_status(

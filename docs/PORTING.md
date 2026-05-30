@@ -510,8 +510,13 @@ bench artifact.
 `--require-firmware-ref` only rejects stale validated evidence; combine it with
 `--require-validated` when all checks must be proven for that exact firmware.
 The combined migration gate requires `--firmware-artifact-manifest` whenever
-`--require-hardware-validated` is used, so a final hardware claim is always tied
-to the exact generated UF2 artifact hashes.
+`--require-hardware-validated` is used. Whenever a firmware artifact manifest
+is supplied, every validated hardware evidence note must mention that
+manifest's `pair_sha256`, so both partial hardware dashboards and final
+hardware claims stay tied to the exact generated UF2 artifact hashes. Plain
+report commands still render these as dashboard errors; add
+`--require-hardware-classified` or use the final cargo-make gates when stale or
+incomplete artifact evidence should make the command fail.
 Use `--evidence-template > hardware-validation-evidence.local.toml` to generate
 a complete local overlay for all current hardware checks, or add
 `--firmware-ref-template <tag-or-commit>` to pre-fill the flashed firmware
@@ -526,7 +531,7 @@ sizes and SHA256 hashes alongside the hardware evidence overlay. Prefer
 `cargo make firmware-artifact-manifest-current` for a clean local build; it
 creates `firmware-artifacts.local.json` with the current exact tag or short
 commit as `firmware_ref` and refuses tracked or untracked non-ignored changes.
-When a final all-validated gate is run with `--firmware-artifact-manifest`,
+When any migration-status command is run with `--firmware-artifact-manifest`,
 each validated hardware evidence note must also mention that manifest's
 `pair_sha256`, tying the bench observation to the exact UF2 pair rather than
 only to a moving file name or host-side state. `--evidence-template` accepts
