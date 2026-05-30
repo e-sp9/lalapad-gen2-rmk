@@ -48,6 +48,7 @@ def software_status(
     keyboard_path: Path,
     zmk_keymap_path: Path | None,
     require_zmk_source: bool,
+    require_zmk_clean_source: bool,
     coverage_baseline_path: Path | None,
 ) -> SoftwareStatus:
     manifest = porting_coverage.load_toml(manifest_path)
@@ -90,6 +91,20 @@ def software_status(
             }
             for failure in failures
         ]
+    zmk_source_failures = [
+        {
+            "id": "zmk_source_clean",
+            "kind": "zmk_source",
+            "passed": 0,
+            "total": 1,
+            "message": failure,
+        }
+        for failure in (
+            porting_coverage.zmk_source_clean_errors(zmk_source)
+            if require_zmk_clean_source
+            else []
+        )
+    ]
     failed = [
         {
             "id": result.id,
@@ -100,7 +115,7 @@ def software_status(
         }
         for result in results
         if not result.ok
-    ] + baseline_failures
+    ] + baseline_failures + zmk_source_failures
     by_kind_json = {
         kind: {
             "passed": bucket.passed,
@@ -335,6 +350,7 @@ def build_status(args: argparse.Namespace) -> MigrationStatus:
         args.keyboard_toml,
         args.zmk_keymap,
         args.require_zmk_source,
+        args.require_zmk_clean_source,
         args.coverage_baseline,
     )
     firmware_artifacts = firmware_artifact_status(
@@ -610,6 +626,7 @@ def main() -> None:
     parser.add_argument("--keyboard-toml", type=Path, default=Path("keyboard.toml"))
     parser.add_argument("--zmk-keymap", type=Path, default=None)
     parser.add_argument("--require-zmk-source", action="store_true")
+    parser.add_argument("--require-zmk-clean-source", action="store_true")
     parser.add_argument("--coverage-baseline", type=Path, default=None)
     parser.add_argument(
         "--hardware-manifest",
@@ -650,6 +667,10 @@ def main() -> None:
         print_text(status)
 
     if args.require_software_complete and not status.software.complete:
+        raise SystemExit(1)
+    if args.require_zmk_clean_source and any(
+        failure["id"] == "zmk_source_clean" for failure in status.software.failed
+    ):
         raise SystemExit(1)
     if args.require_hardware_classified and not status.hardware["classified"]:
         raise SystemExit(1)

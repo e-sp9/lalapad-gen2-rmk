@@ -349,13 +349,15 @@ HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit FIRMWARE_ARTI
 ```
 
 It must report `Full validation: pass` before claiming source-backed and
-real-device validation are both complete for that firmware. The task uses
-`firmware-artifacts.local.json` by default, or `FIRMWARE_ARTIFACT_MANIFEST`
-when set.
+real-device validation are both complete for that firmware. The final gate also
+requires the resolved ZMK source checkout to be a readable, clean Git
+repository, so a release claim cannot be tied to uncommitted upstream-source
+edits. The task uses `firmware-artifacts.local.json` by default, or
+`FIRMWARE_ARTIFACT_MANIFEST` when set.
 
 For hardware evidence collected from the current clean commit, this variant
 derives the exact tag or short commit automatically and refuses tracked or
-untracked non-ignored changes before running the same final gate:
+untracked non-ignored RMK changes before running the same final gate:
 
 ```shell
 HARDWARE_EVIDENCE=hardware-validation-evidence.local.toml cargo make migration-status-final-current

@@ -386,6 +386,78 @@ fn migration_dashboards_report_zmk_source_reference() {
 }
 
 #[test]
+fn zmk_source_clean_gate_rejects_dirty_source_repositories() {
+    let output = run_python(
+        r#"
+import json
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+sys.path.insert(0, "tools")
+import porting_coverage as pc
+
+root = Path(tempfile.mkdtemp(prefix="lalapad-zmk-source-clean-"))
+try:
+    keymap = root / "config" / "lalapadgen2.keymap"
+    keymap.parent.mkdir(parents=True)
+    keymap.write_text("// source keymap\n", encoding="utf-8")
+    subprocess.run(["git", "init"], cwd=root, check=True, stdout=subprocess.DEVNULL)
+    subprocess.run(["git", "add", "config/lalapadgen2.keymap"], cwd=root, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Porting Test",
+            "-c",
+            "user.email=porting-test@example.invalid",
+            "commit",
+            "-m",
+            "source",
+        ],
+        cwd=root,
+        check=True,
+        stdout=subprocess.DEVNULL,
+    )
+    clean = pc.zmk_source_reference(keymap)
+    clean_errors = pc.zmk_source_clean_errors(clean)
+    keymap.write_text("// source keymap\n// local edit\n", encoding="utf-8")
+    dirty = pc.zmk_source_reference(keymap)
+    dirty_errors = pc.zmk_source_clean_errors(dirty)
+    print(json.dumps({
+        "clean": clean,
+        "clean_errors": clean_errors,
+        "dirty": dirty,
+        "dirty_errors": dirty_errors,
+    }, sort_keys=True))
+finally:
+    shutil.rmtree(root, ignore_errors=True)
+"#,
+    );
+    assert!(
+        output.status.success(),
+        "ZMK clean-source fixture failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(parsed["clean"]["available"].as_bool(), Some(true));
+    assert_eq!(parsed["clean"]["git_dirty"].as_bool(), Some(false));
+    assert_eq!(parsed["clean_errors"].as_array().unwrap().len(), 0);
+    assert_eq!(parsed["dirty"]["git_dirty"].as_bool(), Some(true));
+    assert!(
+        parsed["dirty_errors"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|error| error.as_str().unwrap().contains("uncommitted changes")),
+        "dirty ZMK source should fail the clean-source gate"
+    );
+}
+
+#[test]
 fn porting_coverage_requires_evidence_for_non_direct_porting_statuses() {
     let output = run_porting_coverage(&["--json"]);
     assert!(
@@ -2978,6 +3050,7 @@ fn local_validation_entrypoints_match_ci_gates() {
             && migration_status_final_task
                 .contains("--hardware-baseline tools/hardware_validation_baseline.toml")
             && migration_status_final_task.contains("--require-zmk-source")
+            && migration_status_final_task.contains("--require-zmk-clean-source")
             && migration_status_final_task.contains("--zmk-keymap")
             && migration_status_final_task
                 .contains("zmk-config-LalaPadGen2/config/lalapadgen2.keymap")
@@ -3008,6 +3081,7 @@ fn local_validation_entrypoints_match_ci_gates() {
             && migration_status_final_current_task.contains("tools/migration_status.py")
             && migration_status_final_current_task.contains("--evidence \"$HARDWARE_EVIDENCE\"")
             && migration_status_final_current_task.contains("--require-zmk-source")
+            && migration_status_final_current_task.contains("--require-zmk-clean-source")
             && migration_status_final_current_task.contains("--require-software-complete")
             && migration_status_final_current_task.contains("--require-hardware-classified")
             && migration_status_final_current_task.contains("--require-hardware-validated")
@@ -3099,6 +3173,7 @@ fn local_validation_entrypoints_match_ci_gates() {
                 .contains("--evidence hardware-validation-evidence.local.toml")
             && hardware_validation_session_current_task
                 .contains("--firmware-artifact-manifest firmware-artifacts.local.json")
+            && hardware_validation_session_current_task.contains("--require-zmk-clean-source")
             && hardware_validation_session_current_task
                 .contains("--require-firmware-ref \"$firmware_ref\"")
             && hardware_validation_session_current_task.contains("migration-status.local.md"),
@@ -3192,6 +3267,7 @@ fn local_validation_entrypoints_match_ci_gates() {
             && README_MD.contains("cargo make hardware-validation-evidence-template-current")
             && README_MD.contains("cargo make hardware-validation-session-current")
             && README_MD.contains("--artifact-pair-sha256-template <sha256>")
+            && README_MD.contains("requires the resolved ZMK source checkout")
             && README_MD.contains("HARDWARE_EVIDENCE=hardware-validation-evidence.local.toml cargo make migration-status-final-current")
             && README_MD.contains("FIRMWARE_ARTIFACT_MANIFEST")
             && README_MD.contains("HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-report")
@@ -3204,6 +3280,7 @@ fn local_validation_entrypoints_match_ci_gates() {
             && PORTING_MD.contains("cargo make hardware-validation-evidence-template-current")
             && PORTING_MD.contains("cargo make hardware-validation-session-current")
             && PORTING_MD.contains("--artifact-pair-sha256-template <sha256>")
+            && PORTING_MD.contains("--require-zmk-clean-source")
             && PORTING_MD.contains("FIRMWARE_ARTIFACT_MANIFEST")
             && PORTING_MD.contains("HARDWARE_EVIDENCE=hardware-validation-evidence.local.toml cargo make migration-status-final-current"),
         "README and porting notes should document the local Markdown migration dashboard, RMK behavior regression suite, artifact manifest, current-ref evidence template, and current-ref final gate"
@@ -3250,6 +3327,7 @@ fn local_validation_entrypoints_match_ci_gates() {
         RELEASE_MD.contains("HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit FIRMWARE_ARTIFACT_MANIFEST=firmware-artifacts.local.json cargo make migration-status-final")
             && RELEASE_MD.contains("RMK\nZMK-derived runtime scenario suite")
             && RELEASE_MD.contains("ZMK_KEYMAP")
+            && RELEASE_MD.contains("clean Git repository")
             && RELEASE_MD.contains("FIRMWARE_ARTIFACT_MANIFEST")
             && RELEASE_MD.contains("Full validation: pass")
             && RELEASE_MD.contains("if the announcement claims complete hardware validation"),

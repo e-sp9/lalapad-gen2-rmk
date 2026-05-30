@@ -413,6 +413,10 @@ evaluated:
 HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit FIRMWARE_ARTIFACT_MANIFEST=firmware-artifacts.local.json cargo make migration-status-final
 ```
 
+The final gate adds `--require-zmk-clean-source`, so the resolved ZMK source
+keymap must be available inside a readable Git repository with no uncommitted
+changes before a complete validation claim can pass.
+
 For evidence captured from the current clean commit, the current-ref variant
 derives the exact tag or short commit automatically and refuses tracked or
 untracked non-ignored changes:

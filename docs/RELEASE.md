@@ -55,7 +55,8 @@ HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit FIRMWARE_ARTI
 
 This wraps the same final migration status gate after running the RMK
 ZMK-derived runtime scenario suite. It resolves `ZMK_KEYMAP` first when it is
-set and otherwise uses the standard upstream checkout path.
+set and otherwise uses the standard upstream checkout path. The final gate also
+requires that resolved ZMK source checkout to be a clean Git repository.
 
 The command must report `Full validation: pass`. If it fails, the release may
 still be source-complete, but it is not yet fully validated against real

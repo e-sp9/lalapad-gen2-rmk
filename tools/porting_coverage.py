@@ -5647,6 +5647,26 @@ def zmk_source_reference(zmk_keymap_path: Path) -> dict[str, Any]:
     return reference
 
 
+def zmk_source_clean_errors(zmk_source: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    if not zmk_source.get("available"):
+        errors.append(
+            f"ZMK source keymap is not available at {zmk_source.get('keymap_path') or 'n/a'}"
+        )
+    if not zmk_source.get("repo_path"):
+        errors.append("ZMK source keymap is not inside a readable Git repository")
+    if not zmk_source.get("git_commit"):
+        errors.append("ZMK source Git commit could not be resolved")
+    dirty = zmk_source.get("git_dirty")
+    if dirty is None:
+        errors.append("ZMK source dirty state could not be resolved")
+    elif dirty:
+        errors.append(
+            f"ZMK source repository has uncommitted changes: {zmk_source.get('repo_path') or 'n/a'}"
+        )
+    return errors
+
+
 def run(
     manifest_path: Path,
     keyboard_path: Path,
@@ -5752,6 +5772,11 @@ def main(argv: list[str]) -> int:
         help="Fail if the upstream ZMK keymap cannot be read.",
     )
     parser.add_argument(
+        "--require-zmk-clean-source",
+        action="store_true",
+        help="Fail if the upstream ZMK keymap is missing, outside Git, or the source repository is dirty.",
+    )
+    parser.add_argument(
         "--require-porting-complete",
         action="store_true",
         help="Fail if any explicit manifest status is not implemented.",
@@ -5769,6 +5794,9 @@ def main(argv: list[str]) -> int:
     zmk_keymap_path = resolve_zmk_keymap_path(manifest, args.zmk_keymap)
     zmk_source = zmk_source_reference(zmk_keymap_path)
     results = run(args.manifest, args.keyboard_toml, zmk_keymap_path, args.require_zmk_source)
+    zmk_source_failures = (
+        zmk_source_clean_errors(zmk_source) if args.require_zmk_clean_source else []
+    )
     status_summary = porting_status_summary(manifest)
     passed = sum(result.passed for result in results)
     total = sum(result.total for result in results)
@@ -5815,6 +5843,7 @@ def main(argv: list[str]) -> int:
                         "remaining": status_summary.remaining,
                     },
                     "zmk_source": zmk_source,
+                    "zmk_source_errors": zmk_source_failures,
                     "baseline_errors": baseline_failures,
                     "results": [result.__dict__ | {"ok": result.ok} for result in results],
                 },
@@ -5836,6 +5865,11 @@ def main(argv: list[str]) -> int:
     if baseline_failures:
         print("porting coverage baseline drift:", file=sys.stderr)
         for failure in baseline_failures:
+            print(f"- {failure}", file=sys.stderr)
+        ok = False
+    if zmk_source_failures:
+        print("ZMK source is not clean enough for this gate:", file=sys.stderr)
+        for failure in zmk_source_failures:
             print(f"- {failure}", file=sys.stderr)
         ok = False
     return 0 if ok else 1

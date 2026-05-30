@@ -2980,6 +2980,7 @@ script_contains = [
   "tools/migration_status.py",
   "--evidence hardware-validation-evidence.local.toml",
   "--firmware-artifact-manifest firmware-artifacts.local.json",
+  "--require-zmk-clean-source",
   "--require-firmware-ref \"$firmware_ref\"",
   "migration-status.local.md",
 ]
@@ -2994,6 +2995,7 @@ script_contains = [
   "FIRMWARE_ARTIFACT_MANIFEST",
   "--evidence \"$HARDWARE_EVIDENCE\"",
   "--firmware-artifact-manifest \"${FIRMWARE_ARTIFACT_MANIFEST:-firmware-artifacts.local.json}\"",
+  "--require-zmk-clean-source",
   "--require-hardware-validated",
   "--require-firmware-ref \"$FIRMWARE_REF\"",
 ]
@@ -3015,6 +3017,7 @@ script_contains = [
   "tools/migration_status.py",
   "--evidence \"$HARDWARE_EVIDENCE\"",
   "--require-zmk-source",
+  "--require-zmk-clean-source",
   "--require-software-complete",
   "--require-hardware-classified",
   "--require-hardware-validated",

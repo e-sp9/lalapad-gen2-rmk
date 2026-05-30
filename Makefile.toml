@@ -153,6 +153,7 @@ set -- \
   --evidence hardware-validation-evidence.local.toml \
   --firmware-artifact-manifest firmware-artifacts.local.json \
   --require-zmk-source \
+  --require-zmk-clean-source \
   --require-software-complete \
   --require-hardware-classified \
   --require-firmware-ref "$firmware_ref" \
@@ -244,6 +245,7 @@ set -- \
   --evidence "$HARDWARE_EVIDENCE" \
   --firmware-artifact-manifest "${FIRMWARE_ARTIFACT_MANIFEST:-firmware-artifacts.local.json}" \
   --require-zmk-source \
+  --require-zmk-clean-source \
   --require-software-complete \
   --require-hardware-classified \
   --require-hardware-validated \
@@ -282,6 +284,7 @@ set -- \
   --evidence "$HARDWARE_EVIDENCE" \
   --firmware-artifact-manifest "${FIRMWARE_ARTIFACT_MANIFEST:-firmware-artifacts.local.json}" \
   --require-zmk-source \
+  --require-zmk-clean-source \
   --require-software-complete \
   --require-hardware-classified \
   --require-hardware-validated \
