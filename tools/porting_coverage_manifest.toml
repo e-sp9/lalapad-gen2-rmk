@@ -3054,6 +3054,8 @@ script_contains = [
   "--artifact-pair-sha256-template \"$artifact_pair_sha256\"",
   "hardware-validation-evidence.local.toml",
   "--checklist",
+  "--firmware-ref-template \"$firmware_ref\"",
+  "--artifact-pair-sha256-template \"$artifact_pair_sha256\"",
   "hardware-validation-checklist.local.md",
   "tools/migration_status.py",
   "--evidence hardware-validation-evidence.local.toml",
@@ -3062,6 +3064,10 @@ script_contains = [
   "--require-zmk-source-commit",
   "--require-firmware-ref \"$firmware_ref\"",
   "migration-status.local.md",
+]
+script_contains_count = [
+  { value = "--firmware-ref-template \"$firmware_ref\"", count = 2 },
+  { value = "--artifact-pair-sha256-template \"$artifact_pair_sha256\"", count = 2 },
 ]
 
 [[makefile_task_invariants]]

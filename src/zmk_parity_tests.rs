@@ -8783,6 +8783,23 @@ with tempfile.TemporaryDirectory() as tempdir:
 
 with tempfile.TemporaryDirectory() as tempdir:
     root = Path(tempdir)
+    makefile = Path("Makefile.toml").read_text()
+    before, marker, after = makefile.partition("--checklist")
+    assert marker
+    (root / "Makefile.toml").write_text(
+        before
+        + marker
+        + after.replace(
+            "--artifact-pair-sha256-template \"$artifact_pair_sha256\"",
+            "",
+            1,
+        ),
+        encoding="utf-8",
+    )
+    bad_current_hardware_session_checklist_binding = pc.check_makefile_task_invariants(manifest, root)
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
     (root / "Makefile.toml").write_text(
         Path("Makefile.toml").read_text().replace(
             'dependencies = ["clean-current-git-ref", "firmware-artifact-manifest-current", "rmk-zmk-scenario-tests", "host-parity-tests", "rmk-behavior-tests"]',
@@ -8839,6 +8856,7 @@ print(json.dumps({
     "bad_clean_current_task": pack(bad_clean_current_task),
     "bad_current_template_task": pack(bad_current_template_task),
     "bad_current_hardware_session_task": pack(bad_current_hardware_session_task),
+    "bad_current_hardware_session_checklist_binding": pack(bad_current_hardware_session_checklist_binding),
     "bad_current_hardware_session_dependency_order": pack(bad_current_hardware_session_dependency_order),
     "bad_current_final_task": pack(bad_current_final_task),
     "bad_current_final_dependency": pack(bad_current_final_dependency),
@@ -8861,13 +8879,13 @@ print(json.dumps({
         ok.iter()
             .map(|result| result["passed"].as_i64().unwrap())
             .sum::<i64>(),
-        98
+        100
     );
     assert_eq!(
         ok.iter()
             .map(|result| result["total"].as_i64().unwrap())
             .sum::<i64>(),
-        98
+        100
     );
 
     let bad_rmk_config_schema_task = parsed["bad_rmk_config_schema_task"]
@@ -9167,6 +9185,29 @@ print(json.dumps({
             .as_str()
             .unwrap()
             .contains("tasks.hardware-validation-session-current.script missing required values ['migration-status.local.md']")
+    );
+
+    let bad_current_hardware_session_checklist_binding =
+        parsed["bad_current_hardware_session_checklist_binding"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|result| {
+                result["id"] == "makefile_current_hardware_session_bundles_clean_ref_evidence"
+            })
+            .expect(
+                "changed current hardware validation session checklist binding result is missing",
+            );
+    assert_eq!(
+        bad_current_hardware_session_checklist_binding["kind"],
+        "build_task"
+    );
+    assert_eq!(bad_current_hardware_session_checklist_binding["ok"], false);
+    assert!(
+        bad_current_hardware_session_checklist_binding["message"]
+            .as_str()
+            .unwrap()
+            .contains("--artifact-pair-sha256-template \"$artifact_pair_sha256\"")
     );
 
     let bad_current_hardware_session_dependency_order =

@@ -3458,6 +3458,28 @@ def check_makefile_task_invariants(manifest: dict[str, Any], project_root: Path)
             else:
                 messages.append(f"tasks.{task_name}.script missing required values {missing!r}")
 
+        if "script_contains_count" in check:
+            raw_expected_counts = check["script_contains_count"]
+            if isinstance(raw_expected_counts, list):
+                expected_counts = {
+                    str(item["value"]): int(item["count"])
+                    for item in raw_expected_counts
+                    if isinstance(item, dict)
+                }
+            else:
+                expected_counts = dict(raw_expected_counts)
+            actual_script = str(task.get("script", ""))
+            for value, expected_count in expected_counts.items():
+                total += 1
+                actual_count = actual_script.count(str(value))
+                if actual_count == int(expected_count):
+                    passed += 1
+                else:
+                    messages.append(
+                        f"tasks.{task_name}.script expected {value!r} "
+                        f"{int(expected_count)} time(s), got {actual_count}"
+                    )
+
         results.append(
             Result(
                 check["id"],
