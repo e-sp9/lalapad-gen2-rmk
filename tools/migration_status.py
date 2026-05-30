@@ -247,7 +247,7 @@ def firmware_artifact_status(
     firmware_ref = str(artifact_manifest.get("firmware_ref", "")).strip()
     if not firmware_ref:
         errors.append("firmware artifact manifest missing firmware_ref")
-    elif hardware_validation.is_placeholder_value(firmware_ref):
+    elif hardware_validation.is_mutable_firmware_ref(firmware_ref):
         errors.append("firmware artifact manifest firmware_ref must be immutable")
     if required_firmware_ref is not None and firmware_ref != required_firmware_ref:
         errors.append(
@@ -400,7 +400,7 @@ def build_status(args: argparse.Namespace) -> MigrationStatus:
         required_firmware_ref is None
         and firmware_artifacts is not None
         and firmware_artifacts["firmware_ref"]
-        and not hardware_validation.is_placeholder_value(firmware_artifacts["firmware_ref"])
+        and not hardware_validation.is_mutable_firmware_ref(firmware_artifacts["firmware_ref"])
     ):
         required_firmware_ref = firmware_artifacts["firmware_ref"]
     required_artifact_pair_sha256 = (

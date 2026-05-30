@@ -4467,7 +4467,14 @@ fn hardware_validation_rejects_template_firmware_ref_without_template_output() {
 
 #[test]
 fn hardware_validation_rejects_placeholder_template_bindings() {
-    for firmware_ref in ["main", "origin/main", "refs/heads/main", "develop"] {
+    for firmware_ref in [
+        "main",
+        "origin/main",
+        "refs/heads/main",
+        "refs/remotes/upstream/main",
+        "remotes/upstream/develop",
+        "develop",
+    ] {
         let placeholder_ref = run_hardware_validation(&[
             "--evidence-template",
             "--firmware-ref-template",
@@ -4485,6 +4492,17 @@ fn hardware_validation_rejects_placeholder_template_bindings() {
             "placeholder firmware_ref template rejection should describe the immutable ref requirement"
         );
     }
+    let prerelease_ref = run_hardware_validation(&[
+        "--evidence-template",
+        "--firmware-ref-template",
+        "v0.2.65-dev.1",
+    ]);
+    assert!(
+        prerelease_ref.status.success(),
+        "hardware validation rejected a legitimate prerelease tag containing dev\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&prerelease_ref.stdout),
+        String::from_utf8_lossy(&prerelease_ref.stderr)
+    );
 
     let malformed_pair = run_hardware_validation(&[
         "--checklist",
@@ -4649,6 +4667,14 @@ validated_at = "2026-05-29"
 tester = "CI host unit test"
 firmware_ref = "35b3f1f"
 artifact_or_notes = "video: /tmp/ble-split.mp4; BLE trace: /tmp/ble-split.pcap; host test output from CI; right central left peripheral BLE re-pair reconnect right first left Q left A right Y right H"
+
+[[evidence]]
+id = "iqs9151_left_rdy_signal"
+status = "validated"
+validated_at = "2026-05-29"
+tester = "bench operator"
+firmware_ref = "develop"
+artifact_or_notes = "scope: /tmp/left-rdy.csv; left P1_11 RDY D6 active-low no-touch high touch-event low"
 "#;
     let path = write_temp_file("hardware-validation-placeholder-evidence", evidence);
     let output = run_hardware_validation(&["--evidence", path.to_str().unwrap(), "--json"]);
@@ -4742,8 +4768,84 @@ artifact_or_notes = "video: /tmp/ble-split.mp4; BLE trace: /tmp/ble-split.pcap; 
         "host test output should not count even when it names every observation and artifact: {errors:?}"
     );
     assert!(
+        errors.iter().any(|error| {
+            error.contains(
+                "iqs9151_left_rdy_signal: firmware_ref must be the actual flashed tag or commit",
+            ) && error.contains("mutable branch")
+        }),
+        "mutable branch firmware_ref should not count as immutable hardware evidence: {errors:?}"
+    );
+    assert!(
         !require_output.status.success(),
         "placeholder hardware evidence unexpectedly passed --require-classified"
+    );
+}
+
+#[test]
+fn migration_status_rejects_mutable_firmware_artifact_refs() {
+    let (artifact_root, artifact_manifest_path, _pair_sha256) =
+        test_firmware_artifact_fixture("develop");
+    let evidence = r#"
+[[evidence]]
+id = "iqs9151_right_i2c_identity"
+status = "validated"
+validated_at = "2026-05-29"
+tester = "hardware bench"
+firmware_ref = "35b3f1f"
+artifact_or_notes = "log: /tmp/right-i2c.log; right P0_04 SDA and P0_05 SCL showed I2C activity from scan, address 0x56 ACKed, and product-number register 0x1000 read 0x09bc."
+"#;
+    let evidence_path = write_temp_file("migration-status-mutable-artifact-ref-evidence", evidence);
+    let output = run_migration_status(&[
+        "--json",
+        "--coverage-baseline",
+        "tools/porting_coverage_baseline.toml",
+        "--hardware-baseline",
+        "tools/hardware_validation_baseline.toml",
+        "--evidence",
+        evidence_path.to_str().unwrap(),
+        "--firmware-artifact-manifest",
+        artifact_manifest_path.to_str().unwrap(),
+        "--artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--require-software-complete",
+        "--require-hardware-classified",
+    ]);
+    let _ = std::fs::remove_file(&evidence_path);
+    let _ = std::fs::remove_dir_all(&artifact_root);
+
+    assert!(
+        !output.status.success(),
+        "migration status accepted a firmware artifact manifest bound to a mutable branch ref\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        !String::from_utf8_lossy(&output.stderr).contains("Traceback"),
+        "mutable artifact ref should be reported as validation data, not a Python traceback"
+    );
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout)
+        .expect("migration status should still render JSON for mutable artifact refs");
+    assert!(
+        parsed["hardware"]["errors"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|error| error
+                .as_str()
+                .unwrap()
+                .contains("firmware artifact manifest firmware_ref must be immutable")),
+        "migration status JSON should report mutable firmware artifact refs"
+    );
+    assert!(
+        !parsed["hardware"]["errors"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|error| error
+                .as_str()
+                .unwrap()
+                .contains("does not match required 'develop'")),
+        "mutable artifact refs should not be promoted into the required hardware evidence ref"
     );
 }
 

@@ -98,10 +98,15 @@ COPY_AID_PLACEHOLDER_RE = re.compile(
     re.IGNORECASE,
 )
 SHA256_RE = re.compile(r"[0-9a-f]{64}", re.IGNORECASE)
-BRANCH_REF_RE = re.compile(
-    r"^(?:refs/heads/|refs/remotes/|origin/|remotes/)?[A-Za-z0-9._/-]*"
-    r"(?:main|master|develop|development|dev|trunk)[A-Za-z0-9._/-]*$",
-    re.IGNORECASE,
+MUTABLE_BRANCH_NAMES = frozenset(
+    {
+        "main",
+        "master",
+        "develop",
+        "development",
+        "dev",
+        "trunk",
+    }
 )
 IMAGE_SUFFIXES = frozenset({".png", ".jpg", ".jpeg", ".webp"})
 TEXT_LOG_SUFFIXES = frozenset({".log", ".txt", ".csv", ".json"})
@@ -232,7 +237,21 @@ def is_placeholder_value(value: Any) -> bool:
 
 def is_mutable_firmware_ref(value: Any) -> bool:
     text = str(value).strip()
-    return is_placeholder_value(text) or BRANCH_REF_RE.fullmatch(text) is not None
+    if is_placeholder_value(text):
+        return True
+    lower = text.lower().strip("/")
+    for remote_prefix in ("refs/remotes/", "remotes/"):
+        if lower.startswith(remote_prefix):
+            remote_and_branch = lower[len(remote_prefix) :]
+            remote, separator, branch = remote_and_branch.partition("/")
+            lower = branch if separator and remote else remote_and_branch
+            break
+    else:
+        for prefix in ("refs/heads/", "origin/"):
+            if lower.startswith(prefix):
+                lower = lower[len(prefix) :]
+                break
+    return lower.strip("/") in MUTABLE_BRANCH_NAMES
 
 
 def validate_evidence_needles_schema(check_id: str, check: dict[str, Any]) -> list[str]:
@@ -314,8 +333,11 @@ def validate_validated_evidence(check_id: str, check: dict[str, Any]) -> list[st
     elif tester and NON_HARDWARE_EVIDENCE_MARKER_RE.search(tester):
         errors.append(f"{check_id}: tester must identify a real hardware tester or bench")
 
-    if firmware_ref and is_placeholder_value(firmware_ref):
-        errors.append(f"{check_id}: firmware_ref must be the actual flashed tag or commit")
+    if firmware_ref and is_mutable_firmware_ref(firmware_ref):
+        errors.append(
+            f"{check_id}: firmware_ref must be the actual flashed tag or commit, "
+            "not a placeholder or mutable branch"
+        )
 
     if artifact_or_notes and is_placeholder_value(artifact_or_notes):
         errors.append(f"{check_id}: artifact_or_notes must describe the observed evidence")
