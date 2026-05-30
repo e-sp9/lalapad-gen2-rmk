@@ -215,6 +215,14 @@ fn test_firmware_artifact_fixture(
             "firmware/normal/lalapad-gen2-rmk-peripheral.uf2",
             b"peripheral uf2".as_slice(),
         ),
+        (
+            "firmware/reset/lalapad-gen2-rmk-reset-central.uf2",
+            b"reset central uf2".as_slice(),
+        ),
+        (
+            "firmware/reset/lalapad-gen2-rmk-reset-peripheral.uf2",
+            b"reset peripheral uf2".as_slice(),
+        ),
     ] {
         let target = root.join(path);
         std::fs::create_dir_all(target.parent().unwrap()).unwrap();
@@ -228,6 +236,7 @@ fn test_firmware_artifact_fixture(
         .arg("--firmware-ref")
         .arg(firmware_ref)
         .arg("--require-uf2")
+        .arg("--require-reset-uf2")
         .arg("--output")
         .arg(&manifest_path)
         .current_dir(env!("CARGO_MANIFEST_DIR"))
@@ -1928,6 +1937,75 @@ fn migration_status_ties_hardware_evidence_to_firmware_artifact_manifest() {
     );
     assert_eq!(parsed["fully_validated"].as_bool(), Some(true));
 
+    let missing_reset_artifact_path =
+        artifact_path.with_file_name("missing-reset-firmware-artifacts.local.json");
+    let rewrite_missing_reset = Command::new("python3")
+        .arg("-c")
+        .arg(
+            r#"
+import hashlib
+import json
+import sys
+from pathlib import Path
+
+src = Path(sys.argv[1])
+dst = Path(sys.argv[2])
+manifest = json.loads(src.read_text())
+manifest["artifacts"] = [
+    artifact
+    for artifact in manifest["artifacts"]
+    if artifact.get("kind") != "reset-uf2"
+]
+manifest["artifact_count"] = len(manifest["artifacts"])
+pair_payload = json.dumps(
+    [
+        {
+            "path": artifact.get("path"),
+            "size": artifact.get("size"),
+            "sha256": artifact.get("sha256"),
+        }
+        for artifact in manifest["artifacts"]
+    ],
+    sort_keys=True,
+    separators=(",", ":"),
+).encode()
+manifest["pair_sha256"] = hashlib.sha256(pair_payload).hexdigest()
+dst.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+"#,
+        )
+        .arg(&artifact_path)
+        .arg(&missing_reset_artifact_path)
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .output()
+        .unwrap();
+    assert!(
+        rewrite_missing_reset.status.success(),
+        "failed to rewrite artifact manifest without reset UF2\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&rewrite_missing_reset.stdout),
+        String::from_utf8_lossy(&rewrite_missing_reset.stderr)
+    );
+    let missing_reset_artifact = run_migration_status(&[
+        "--coverage-baseline",
+        "tools/porting_coverage_baseline.toml",
+        "--hardware-baseline",
+        "tools/hardware_validation_baseline.toml",
+        "--firmware-artifact-manifest",
+        missing_reset_artifact_path.to_str().unwrap(),
+        "--artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--require-hardware-classified",
+    ]);
+    let _ = std::fs::remove_file(&missing_reset_artifact_path);
+    assert!(
+        !missing_reset_artifact.status.success(),
+        "migration status accepted an artifact manifest missing reset UF2 files\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&missing_reset_artifact.stdout),
+        String::from_utf8_lossy(&missing_reset_artifact.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&missing_reset_artifact.stdout);
+    assert!(stdout.contains("firmware/reset/lalapad-gen2-rmk-reset-central.uf2"));
+    assert!(stdout.contains("reset-uf2"));
+
     let missing_pair_sha = run_migration_status(&[
         "--coverage-baseline",
         "tools/porting_coverage_baseline.toml",
@@ -2650,6 +2728,96 @@ print(json.dumps({
             .as_str()
             .unwrap()
             .contains("missing required artifact: firmware/normal/lalapad-gen2-rmk-peripheral.uf2")
+    );
+}
+
+#[test]
+fn flash_layout_ignores_reset_uf2_until_reset_gate_is_requested() {
+    let output = run_python(
+        r#"
+import json
+import struct
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+script = Path.cwd() / "tools/check_flash_layout.py"
+
+def write_uf2(path, addr):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = b"ok"
+    block = bytearray(512)
+    struct.pack_into(
+        "<IIIIIIII",
+        block,
+        0,
+        0x0A324655,
+        0x9E5D5157,
+        0,
+        addr,
+        len(payload),
+        0,
+        1,
+        0,
+    )
+    block[32:32 + len(payload)] = payload
+    path.write_bytes(block)
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    (root / "memory.x").write_text(
+        "MEMORY\n{\n  FLASH : ORIGIN = 0x1000, LENGTH = 0x70000\n}\n",
+    )
+    (root / "keyboard.toml").write_text(
+        "[storage]\nstart_addr = 0x73000\nnum_sectors = 4\n",
+    )
+    write_uf2(root / "firmware/normal/lalapad-gen2-rmk-central.uf2", 0x1000)
+    write_uf2(root / "firmware/normal/lalapad-gen2-rmk-peripheral.uf2", 0x2000)
+    reset = root / "firmware/reset/lalapad-gen2-rmk-reset-central.uf2"
+    reset.parent.mkdir(parents=True, exist_ok=True)
+    reset.write_bytes(b"stale reset artifact")
+
+    normal_gate = subprocess.run(
+        [sys.executable, str(script), "--require-uf2"],
+        cwd=root,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    reset_gate = subprocess.run(
+        [sys.executable, str(script), "--require-uf2", "--require-reset-uf2"],
+        cwd=root,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+
+print(json.dumps({
+    "normal_code": normal_gate.returncode,
+    "normal_stdout": normal_gate.stdout,
+    "normal_stderr": normal_gate.stderr,
+    "reset_code": reset_gate.returncode,
+    "reset_stdout": reset_gate.stdout,
+    "reset_stderr": reset_gate.stderr,
+}))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "flash layout reset gate fixture failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(parsed["normal_code"].as_i64(), Some(0));
+    assert_ne!(parsed["reset_code"].as_i64(), Some(0));
+    assert!(
+        parsed["reset_stderr"]
+            .as_str()
+            .unwrap()
+            .contains("firmware/reset/lalapad-gen2-rmk-reset-central.uf2")
     );
 }
 
@@ -4313,8 +4481,7 @@ fn local_validation_entrypoints_match_ci_gates() {
     );
     assert!(
         uf2_reset_central_task.contains("firmware/reset/lalapad-gen2-rmk-reset-central.hex")
-            && uf2_reset_central_task
-                .contains("firmware/reset/lalapad-gen2-rmk-reset-central.uf2")
+            && uf2_reset_central_task.contains("firmware/reset/lalapad-gen2-rmk-reset-central.uf2")
             && uf2_reset_central_task.contains("--family")
             && uf2_reset_central_task.contains("nrf52840")
             && uf2_reset_central_task.contains("dependencies = [\"objcopy-reset-central\"]"),

@@ -139,7 +139,8 @@ def main() -> None:
         return
 
     expected_uf2s = [(uf2, args.require_uf2) for uf2 in UF2_FILES]
-    expected_uf2s.extend((uf2, args.require_reset_uf2) for uf2 in RESET_UF2_FILES)
+    if args.require_reset_uf2:
+        expected_uf2s.extend((uf2, True) for uf2 in RESET_UF2_FILES)
 
     for uf2, required in expected_uf2s:
         if not uf2.exists():

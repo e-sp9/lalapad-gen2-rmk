@@ -346,18 +346,23 @@ def firmware_artifact_status(
             f"{pair_sha256!r} does not match artifact entries {expected_pair_sha256!r}"
         )
 
-    required_uf2_paths = [
-        spec.path
+    required_artifact_specs = [
+        spec
         for spec in firmware_artifact_manifest.ARTIFACTS
-        if spec.required_group == "uf2"
+        if spec.required_group in {"uf2", "reset_uf2"}
     ]
-    for required_path in required_uf2_paths:
-        artifact = artifacts_by_path.get(required_path)
+    required_uf2_paths = [spec.path for spec in required_artifact_specs]
+    for spec in required_artifact_specs:
+        artifact = artifacts_by_path.get(spec.path)
         if artifact is None:
-            errors.append(f"firmware artifact manifest missing required UF2 {required_path}")
+            errors.append(
+                f"firmware artifact manifest missing required {spec.kind} {spec.path}"
+            )
             continue
-        if artifact.get("kind") != "uf2":
-            errors.append(f"firmware artifact manifest {required_path} kind must be uf2")
+        if artifact.get("kind") != spec.kind:
+            errors.append(
+                f"firmware artifact manifest {spec.path} kind must be {spec.kind}"
+            )
 
     return {
         "path": str(artifact_manifest_path),
