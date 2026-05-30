@@ -1,8 +1,8 @@
 [coverage]
-passed = 3356
-total = 3356
-result_count = 579
-result_inventory_sha256 = "ef07653325aec6f876db41f290d4366c6f1b4078ee8704274a16cb45e6ffb5d2"
+passed = 3391
+total = 3391
+result_count = 580
+result_inventory_sha256 = "e8104e9f750754f63fc5c9f37e334a75913d6334d3d38c684c96c2fd12f8d79b"
 
 [coverage.by_kind.behavior]
 passed = 10
@@ -67,6 +67,10 @@ total = 3
 [coverage.by_kind.rmk_patch]
 passed = 59
 total = 59
+
+[coverage.by_kind.runtime_keymap_mirror]
+passed = 35
+total = 35
 
 [coverage.by_kind.porting_status_evidence]
 passed = 34

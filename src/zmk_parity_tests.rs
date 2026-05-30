@@ -2987,6 +2987,17 @@ fn porting_coverage_includes_exact_rmk_inventory_gates() {
         .iter()
         .map(|scenario| scenario["id"].as_str().unwrap())
         .collect::<BTreeSet<_>>();
+    let runtime_keymap_mirror = manifest["runtime_keymap_mirrors"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|mirror| {
+            mirror["id"].as_str().unwrap()
+                == "runtime_lalapad_keymap_mirrors_shipped_scenario_cells"
+        })
+        .expect("runtime keymap mirror gate is missing");
+    let expected_runtime_keymap_mirror_total =
+        runtime_keymap_mirror["positions"].as_array().unwrap().len() as i64;
     for runtime_scenario in manifest["runtime_scenario_tests"].as_array().unwrap() {
         if runtime_scenario["file"].as_str().unwrap()
             == "vendor/rmk-0.8.2/tests/keyboard_lalapad_zmk_scenarios_test.rs"
@@ -3058,6 +3069,24 @@ fn porting_coverage_includes_exact_rmk_inventory_gates() {
         assert_eq!(scenario_result["kind"], "runtime_scenario");
         assert_eq!(scenario_result["ok"], true);
     }
+
+    let runtime_keymap_mirror_result = results
+        .iter()
+        .find(|result| result["id"] == "runtime_lalapad_keymap_mirrors_shipped_scenario_cells")
+        .expect("runtime keymap mirror coverage result is missing");
+    assert_eq!(
+        runtime_keymap_mirror_result["kind"],
+        "runtime_keymap_mirror"
+    );
+    assert_eq!(
+        runtime_keymap_mirror_result["passed"].as_i64(),
+        Some(expected_runtime_keymap_mirror_total)
+    );
+    assert_eq!(
+        runtime_keymap_mirror_result["total"].as_i64(),
+        Some(expected_runtime_keymap_mirror_total)
+    );
+    assert_eq!(runtime_keymap_mirror_result["ok"], true);
 
     if default_zmk_config_dir().is_some() {
         let source_scenarios: Vec<_> = results
@@ -4069,6 +4098,98 @@ print(json.dumps({
             .as_str()
             .unwrap()
             .contains("must be marked #[test]")
+    );
+}
+
+#[test]
+fn porting_coverage_rejects_runtime_keymap_fixture_drift() {
+    let output = run_python(
+        r#"
+import copy
+import importlib.util
+import json
+import sys
+import tempfile
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("porting_coverage", "tools/porting_coverage.py")
+pc = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = pc
+spec.loader.exec_module(pc)
+
+manifest = pc.load_toml(Path("tools/porting_coverage_manifest.toml"))
+keyboard = pc.load_toml(Path("keyboard.toml"))
+ok = pc.check_runtime_keymap_mirrors(manifest, keyboard, Path("."))[0]
+
+bad_keyboard = copy.deepcopy(keyboard)
+bad_keyboard["layout"]["keymap"][0][3][4] = "LCtrl"
+keyboard_drift = pc.check_runtime_keymap_mirrors(manifest, bad_keyboard, Path("."))[0]
+
+with tempfile.TemporaryDirectory() as root_dir:
+    root = Path(root_dir)
+    scenario_dir = root / "vendor/rmk-0.8.2/tests"
+    scenario_dir.mkdir(parents=True)
+    scenario = Path("vendor/rmk-0.8.2/tests/keyboard_lalapad_zmk_scenarios_test.rs").read_text(
+        encoding="utf-8"
+    )
+    scenario = scenario.replace("k!(Kp7)", "k!(Kp8)", 1)
+    (scenario_dir / "keyboard_lalapad_zmk_scenarios_test.rs").write_text(
+        scenario, encoding="utf-8"
+    )
+    fixture_drift = pc.check_runtime_keymap_mirrors(manifest, keyboard, root)[0]
+
+def pack(result):
+    return result.__dict__ | {"ok": result.ok}
+
+print(json.dumps({
+    "ok": pack(ok),
+    "keyboard_drift": pack(keyboard_drift),
+    "fixture_drift": pack(fixture_drift),
+}))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "runtime keymap mirror drift check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(parsed["ok"]["kind"], "runtime_keymap_mirror");
+    assert_eq!(parsed["ok"]["total"].as_i64(), Some(35));
+    assert_eq!(parsed["ok"]["passed"].as_i64(), Some(35));
+    assert_eq!(parsed["ok"]["ok"], true);
+
+    assert_eq!(parsed["keyboard_drift"]["kind"], "runtime_keymap_mirror");
+    assert_eq!(parsed["keyboard_drift"]["ok"], false);
+    assert!(
+        parsed["keyboard_drift"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("L0R3C4")
+    );
+    assert!(
+        parsed["keyboard_drift"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("LCtrl")
+    );
+
+    assert_eq!(parsed["fixture_drift"]["kind"], "runtime_keymap_mirror");
+    assert_eq!(parsed["fixture_drift"]["ok"], false);
+    assert!(
+        parsed["fixture_drift"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("L1R0C8")
+    );
+    assert!(
+        parsed["fixture_drift"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("k!(Kp8)")
     );
 }
 

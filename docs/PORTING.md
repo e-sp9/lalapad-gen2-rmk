@@ -257,6 +257,10 @@ actions are checked by asserting that the sequence does not fall through to a
 keyboard HID report from a lower layer. The runtime inventory gate scopes its
 needles to the declared Rust test function, preventing an expected action in one
 test from satisfying another scenario's coverage entry.
+It also parses the hand-written RMK runtime-test `lalapad_keymap()` fixture and
+compares every scenario-relevant cell by layer, row, and column against the
+shipped `keyboard.toml`, so a runtime test cannot keep passing against a stale
+fixture after the real firmware keymap changes.
 The gate additionally resolves every position on layer 1, layer 2, and the
 system tri-layer against the ZMK source keymap to catch transparent-key
 fallthrough drift beyond the hand-written representative scenarios.

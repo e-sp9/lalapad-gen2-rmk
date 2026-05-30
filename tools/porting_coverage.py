@@ -3973,6 +3973,173 @@ def check_rust_unit_tests(manifest: dict[str, Any], project_root: Path) -> list[
     return results
 
 
+def split_rust_top_level_commas(text: str) -> list[str]:
+    items: list[str] = []
+    start = 0
+    depth = 0
+    in_string = False
+    escape = False
+    for index, char in enumerate(text):
+        if in_string:
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+            continue
+        if char in "([{":
+            depth += 1
+            continue
+        if char in ")]}":
+            depth -= 1
+            continue
+        if char == "," and depth == 0:
+            item = text[start:index].strip()
+            if item:
+                items.append(item)
+            start = index + 1
+    item = text[start:].strip()
+    if item:
+        items.append(item)
+    return items
+
+
+def matching_rust_bracket(text: str, open_index: int) -> int | None:
+    pairs = {"[": "]", "(": ")", "{": "}"}
+    open_char = text[open_index]
+    close_char = pairs.get(open_char)
+    if close_char is None:
+        return None
+    depth = 0
+    in_string = False
+    escape = False
+    for index in range(open_index, len(text)):
+        char = text[index]
+        if in_string:
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+            continue
+        if char == open_char:
+            depth += 1
+        elif char == close_char:
+            depth -= 1
+            if depth == 0:
+                return index
+    return None
+
+
+def parse_rust_keymap_layers(function_scope: str) -> list[list[list[str]]]:
+    layers: list[list[list[str]]] = []
+    search_start = 0
+    while True:
+        match = re.search(r"layer!\s*\(\s*\[", function_scope[search_start:])
+        if not match:
+            break
+        layer_open = search_start + match.end() - 1
+        layer_close = matching_rust_bracket(function_scope, layer_open)
+        if layer_close is None:
+            break
+        layer_body = function_scope[layer_open + 1 : layer_close]
+        rows: list[list[str]] = []
+        for row in split_rust_top_level_commas(layer_body):
+            stripped = row.strip()
+            if not (stripped.startswith("[") and stripped.endswith("]")):
+                continue
+            rows.append(split_rust_top_level_commas(stripped[1:-1]))
+        layers.append(rows)
+        search_start = layer_close + 1
+    return layers
+
+
+def normalize_rust_key_action(value: str) -> str:
+    return re.sub(r"\s+", "", value.strip())
+
+
+def keyboard_action_to_runtime_rust(action: str) -> str:
+    if action == NO_KEY:
+        return "a!(No)"
+    if action == TRANSPARENT:
+        return "a!(Transparent)"
+    if match := re.fullmatch(r"LT\((\d+),\s*([A-Za-z0-9_]+),\s*FAST_LAYER\)", action):
+        layer, key = match.groups()
+        return f"lt({layer}, KeyCode::{key})"
+    if re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", action):
+        return f"k!({action})"
+    raise ValueError(f"unsupported runtime mirror action {action!r}")
+
+
+def check_runtime_keymap_mirrors(
+    manifest: dict[str, Any], config: dict[str, Any], project_root: Path
+) -> list[Result]:
+    results: list[Result] = []
+    km = keymap(config)
+    for check in manifest.get("runtime_keymap_mirrors", []):
+        target_file = str(check["file"])
+        function_name = str(check["function"])
+        positions = list(check["positions"])
+        total = len(positions)
+        try:
+            text = (project_root / target_file).read_text()
+        except OSError as e:
+            results.append(Result(check["id"], "runtime_keymap_mirror", 0, total, str(e)))
+            continue
+        function_scope = extract_rust_function_scope(text, function_name)
+        if function_scope is None:
+            results.append(
+                Result(
+                    check["id"],
+                    "runtime_keymap_mirror",
+                    0,
+                    total,
+                    f"{target_file} missing function {function_name!r}",
+                )
+            )
+            continue
+        runtime_layers = parse_rust_keymap_layers(function_scope)
+        passed = 0
+        messages: list[str] = []
+        for position in positions:
+            layer = int(position["layer"])
+            row = int(position["row"])
+            col = int(position["col"])
+            label = f"L{layer}R{row}C{col}"
+            try:
+                keyboard_action = km[layer][row][col]
+                expected_rust = keyboard_action_to_runtime_rust(keyboard_action)
+                actual_rust = runtime_layers[layer][row][col]
+            except (IndexError, KeyError, ValueError) as e:
+                messages.append(f"{label}: {e}")
+                continue
+            if normalize_rust_key_action(actual_rust) == normalize_rust_key_action(expected_rust):
+                passed += 1
+            else:
+                messages.append(
+                    f"{label}: keyboard.toml {keyboard_action!r} expects {expected_rust!r}, "
+                    f"runtime fixture has {actual_rust!r}"
+                )
+        results.append(
+            Result(
+                check["id"],
+                "runtime_keymap_mirror",
+                passed,
+                total,
+                "ok" if not messages else "; ".join(messages),
+            )
+        )
+    return results
+
+
 def check_runtime_scenario_tests(manifest: dict[str, Any], project_root: Path) -> list[Result]:
     results: list[Result] = []
     for check in manifest.get("runtime_scenario_tests", []):
@@ -5124,6 +5291,7 @@ def run(
     results.extend(check_code_topology(manifest, project_root))
     results.extend(check_file_contains_invariants(manifest, project_root))
     results.extend(check_rust_unit_tests(manifest, project_root))
+    results.extend(check_runtime_keymap_mirrors(manifest, keyboard, project_root))
     results.extend(check_runtime_scenario_tests(manifest, project_root))
     results.extend(check_makefile_task_invariants(manifest, project_root))
     results.extend(check_trackpad_virtual_buttons(manifest, keyboard, project_root))

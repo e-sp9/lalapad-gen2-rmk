@@ -32,7 +32,7 @@ const fn lt(layer: u8, key: KeyCode) -> KeyAction {
 fn lalapad_keymap() -> [[[KeyAction; 12]; 7]; 4] {
     [
         layer!([
-            [k!(Q), k!(W), a!(No), a!(No), a!(No), a!(No), a!(No), k!(Y), a!(No), a!(No), a!(No), a!(No)],
+            [k!(Q), k!(W), a!(No), a!(No), a!(No), a!(No), a!(No), k!(Y), k!(U), a!(No), a!(No), a!(No)],
             [k!(A), k!(S), k!(D), k!(F), a!(No), a!(No), a!(No), k!(H), k!(J), k!(K), a!(No), a!(No)],
             [a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), k!(N), a!(No), a!(No), a!(No), a!(No)],
             [a!(No), a!(No), a!(No), a!(No), lt(1, KeyCode::Space), a!(No), a!(No), lt(2, KeyCode::Enter), a!(No), a!(No), a!(No), a!(No)],
