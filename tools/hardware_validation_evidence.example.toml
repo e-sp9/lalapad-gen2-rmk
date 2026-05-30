@@ -12,7 +12,7 @@
 # each check. Keep the generated pair_sha256 prefix when present, then replace
 # the path/reading placeholder with real bench evidence and leave every
 # required observation term in the completed note. For final validation, also
-# fill artifact_paths with real evidence files under the chosen
+# fill artifact_paths with non-empty real evidence files under the chosen
 # EVIDENCE_ARTIFACT_ROOT, such as captured videos, logs, photos, screenshots, or
 # scope traces.
 #

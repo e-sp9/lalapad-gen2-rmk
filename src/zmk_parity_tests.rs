@@ -4038,6 +4038,12 @@ fn hardware_validation_can_generate_complete_evidence_template() {
     );
     let checks = manifest["checks"].as_array().unwrap();
     assert_eq!(template_entries.len(), checks.len());
+    assert!(
+        stdout.contains(
+            "# Final validation also requires artifact_paths to list non-empty real evidence files"
+        ),
+        "evidence template should explain that retained artifact_paths files must be non-empty"
+    );
     for check in checks {
         let check_id = check["id"].as_str().unwrap();
         let suggested_check_id = check_id.replace('_', "-");
@@ -4170,6 +4176,10 @@ fn hardware_validation_can_generate_bench_checklist() {
     let checks = manifest["checks"].as_array().unwrap();
     assert!(stdout.contains("# LaLaPad Gen2 RMK Hardware Validation Checklist"));
     assert!(stdout.contains("Record the flashed firmware tag or commit before testing."));
+    assert!(
+        stdout.contains("non-empty real evidence files in `artifact_paths`"),
+        "checklist should explain that retained artifact_paths files must be non-empty"
+    );
     assert!(stdout.contains("firmware-artifacts.local.json"));
     assert!(stdout.contains("pair_sha256"));
     assert!(stdout.contains("## trackpad"));
@@ -5288,6 +5298,7 @@ fn local_validation_entrypoints_match_ci_gates() {
             && README_MD.contains("FIRMWARE_ARTIFACT_MANIFEST")
             && README_MD.contains("EVIDENCE_ARTIFACT_ROOT")
             && README_MD.contains("artifact_paths")
+            && README_MD.contains("non-empty real file in `artifact_paths`")
             && README_MD.contains("HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-report")
             && PORTING_MD.contains("cargo make migration-status-report")
             && PORTING_MD.contains("cargo make migration-status")
@@ -5304,6 +5315,7 @@ fn local_validation_entrypoints_match_ci_gates() {
             && PORTING_MD.contains("FIRMWARE_ARTIFACT_MANIFEST")
             && PORTING_MD.contains("EVIDENCE_ARTIFACT_ROOT")
             && PORTING_MD.contains("artifact_paths")
+            && PORTING_MD.contains("existing non-empty `artifact_paths` file")
             && PORTING_MD.contains("HARDWARE_EVIDENCE=hardware-validation-evidence.local.toml cargo make migration-status-final-current"),
         "README and porting notes should document the local Markdown migration dashboard, RMK behavior regression suite, artifact manifest, current-ref evidence template, and current-ref final gate"
     );
@@ -5346,6 +5358,11 @@ fn local_validation_entrypoints_match_ci_gates() {
         "hardware evidence example should document firmware_ref-prefilled template generation"
     );
     assert!(
+        HARDWARE_VALIDATION_EVIDENCE_EXAMPLE_TOML
+            .contains("non-empty real evidence files under the chosen"),
+        "hardware evidence example should document that retained artifact_paths files must be non-empty"
+    );
+    assert!(
         RELEASE_MD.contains("HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit FIRMWARE_ARTIFACT_MANIFEST=firmware-artifacts.local.json cargo make migration-status-final")
             && RELEASE_MD.contains("RMK\nZMK-derived runtime scenario suite")
             && RELEASE_MD.contains("ZMK_KEYMAP")
@@ -5354,6 +5371,7 @@ fn local_validation_entrypoints_match_ci_gates() {
             && RELEASE_MD.contains("FIRMWARE_ARTIFACT_MANIFEST")
             && RELEASE_MD.contains("EVIDENCE_ARTIFACT_ROOT")
             && RELEASE_MD.contains("artifact_paths")
+            && RELEASE_MD.contains("non-empty file in `artifact_paths`")
             && RELEASE_MD.contains("Full validation: pass")
             && RELEASE_MD.contains("if the announcement claims complete hardware validation"),
         "release guide should require the final migration status gate before complete hardware-validation claims"

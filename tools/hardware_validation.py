@@ -984,7 +984,7 @@ def as_evidence_template(
         "# Entries are keyed by id from tools/hardware_validation_manifest.toml.",
         "# The metadata hash binds this evidence file to the current hardware validation manifest.",
         "# Change status to \"validated\" only when validated_at, tester, firmware_ref, and artifact_or_notes are filled.",
-        "# Final validation also requires artifact_paths to list real evidence files under the evidence artifact root.",
+        "# Final validation also requires artifact_paths to list non-empty real evidence files under the evidence artifact root.",
         "# Each artifact_paths entry must be named in artifact_or_notes and match a required evidence artifact type.",
         "# If artifact_or_notes is prefilled with firmware artifact pair_sha256, keep it and append the observed evidence after it.",
         "",
@@ -1142,7 +1142,7 @@ def as_checklist(
         "Record the flashed firmware tag or commit before testing. After each item "
         "passes, copy the check id into an evidence overlay generated with "
         "`--evidence-template` and include the required observations in "
-        "`artifact_or_notes` plus real evidence files in `artifact_paths`.",
+        "`artifact_or_notes` plus non-empty real evidence files in `artifact_paths`.",
         "",
         "When using `firmware-artifacts.local.json`, keep the generated "
         "`pair_sha256` in each `artifact_or_notes` entry and append the bench "
@@ -1191,7 +1191,10 @@ def as_checklist(
             artifact_paths_hint = (
                 toml_string_array(artifact_paths)
                 if artifact_paths
-                else "captured files named in artifact_or_notes and matching required artifact types"
+                else (
+                    "non-empty captured files named in artifact_or_notes and matching "
+                    "required artifact types"
+                )
             )
             lines.append(f"    - artifact_paths: {artifact_paths_hint}")
             if artifact_paths:
@@ -1343,7 +1346,7 @@ def main() -> None:
     parser.add_argument(
         "--require-evidence-artifact-paths",
         action="store_true",
-        help="fail unless each validated evidence entry lists at least one existing artifact_paths file",
+        help="fail unless each validated evidence entry lists at least one existing non-empty artifact_paths file",
     )
     parser.add_argument(
         "--require-classified",
