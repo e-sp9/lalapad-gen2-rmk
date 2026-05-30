@@ -2057,6 +2057,14 @@ validated_at = "2026-05-29"
 tester = "hardware bench"
 firmware_ref = "35b3f1f"
 artifact_or_notes = "video: /tmp/right-trackpad.mp4; right cursor and tap worked during the run."
+
+[[evidence]]
+id = "vial_thumb_layer_taps"
+status = "validated"
+validated_at = "2026-05-29"
+tester = "hardware bench"
+firmware_ref = "35b3f1f"
+artifact_or_notes = "photo: /tmp/vial.png; Vial screenshot shows Spacebar Entertainer layer 10 layer 20 labels."
 "#;
     let path = write_temp_file("hardware-validation-missing-observations", evidence);
     let output = run_hardware_validation(&["--evidence", path.to_str().unwrap(), "--json"]);
@@ -2085,6 +2093,17 @@ artifact_or_notes = "video: /tmp/right-trackpad.mp4; right cursor and tap worked
                 && error.contains("'horizontal scroll'")
         }),
         "missing scroll observations should be rejected: {errors:?}"
+    );
+    assert!(
+        errors.iter().any(|error| {
+            error.contains(
+                "vial_thumb_layer_taps: artifact_or_notes must mention required observation(s)",
+            ) && error.contains("'Space'")
+                && error.contains("'Enter'")
+                && error.contains("'layer 1'")
+                && error.contains("'layer 2'")
+        }),
+        "required observations should not match inside larger words or numbers: {errors:?}"
     );
     assert!(
         !require_output.status.success(),

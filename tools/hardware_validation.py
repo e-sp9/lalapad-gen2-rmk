@@ -180,6 +180,14 @@ def validate_evidence_needles_schema(check_id: str, check: dict[str, Any]) -> li
     return []
 
 
+def artifact_note_mentions_needle(artifact_or_notes: str, needle: str) -> bool:
+    pattern = re.compile(
+        rf"(?<![A-Za-z0-9_]){re.escape(needle.strip())}(?![A-Za-z0-9_])",
+        re.IGNORECASE,
+    )
+    return pattern.search(artifact_or_notes) is not None
+
+
 def validate_validated_evidence(check_id: str, check: dict[str, Any]) -> list[str]:
     errors: list[str] = []
     validated_at = str(check.get("validated_at", "")).strip()
@@ -227,7 +235,7 @@ def validate_validated_evidence(check_id: str, check: dict[str, Any]) -> list[st
         missing_needles = [
             needle
             for needle in evidence_needles
-            if needle.lower() not in lower_notes
+            if not artifact_note_mentions_needle(lower_notes, needle)
         ]
         if missing_needles:
             errors.append(
