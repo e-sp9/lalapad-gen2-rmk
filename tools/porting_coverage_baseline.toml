@@ -1,8 +1,8 @@
 [coverage]
-passed = 3247
-total = 3247
+passed = 3273
+total = 3273
 result_count = 572
-result_inventory_sha256 = "06abfeee4c30951df6bfd9094400b64658c0ccb5710b3bf6f978fc1672d8a72d"
+result_inventory_sha256 = "d034b7eb493f460824b99d6fa3e964b5d7228f942fa11fd2e6574b9204241124"
 
 [coverage.by_kind.behavior]
 passed = 10
@@ -21,8 +21,8 @@ passed = 27
 total = 27
 
 [coverage.by_kind.code_topology]
-passed = 28
-total = 28
+passed = 54
+total = 54
 
 [coverage.by_kind.combo]
 passed = 4

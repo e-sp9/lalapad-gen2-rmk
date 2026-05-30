@@ -2995,6 +2995,12 @@ forbidden = [
   "Iqs9151KeyboardController::new_peripheral",
   "RgbLedWidget::new(red, green, blue, true, false)",
 ]
+controllers = [
+  { name = "split_trackpad_events", kind = "event", body_required = ["Iqs9151SplitEventController::new()"] },
+  { name = "trackpad_layer_state", kind = "event", body_required = ["TrackpadLayerController::new()"] },
+  { name = "rgb_led_widget", kind = "poll", body_required = ["RgbLedWidget::new(red, green, blue, true, true)"], body_forbidden = ["RgbLedWidget::new(red, green, blue, true, false)"] },
+  { name = "right_trackpad", kind = "event", body_required = ["TrackpadSide::Right", "device.set_motion_output(Iqs9151MotionOutput::HidReport)", "Iqs9151KeyboardController::new_central(device)"], body_forbidden = ["TrackpadSide::Left", "Iqs9151MotionOutput::SplitEvent", "Iqs9151KeyboardController::new_peripheral"] },
+]
 
 [[code_topology]]
 id = "peripheral_controller_topology"
@@ -3016,6 +3022,11 @@ forbidden = [
   "Iqs9151MotionOutput::HidReport",
   "Iqs9151KeyboardController::new_central",
   "RgbLedWidget::new(red, green, blue, true, true)",
+]
+controllers = [
+  { name = "trackpad_layer_state", kind = "event", body_required = ["TrackpadLayerController::new()"] },
+  { name = "rgb_led_widget", kind = "poll", body_required = ["RgbLedWidget::new(red, green, blue, true, false)"], body_forbidden = ["RgbLedWidget::new(red, green, blue, true, true)"] },
+  { name = "left_trackpad", kind = "event", body_required = ["TrackpadSide::Left", "device.set_motion_output(Iqs9151MotionOutput::SplitEvent)", "Iqs9151KeyboardController::new_peripheral(device)"], body_forbidden = ["TrackpadSide::Right", "Iqs9151MotionOutput::HidReport", "Iqs9151KeyboardController::new_central"] },
 ]
 
 [[rust_unit_tests]]

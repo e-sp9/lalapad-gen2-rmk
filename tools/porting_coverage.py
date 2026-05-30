@@ -880,6 +880,47 @@ def strip_c_style_comments(text: str) -> str:
     return re.sub(r"//.*", "", text)
 
 
+def strip_rust_comments_and_strings(text: str) -> str:
+    output: list[str] = []
+    i = 0
+    while i < len(text):
+        if text.startswith("//", i):
+            newline = text.find("\n", i)
+            if newline == -1:
+                break
+            output.append("\n")
+            i = newline + 1
+            continue
+        if text.startswith("/*", i):
+            end = text.find("*/", i + 2)
+            if end == -1:
+                break
+            output.append("\n" * text[i : end + 2].count("\n"))
+            i = end + 2
+            continue
+        char = text[i]
+        if char == '"':
+            output.append('""')
+            i += 1
+            escaped = False
+            while i < len(text):
+                current = text[i]
+                if current == "\n":
+                    output.append("\n")
+                if escaped:
+                    escaped = False
+                elif current == "\\":
+                    escaped = True
+                elif current == '"':
+                    i += 1
+                    break
+                i += 1
+            continue
+        output.append(char)
+        i += 1
+    return "".join(output)
+
+
 def extract_angle_property(block: str, name: str) -> str:
     match = re.search(rf"\b{re.escape(name)}\s*=\s*<(?P<body>.*?)>\s*;", block, re.S)
     if not match:
@@ -3726,22 +3767,75 @@ def check_code_contains(manifest: dict[str, Any], project_root: Path) -> list[Re
     return results
 
 
+def rust_controller_bodies(text: str) -> dict[str, tuple[str, str]]:
+    controllers: dict[str, tuple[str, str]] = {}
+    for match in re.finditer(
+        r"#\s*\[\s*controller\s*\(\s*(?P<kind>[A-Za-z_][A-Za-z0-9_]*)\s*\)\s*\]\s*"
+        r"fn\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*\(",
+        text,
+    ):
+        open_brace = text.find("{", match.end())
+        if open_brace == -1:
+            continue
+        try:
+            close_brace = matching_block_end(text, open_brace)
+        except ValueError:
+            continue
+        controllers[match.group("name")] = (
+            match.group("kind"),
+            text[open_brace + 1 : close_brace],
+        )
+    return controllers
+
+
 def check_code_topology(manifest: dict[str, Any], project_root: Path) -> list[Result]:
     results: list[Result] = []
     for check in manifest.get("code_topology", []):
-        text = (project_root / check["file"]).read_text()
+        text = strip_rust_comments_and_strings((project_root / check["file"]).read_text())
         required = list(check.get("required", []))
         forbidden = list(check.get("forbidden", []))
         passed_required = sum(1 for needle in required if needle in text)
         passed_forbidden = sum(1 for needle in forbidden if needle not in text)
         messages = [f"missing {needle!r}" for needle in required if needle not in text]
         messages.extend(f"forbidden {needle!r} is present" for needle in forbidden if needle in text)
+        total = len(required) + len(forbidden)
+        passed = passed_required + passed_forbidden
+
+        controllers = rust_controller_bodies(text)
+        for controller in check.get("controllers", []):
+            name = str(controller["name"])
+            expected_kind = str(controller["kind"])
+            actual = controllers.get(name)
+            total += 1
+            if actual is None:
+                messages.append(f"controller {name!r} is missing")
+                continue
+            actual_kind, body = actual
+            if actual_kind == expected_kind:
+                passed += 1
+            else:
+                messages.append(
+                    f"controller {name!r} kind expected {expected_kind!r}, got {actual_kind!r}"
+                )
+            for needle in controller.get("body_required", []):
+                total += 1
+                if needle in body:
+                    passed += 1
+                else:
+                    messages.append(f"controller {name!r} body missing {needle!r}")
+            for needle in controller.get("body_forbidden", []):
+                total += 1
+                if needle not in body:
+                    passed += 1
+                else:
+                    messages.append(f"controller {name!r} body has forbidden {needle!r}")
+
         results.append(
             Result(
                 check["id"],
                 "code_topology",
-                passed_required + passed_forbidden,
-                len(required) + len(forbidden),
+                passed,
+                total,
                 "ok" if not messages else "; ".join(messages),
             )
         )

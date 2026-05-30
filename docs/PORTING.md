@@ -330,7 +330,11 @@ Vial-exposed positions together so a gesture cannot silently move to a different
 RMK key.
 The split checks also verify the RMK central/peripheral matrix footprint,
 row/column pin order, absence of incompatible top-level matrix or serial
-configuration, and central/peripheral controller topology.
+configuration, and central/peripheral controller topology. The controller
+topology check inspects each `#[controller(...)]` function body so the right
+central trackpad must own HID reporting and the left peripheral trackpad must
+use split-event transport in the intended entrypoint, not merely somewhere in
+the same Rust file.
 `tools/porting_coverage_baseline.toml` records the current
 overall denominator, result-id inventory hash, and per-kind denominator. Use
 `--coverage-baseline` in CI and release checks so a removed or swapped check

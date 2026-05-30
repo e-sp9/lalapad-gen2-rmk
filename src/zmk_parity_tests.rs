@@ -244,7 +244,7 @@ fn porting_coverage_complete_gate_accepts_explicit_status_completion() {
         assert!(stdout.contains(&format!("- {kind}: {passed}/{total} = 100.00%")));
     }
     assert!(stdout.contains("Porting coverage by kind:"));
-    assert!(stdout.contains("- code_topology: 28/28 = 100.00%"));
+    assert!(stdout.contains("- code_topology: 54/54 = 100.00%"));
     assert!(stdout.contains("- dependency: 23/23 = 100.00%"));
     assert!(stdout.contains("- gpio_flag_mirror: 36/36 = 100.00%"));
     assert!(stdout.contains("- release_workflow: 32/32 = 100.00%"));
@@ -4485,12 +4485,55 @@ with tempfile.TemporaryDirectory() as root_dir:
     (root / "src/central.rs").write_text(bad_central, encoding="utf-8")
     bad = pc.check_code_topology(manifest, root)
 
+with tempfile.TemporaryDirectory() as root_dir:
+    root = Path(root_dir)
+    (root / "src").mkdir()
+    shutil.copy(Path("src/central.rs"), root / "src/central.rs")
+    shutil.copy(Path("src/peripheral.rs"), root / "src/peripheral.rs")
+    decoy_central = (root / "src/central.rs").read_text(encoding="utf-8")
+    decoy_central = decoy_central.replace(
+        "        device.set_motion_output(Iqs9151MotionOutput::HidReport);\n",
+        "        let _ = Iqs9151MotionOutput::HidReport;\n",
+    )
+    (root / "src/central.rs").write_text(decoy_central, encoding="utf-8")
+    decoy = pc.check_code_topology(manifest, root)
+
+with tempfile.TemporaryDirectory() as root_dir:
+    root = Path(root_dir)
+    (root / "src").mkdir()
+    shutil.copy(Path("src/central.rs"), root / "src/central.rs")
+    shutil.copy(Path("src/peripheral.rs"), root / "src/peripheral.rs")
+    peripheral_decoy = (root / "src/peripheral.rs").read_text(encoding="utf-8")
+    peripheral_decoy = peripheral_decoy.replace(
+        "        device.set_motion_output(Iqs9151MotionOutput::SplitEvent);\n",
+        "        let _ = Iqs9151MotionOutput::SplitEvent;\n",
+    )
+    (root / "src/peripheral.rs").write_text(peripheral_decoy, encoding="utf-8")
+    peripheral_decoy_result = pc.check_code_topology(manifest, root)
+
+with tempfile.TemporaryDirectory() as root_dir:
+    root = Path(root_dir)
+    (root / "src").mkdir()
+    shutil.copy(Path("src/central.rs"), root / "src/central.rs")
+    shutil.copy(Path("src/peripheral.rs"), root / "src/peripheral.rs")
+    file_level_decoy_central = (root / "src/central.rs").read_text(encoding="utf-8")
+    file_level_decoy_central = file_level_decoy_central.replace(
+        "        device.set_motion_output(Iqs9151MotionOutput::HidReport);\n",
+        "",
+    )
+    file_level_decoy_central += "\nfn topology_decoy() { let _ = Iqs9151MotionOutput::HidReport; }\n"
+    (root / "src/central.rs").write_text(file_level_decoy_central, encoding="utf-8")
+    file_level_decoy = pc.check_code_topology(manifest, root)
+
 def pack(results):
     return [result.__dict__ | {"ok": result.ok} for result in results]
 
 print(json.dumps({
     "ok": pack(ok),
     "bad": pack(bad),
+    "decoy": pack(decoy),
+    "peripheral_decoy": pack(peripheral_decoy_result),
+    "file_level_decoy": pack(file_level_decoy),
 }))
 "#,
     );
@@ -4510,9 +4553,20 @@ print(json.dumps({
         .find(|result| result["id"] == "central_controller_topology")
         .expect("central topology result is missing");
     assert_eq!(ok_central["kind"], "code_topology");
-    assert_eq!(ok_central["passed"].as_i64(), Some(14));
-    assert_eq!(ok_central["total"].as_i64(), Some(14));
+    assert_eq!(ok_central["passed"].as_i64(), Some(28));
+    assert_eq!(ok_central["total"].as_i64(), Some(28));
     assert_eq!(ok_central["ok"], true);
+
+    let ok_peripheral = parsed["ok"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "peripheral_controller_topology")
+        .expect("peripheral topology result is missing");
+    assert_eq!(ok_peripheral["kind"], "code_topology");
+    assert_eq!(ok_peripheral["passed"].as_i64(), Some(26));
+    assert_eq!(ok_peripheral["total"].as_i64(), Some(26));
+    assert_eq!(ok_peripheral["ok"], true);
 
     let bad_central = parsed["bad"]
         .as_array()
@@ -4527,6 +4581,55 @@ print(json.dumps({
     assert!(message.contains("forbidden 'TrackpadSide::Left' is present"));
     assert!(message.contains("missing 'Iqs9151MotionOutput::HidReport'"));
     assert!(message.contains("forbidden 'Iqs9151MotionOutput::SplitEvent' is present"));
+    assert!(message.contains("controller 'right_trackpad' body missing 'TrackpadSide::Right'"));
+    assert!(
+        message.contains("controller 'right_trackpad' body has forbidden 'TrackpadSide::Left'")
+    );
+
+    let decoy_central = parsed["decoy"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "central_controller_topology")
+        .expect("decoy central topology result is missing");
+    assert_eq!(decoy_central["kind"], "code_topology");
+    assert_eq!(decoy_central["ok"], false);
+    assert!(
+        decoy_central["message"]
+            .as_str()
+            .unwrap()
+            .contains("controller 'right_trackpad' body missing 'device.set_motion_output(Iqs9151MotionOutput::HidReport)'")
+    );
+
+    let peripheral_decoy = parsed["peripheral_decoy"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "peripheral_controller_topology")
+        .expect("peripheral decoy topology result is missing");
+    assert_eq!(peripheral_decoy["kind"], "code_topology");
+    assert_eq!(peripheral_decoy["ok"], false);
+    assert!(
+        peripheral_decoy["message"]
+            .as_str()
+            .unwrap()
+            .contains("controller 'left_trackpad' body missing 'device.set_motion_output(Iqs9151MotionOutput::SplitEvent)'")
+    );
+
+    let file_level_decoy = parsed["file_level_decoy"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "central_controller_topology")
+        .expect("file-level decoy central topology result is missing");
+    assert_eq!(file_level_decoy["kind"], "code_topology");
+    assert_eq!(file_level_decoy["ok"], false);
+    assert!(
+        file_level_decoy["message"]
+            .as_str()
+            .unwrap()
+            .contains("controller 'right_trackpad' body missing 'device.set_motion_output(Iqs9151MotionOutput::HidReport)'")
+    );
 }
 
 #[test]
