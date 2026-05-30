@@ -502,7 +502,9 @@ reported as `validated_invalid` in the remaining table, so they remain visible
 as work to fix and do not inflate the validated count.
 Each manifest check must also declare non-empty `evidence_needles`, so
 `--require-hardware-classified` catches hardware checks that lack concrete
-observation terms before any release claim is made.
+observation terms before any release claim is made. Side-specific checks must
+include their side in those observations, so a right-half I2C log cannot be
+reused as left-half evidence.
 `validated_at` must be a real `YYYY-MM-DD` date that is not in the future.
 `firmware_ref` is an exact string match against the release tag, commit hash, or
 other immutable identifier for the central/peripheral firmware pair that was

@@ -8,7 +8,7 @@ area = "trackpad"
 side = "right"
 requirement = "Right IQS9151 answers at I2C address 0x56 and product-number register 0x1000 reads 0x09bc."
 evidence = "Probe the right-half I2C bus or run diagnostic firmware that reports the product-number read."
-evidence_needles = ["0x56", "0x1000", "0x09bc"]
+evidence_needles = ["right", "0x56", "0x1000", "0x09bc"]
 source = "docs/TRACKPAD_HARDWARE_CHECK.md#electrical-checks"
 status = "requires_hardware"
 
@@ -18,7 +18,7 @@ area = "trackpad"
 side = "left"
 requirement = "Left IQS9151 answers at I2C address 0x56 and product-number register 0x1000 reads 0x09bc."
 evidence = "Probe the left-half I2C bus or run diagnostic firmware that reports the product-number read."
-evidence_needles = ["0x56", "0x1000", "0x09bc"]
+evidence_needles = ["left", "0x56", "0x1000", "0x09bc"]
 source = "docs/TRACKPAD_HARDWARE_CHECK.md#electrical-checks"
 status = "requires_hardware"
 

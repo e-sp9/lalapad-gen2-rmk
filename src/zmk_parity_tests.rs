@@ -2068,6 +2068,23 @@ fn hardware_validation_manifest_requires_observation_needles_for_each_check() {
     let manifest = hardware_validation_manifest_toml();
     let checks = manifest["checks"].as_array().unwrap();
     assert_eq!(checks.len(), 12);
+    for (check_id, side) in [
+        ("iqs9151_right_i2c_identity", "right"),
+        ("iqs9151_left_i2c_identity", "left"),
+    ] {
+        let check = checks
+            .iter()
+            .find(|check| check["id"].as_str() == Some(check_id))
+            .unwrap_or_else(|| panic!("{check_id} is missing"));
+        assert!(
+            check["evidence_needles"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|needle| needle.as_str() == Some(side)),
+            "{check_id} should require side-specific evidence"
+        );
+    }
     for check in checks {
         let check_id = check["id"].as_str().unwrap();
         let needles = check["evidence_needles"]
@@ -2156,6 +2173,14 @@ validated_at = "2026-05-29"
 tester = "hardware bench"
 firmware_ref = "35b3f1f"
 artifact_or_notes = "photo: /tmp/vial.png; Vial screenshot shows Spacebar Entertainer layer 10 layer 20 labels."
+
+[[evidence]]
+id = "iqs9151_left_i2c_identity"
+status = "validated"
+validated_at = "2026-05-29"
+tester = "hardware bench"
+firmware_ref = "35b3f1f"
+artifact_or_notes = "log: /tmp/right-i2c.log; I2C scan found 0x56 and product register 0x1000 read 0x09bc on the right half."
 "#;
     let path = write_temp_file("hardware-validation-missing-observations", evidence);
     let output = run_hardware_validation(&["--evidence", path.to_str().unwrap(), "--json"]);
@@ -2195,6 +2220,14 @@ artifact_or_notes = "photo: /tmp/vial.png; Vial screenshot shows Spacebar Entert
                 && error.contains("'layer 2'")
         }),
         "required observations should not match inside larger words or numbers: {errors:?}"
+    );
+    assert!(
+        errors.iter().any(|error| {
+            error.contains(
+                "iqs9151_left_i2c_identity: artifact_or_notes must mention required observation(s)",
+            ) && error.contains("'left'")
+        }),
+        "left IQS9151 identity should require left-side evidence instead of accepting a right-side log: {errors:?}"
     );
     assert!(
         !require_output.status.success(),
