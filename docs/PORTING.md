@@ -493,6 +493,6 @@ only to a moving file name or host-side state. `--evidence-template` accepts
 `--artifact-pair-sha256-template <sha256>` to seed every evidence note with that
 hash before bench observations are added.
 Use `cargo make hardware-validation-session-current` to prepare a complete
-current-ref bench packet in one step: rebuilt UF2 artifact hashes, a
-firmware-ref and pair-SHA-prefilled evidence overlay, a hardware checklist, and
-a local Markdown migration status report.
+current-ref bench packet in one step: RMK ZMK-derived runtime scenario results,
+rebuilt UF2 artifact hashes, a firmware-ref and pair-SHA-prefilled evidence
+overlay, a hardware checklist, and a local Markdown migration status report.

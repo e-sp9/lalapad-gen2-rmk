@@ -2691,7 +2691,7 @@ fn local_validation_entrypoints_match_ci_gates() {
     );
     assert!(
         hardware_validation_session_current_task.contains(
-            "dependencies = [\"clean-current-git-ref\", \"firmware-artifact-manifest-current\"]",
+            "dependencies = [\"clean-current-git-ref\", \"firmware-artifact-manifest-current\", \"rmk-zmk-scenario-tests\"]",
         ) && hardware_validation_session_current_task
             .contains("git status --porcelain --untracked-files=normal")
             && hardware_validation_session_current_task
@@ -5853,8 +5853,8 @@ with tempfile.TemporaryDirectory() as tempdir:
     root = Path(tempdir)
     (root / "Makefile.toml").write_text(
         Path("Makefile.toml").read_text().replace(
-            'dependencies = ["clean-current-git-ref", "firmware-artifact-manifest-current"]',
-            'dependencies = ["firmware-artifact-manifest-current", "clean-current-git-ref"]',
+            'dependencies = ["clean-current-git-ref", "firmware-artifact-manifest-current", "rmk-zmk-scenario-tests"]',
+            'dependencies = ["firmware-artifact-manifest-current", "clean-current-git-ref", "rmk-zmk-scenario-tests"]',
             1,
         ),
         encoding="utf-8",
@@ -6104,7 +6104,7 @@ print(json.dumps({
         bad_current_hardware_session_dependency_order["message"]
             .as_str()
             .unwrap()
-            .contains("tasks.hardware-validation-session-current.dependencies expected ['clean-current-git-ref', 'firmware-artifact-manifest-current']")
+            .contains("tasks.hardware-validation-session-current.dependencies expected ['clean-current-git-ref', 'firmware-artifact-manifest-current', 'rmk-zmk-scenario-tests']")
     );
 
     let bad_current_final_task = parsed["bad_current_final_task"]

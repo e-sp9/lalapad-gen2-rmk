@@ -94,7 +94,7 @@ python3 tools/hardware_validation.py \
 '''
 
 [tasks.hardware-validation-session-current]
-dependencies = ["clean-current-git-ref", "firmware-artifact-manifest-current"]
+dependencies = ["clean-current-git-ref", "firmware-artifact-manifest-current", "rmk-zmk-scenario-tests"]
 script = '''
 if [ -n "$(git status --porcelain --untracked-files=normal)" ]; then
   echo "working tree has tracked or untracked non-ignored changes; commit or stash them before preparing current-ref hardware evidence" >&2

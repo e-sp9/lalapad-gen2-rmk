@@ -308,8 +308,9 @@ file sizes and SHA256 hashes so `artifact_or_notes` can point to an exact
 artifact set. `cargo make firmware-artifact-manifest-current` records the same
 hashes in `firmware-artifacts.local.json` and requires a clean current tag or
 commit for its `firmware_ref`. `cargo make
-hardware-validation-session-current` runs the current-ref firmware artifact
-manifest task, then writes `hardware-validation-evidence.local.toml`,
+hardware-validation-session-current` runs the RMK ZMK-derived runtime scenarios
+and the current-ref firmware artifact manifest task, then writes
+`hardware-validation-evidence.local.toml`,
 `hardware-validation-checklist.local.md`, and `migration-status.local.md` for a
 single hardware bench session; its evidence overlay is prefilled with both the
 current firmware ref and the generated artifact `pair_sha256`. Generated

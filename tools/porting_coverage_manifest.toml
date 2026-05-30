@@ -2866,7 +2866,7 @@ script_contains = [
 [[makefile_task_invariants]]
 id = "makefile_current_hardware_session_bundles_clean_ref_evidence"
 task = "hardware-validation-session-current"
-dependencies_equal = ["clean-current-git-ref", "firmware-artifact-manifest-current"]
+dependencies_equal = ["clean-current-git-ref", "firmware-artifact-manifest-current", "rmk-zmk-scenario-tests"]
 script_contains = [
   "git status --porcelain --untracked-files=normal",
   "git describe --tags --exact-match",
