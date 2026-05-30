@@ -237,7 +237,7 @@ fn porting_coverage_complete_gate_accepts_explicit_status_completion() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     let baseline = porting_coverage_baseline_toml();
     let baseline_by_kind = baseline["coverage"]["by_kind"].as_table().unwrap();
-    for kind in ["build_task", "runtime_scenario"] {
+    for kind in ["build_task", "dependency", "runtime_scenario"] {
         let expected = baseline_by_kind[kind].as_table().unwrap();
         let passed = expected["passed"].as_integer().unwrap();
         let total = expected["total"].as_integer().unwrap();
@@ -245,7 +245,6 @@ fn porting_coverage_complete_gate_accepts_explicit_status_completion() {
     }
     assert!(stdout.contains("Porting coverage by kind:"));
     assert!(stdout.contains("- code_topology: 54/54 = 100.00%"));
-    assert!(stdout.contains("- dependency: 23/23 = 100.00%"));
     assert!(stdout.contains("- gpio_flag_mirror: 36/36 = 100.00%"));
     assert!(stdout.contains("- release_workflow: 45/45 = 100.00%"));
     assert!(stdout.contains("- rmk_patch: 59/59 = 100.00%"));
@@ -6117,6 +6116,25 @@ with tempfile.TemporaryDirectory() as tempdir:
 
 with tempfile.TemporaryDirectory() as tempdir:
     root = Path(tempdir)
+    write_cargo_project(root, Path("Cargo.toml").read_text())
+    vendor_text = (root / "vendor/rmk-0.8.2/Cargo.toml").read_text().replace(
+        '''default = [
+    "defmt",
+    "storage",
+    "vial",
+    "vial_lock",
+]''',
+        '''default = [
+    "defmt",
+    "storage",
+]''',
+        1,
+    )
+    (root / "vendor/rmk-0.8.2/Cargo.toml").write_text(vendor_text)
+    bad_default_vial_feature_result = pc.check_cargo_dependency_invariants(manifest, root)
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
     cargo = pc.load_toml(Path("Cargo.toml"))
     cargo.pop("patch", None)
     cargo_text = Path("Cargo.toml").read_text()
@@ -6136,6 +6154,7 @@ print(json.dumps({
     "bad_default_features": pack(bad_default_features_result),
     "bad_bin": pack(bad_bin_result),
     "bad_ble_storage_feature": pack(bad_ble_storage_feature_result),
+    "bad_default_vial_feature": pack(bad_default_vial_feature_result),
     "no_patch": pack(no_patch_result),
 }))
 "#,
@@ -6153,8 +6172,8 @@ print(json.dumps({
     assert_eq!(ok.len(), 1);
     assert_eq!(ok[0]["id"], "cargo_uses_local_rmk_0_8_2_patch");
     assert_eq!(ok[0]["kind"], "dependency");
-    assert_eq!(ok[0]["passed"].as_i64(), Some(23));
-    assert_eq!(ok[0]["total"].as_i64(), Some(23));
+    assert_eq!(ok[0]["passed"].as_i64(), Some(25));
+    assert_eq!(ok[0]["total"].as_i64(), Some(25));
     assert_eq!(ok[0]["ok"], true);
 
     let bad_features = &parsed["bad_features"][0];
@@ -6198,6 +6217,22 @@ print(json.dumps({
             .as_str()
             .unwrap()
             .contains("vendor rmk feature 'adafruit_bl' closure missing 'storage'")
+    );
+
+    let bad_default_vial_feature = &parsed["bad_default_vial_feature"][0];
+    assert_eq!(bad_default_vial_feature["kind"], "dependency");
+    assert_eq!(bad_default_vial_feature["ok"], false);
+    assert!(
+        bad_default_vial_feature["message"]
+            .as_str()
+            .unwrap()
+            .contains("vendor rmk feature 'default' closure missing 'vial'")
+    );
+    assert!(
+        bad_default_vial_feature["message"]
+            .as_str()
+            .unwrap()
+            .contains("vendor rmk feature 'default' closure missing 'host'")
     );
 
     let no_patch = &parsed["no_patch"][0];

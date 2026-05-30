@@ -312,9 +312,10 @@ storage, or Vial runtime paths have been exhaustively exercised on real devices.
 The Cargo dependency checks also keep RMK default features enabled so the
 default storage/Vial support from the selected RMK release is not accidentally
 disabled, and they pin the split firmware entrypoints to the expected
-`central` and `peripheral` binaries. Because RMK BLE split requires storage
-support, the same dependency gate walks the vendored RMK feature graph and
-verifies that the enabled BLE features still resolve to `storage`.
+`central` and `peripheral` binaries. The same dependency gate walks the
+vendored RMK feature graph and verifies that the default feature closure still
+reaches `vial` and `host`, and that the enabled BLE features still resolve to
+`storage`.
 The build-task checks pin the cargo-make release path as well: release builds
 must run the flash-layout config guard, objcopy the central and peripheral
 ELFs into matching HEX files, convert both halves to nRF52840 UF2 artifacts,
