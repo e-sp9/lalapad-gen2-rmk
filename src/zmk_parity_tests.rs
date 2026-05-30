@@ -2073,6 +2073,87 @@ dst.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
     assert!(stdout.contains("firmware/reset/lalapad-gen2-rmk-reset-central.uf2"));
     assert!(stdout.contains("reset-uf2"));
 
+    let unknown_artifact_path =
+        artifact_path.with_file_name("unknown-firmware-artifacts.local.json");
+    let rewrite_unknown_artifact = Command::new("python3")
+        .arg("-c")
+        .arg(
+            r#"
+import hashlib
+import json
+import sys
+from pathlib import Path
+
+src = Path(sys.argv[1])
+dst = Path(sys.argv[2])
+root = Path(sys.argv[3])
+manifest = json.loads(src.read_text())
+extra_path = "firmware/normal/untracked-extra.uf2"
+extra_file = root / extra_path
+extra_file.parent.mkdir(parents=True, exist_ok=True)
+extra_file.write_bytes(b"untracked extra")
+extra_sha = hashlib.sha256(extra_file.read_bytes()).hexdigest()
+manifest["artifacts"].append({
+    "path": extra_path,
+    "role": "central",
+    "side": "right",
+    "kind": "uf2",
+    "size": extra_file.stat().st_size,
+    "sha256": extra_sha,
+})
+manifest["artifact_count"] = len(manifest["artifacts"])
+pair_payload = json.dumps(
+    [
+        {
+            "path": artifact.get("path"),
+            "size": artifact.get("size"),
+            "sha256": artifact.get("sha256"),
+        }
+        for artifact in manifest["artifacts"]
+    ],
+    sort_keys=True,
+    separators=(",", ":"),
+).encode()
+manifest["pair_sha256"] = hashlib.sha256(pair_payload).hexdigest()
+dst.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+"#,
+        )
+        .arg(&artifact_path)
+        .arg(&unknown_artifact_path)
+        .arg(&artifact_root)
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .output()
+        .unwrap();
+    assert!(
+        rewrite_unknown_artifact.status.success(),
+        "failed to rewrite artifact manifest with unknown artifact\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&rewrite_unknown_artifact.stdout),
+        String::from_utf8_lossy(&rewrite_unknown_artifact.stderr)
+    );
+    let unknown_artifact = run_migration_status(&[
+        "--coverage-baseline",
+        "tools/porting_coverage_baseline.toml",
+        "--hardware-baseline",
+        "tools/hardware_validation_baseline.toml",
+        "--firmware-artifact-manifest",
+        unknown_artifact_path.to_str().unwrap(),
+        "--artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--require-hardware-classified",
+    ]);
+    let _ = std::fs::remove_file(&unknown_artifact_path);
+    assert!(
+        !unknown_artifact.status.success(),
+        "migration status accepted an artifact manifest with an unknown artifact path\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&unknown_artifact.stdout),
+        String::from_utf8_lossy(&unknown_artifact.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&unknown_artifact.stdout)
+            .contains("firmware/normal/untracked-extra.uf2 is not a known artifact path"),
+        "unknown firmware artifact rejection should be reported by migration status"
+    );
+
     let missing_pair_sha = run_migration_status(&[
         "--coverage-baseline",
         "tools/porting_coverage_baseline.toml",
@@ -4848,6 +4929,47 @@ fn hardware_validation_rejects_placeholder_template_bindings() {
             "missing required reset-uf2 firmware/reset/lalapad-gen2-rmk-reset-peripheral.uf2"
         ),
         "missing required firmware artifact rejection should name the missing reset UF2"
+    );
+
+    let mut unknown_artifact_manifest: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&artifact_manifest_path).unwrap()).unwrap();
+    let mut unknown_artifact = unknown_artifact_manifest["artifacts"][0].clone();
+    unknown_artifact["path"] =
+        serde_json::Value::String("firmware/normal/untracked-extra.uf2".into());
+    unknown_artifact_manifest["artifacts"]
+        .as_array_mut()
+        .unwrap()
+        .push(unknown_artifact);
+    unknown_artifact_manifest["artifact_count"] = serde_json::Value::Number(
+        unknown_artifact_manifest["artifacts"]
+            .as_array()
+            .unwrap()
+            .len()
+            .into(),
+    );
+    let unknown_artifact_path =
+        artifact_manifest_path.with_file_name("unknown-template-firmware-artifacts.local.json");
+    std::fs::write(
+        &unknown_artifact_path,
+        serde_json::to_string_pretty(&unknown_artifact_manifest).unwrap(),
+    )
+    .unwrap();
+    let unknown_artifact = run_hardware_validation(&[
+        "--checklist",
+        "--firmware-artifact-manifest-template",
+        unknown_artifact_path.to_str().unwrap(),
+    ]);
+    let _ = std::fs::remove_file(&unknown_artifact_path);
+    assert!(
+        !unknown_artifact.status.success(),
+        "hardware validation accepted artifact manifest template with an unknown artifact path\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&unknown_artifact.stdout),
+        String::from_utf8_lossy(&unknown_artifact.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&unknown_artifact.stderr)
+            .contains("firmware/normal/untracked-extra.uf2 is not a known artifact path"),
+        "unknown firmware artifact rejection should name the unexpected path"
     );
 
     let mut wrong_metadata_manifest: serde_json::Value =

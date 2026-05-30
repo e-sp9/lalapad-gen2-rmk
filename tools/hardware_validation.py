@@ -995,6 +995,8 @@ def firmware_artifact_manifest_errors(manifest: dict[str, Any]) -> list[str]:
             if not value:
                 errors.append(f"firmware artifact manifest artifacts[{index}].{field} is missing")
         path = str(artifact.get("path", "")).strip()
+        if path and path not in firmware_artifact_specs.KNOWN_ARTIFACT_PATHS:
+            errors.append(f"firmware artifact manifest {path} is not a known artifact path")
         expected_metadata = firmware_artifact_specs.EXPECTED_METADATA_BY_PATH.get(path)
         if expected_metadata is not None:
             for field, expected_value in expected_metadata.items():

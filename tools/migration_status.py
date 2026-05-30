@@ -292,6 +292,8 @@ def firmware_artifact_status(
         sha256 = str(artifact.get("sha256", "")).strip()
         if not path:
             errors.append("firmware artifact manifest artifact path must be present")
+        elif path not in firmware_artifact_specs.KNOWN_ARTIFACT_PATHS:
+            errors.append(f"firmware artifact manifest {path} is not a known artifact path")
         if not isinstance(size, int) or size <= 0:
             errors.append(f"firmware artifact manifest {path or '<missing path>'} size must be positive")
         if not SHA256_RE.fullmatch(sha256):
