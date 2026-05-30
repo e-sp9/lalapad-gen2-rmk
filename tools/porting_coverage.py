@@ -4152,14 +4152,47 @@ def normalize_rust_key_action(value: str) -> str:
     return re.sub(r"\s+", "", value.strip())
 
 
+def runtime_modifier_expression(modifiers: str) -> str:
+    modifier_names = {
+        "LCtrl": "LCTRL",
+        "LShift": "LSHIFT",
+        "LAlt": "LALT",
+        "LGui": "LGUI",
+        "RCtrl": "RCTRL",
+        "RShift": "RSHIFT",
+        "RAlt": "RALT",
+        "RGui": "RGUI",
+    }
+    parts = [part.strip() for part in modifiers.split("|")]
+    try:
+        return " | ".join(f"ModifierCombination::{modifier_names[part]}" for part in parts)
+    except KeyError as e:
+        raise ValueError(f"unsupported runtime mirror modifier {e.args[0]!r}") from e
+
+
 def keyboard_action_to_runtime_rust(action: str) -> str:
     if action == NO_KEY:
         return "a!(No)"
     if action == TRANSPARENT:
         return "a!(Transparent)"
+    if match := re.fullmatch(r"MO\((\d+)\)", action):
+        layer = match.group(1)
+        return f"mo!({layer})"
     if match := re.fullmatch(r"LT\((\d+),\s*([A-Za-z0-9_]+),\s*FAST_LAYER\)", action):
         layer, key = match.groups()
         return f"lt({layer}, KeyCode::{key})"
+    if match := re.fullmatch(r"MT\(([A-Za-z0-9_]+),\s*([A-Za-z0-9_|\s]+)\)", action):
+        key, modifiers = match.groups()
+        return f"mt!({key}, {runtime_modifier_expression(modifiers)})"
+    if match := re.fullmatch(r"TH\(([A-Za-z0-9_]+),\s*([A-Za-z0-9_]+)\)", action):
+        tap, hold = match.groups()
+        return f"th!({tap}, {hold})"
+    if match := re.fullmatch(r"SHIFTED\(([A-Za-z0-9_]+)\)", action):
+        key = match.group(1)
+        return f"shifted!({key})"
+    if match := re.fullmatch(r"WM\(([A-Za-z0-9_]+),\s*([A-Za-z0-9_|\s]+)\)", action):
+        key, modifiers = match.groups()
+        return f"wm!({key}, {runtime_modifier_expression(modifiers)})"
     if re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", action):
         return f"k!({action})"
     raise ValueError(f"unsupported runtime mirror action {action!r}")
@@ -4248,7 +4281,7 @@ def check_runtime_keymap_mirrors(
     for check in manifest.get("runtime_keymap_mirrors", []):
         target_file = str(check["file"])
         function_name = str(check["function"])
-        positions = list(check["positions"])
+        positions = runtime_keymap_mirror_positions_for_check(check, config)
         total = len(positions)
         try:
             text = (project_root / target_file).read_text()
@@ -4270,10 +4303,7 @@ def check_runtime_keymap_mirrors(
         runtime_layers = parse_rust_keymap_layers(function_scope)
         passed = 0
         messages: list[str] = []
-        for position in positions:
-            layer = int(position["layer"])
-            row = int(position["row"])
-            col = int(position["col"])
+        for layer, row, col in positions:
             label = f"L{layer}R{row}C{col}"
             try:
                 keyboard_action = km[layer][row][col]
@@ -4301,69 +4331,89 @@ def check_runtime_keymap_mirrors(
     return results
 
 
+def all_keymap_positions(config: dict[str, Any]) -> list[tuple[int, int, int]]:
+    positions: list[tuple[int, int, int]] = []
+    for layer, rows in enumerate(keymap(config)):
+        for row, cols in enumerate(rows):
+            for col, _action in enumerate(cols):
+                positions.append((layer, row, col))
+    return positions
+
+
+def runtime_keymap_mirror_positions_for_check(
+    check: dict[str, Any], config: dict[str, Any]
+) -> list[tuple[int, int, int]]:
+    if check.get("cover_all") is True:
+        return all_keymap_positions(config)
+    return [
+        (
+            int(position["layer"]),
+            int(position["row"]),
+            int(position["col"]),
+        )
+        for position in check.get("positions", [])
+    ]
+
+
 def manifest_runtime_keymap_mirror_positions(
-    manifest: dict[str, Any],
+    manifest: dict[str, Any], config: dict[str, Any]
 ) -> set[tuple[int, int, int]]:
     positions: set[tuple[int, int, int]] = set()
     for check in manifest.get("runtime_keymap_mirrors", []):
-        for position in check.get("positions", []):
-            positions.add(
-                (
-                    int(position["layer"]),
-                    int(position["row"]),
-                    int(position["col"]),
-                )
-            )
+        positions.update(runtime_keymap_mirror_positions_for_check(check, config))
     return positions
 
 
 def manifest_runtime_keymap_mirror_position_list(
-    manifest: dict[str, Any],
+    manifest: dict[str, Any], config: dict[str, Any]
 ) -> list[tuple[int, int, int]]:
     positions: list[tuple[int, int, int]] = []
     for check in manifest.get("runtime_keymap_mirrors", []):
-        for position in check.get("positions", []):
-            positions.append(
-                (
-                    int(position["layer"]),
-                    int(position["row"]),
-                    int(position["col"]),
-                )
-            )
+        positions.extend(runtime_keymap_mirror_positions_for_check(check, config))
     return positions
 
 
 def check_runtime_keymap_mirror_position_inventory(
     manifest: dict[str, Any], config: dict[str, Any]
 ) -> list[Result]:
-    positions = manifest_runtime_keymap_mirror_position_list(manifest)
     km = keymap(config)
     seen: set[tuple[int, int, int]] = set()
     passed = 0
+    total = 0
     messages: list[str] = []
-    for layer, row, col in positions:
-        label = f"L{layer}R{row}C{col}"
-        if (layer, row, col) in seen:
-            messages.append(f"duplicate runtime mirror position {label}")
+    for check in manifest.get("runtime_keymap_mirrors", []):
+        positions = runtime_keymap_mirror_positions_for_check(check, config)
+        if check.get("cover_all") is True:
+            total += 1
+            if len(set(positions)) == len(positions):
+                passed += 1
+            else:
+                messages.append(f"{check['id']}: cover_all generated duplicate positions")
             continue
-        seen.add((layer, row, col))
-        if (
-            layer < 0
-            or layer >= len(km)
-            or row < 0
-            or row >= len(km[layer])
-            or col < 0
-            or col >= len(km[layer][row])
-        ):
-            messages.append(f"runtime mirror position out of bounds {label}")
-            continue
-        passed += 1
+        for layer, row, col in positions:
+            total += 1
+            label = f"L{layer}R{row}C{col}"
+            if (layer, row, col) in seen:
+                messages.append(f"duplicate runtime mirror position {label}")
+                continue
+            seen.add((layer, row, col))
+            if (
+                layer < 0
+                or layer >= len(km)
+                or row < 0
+                or row >= len(km[layer])
+                or col < 0
+                or col >= len(km[layer][row])
+            ):
+                messages.append(f"runtime mirror position out of bounds {label}")
+                continue
+            passed += 1
     return [
         Result(
             "runtime_keymap_mirror_positions_are_unique_and_in_bounds",
             "runtime_keymap_mirror",
             passed,
-            len(positions),
+            total,
             "ok" if not messages else "; ".join(messages),
         )
     ]
@@ -4410,8 +4460,21 @@ def check_runtime_keymap_mirror_coverage(
     expected = runtime_test_sequence_positions(manifest) | scenario_resolution_positions(
         manifest, config
     )
-    actual = manifest_runtime_keymap_mirror_positions(manifest)
+    actual = manifest_runtime_keymap_mirror_positions(manifest, config)
     missing = sorted(expected - actual)
+    uses_cover_all = any(
+        check.get("cover_all") is True for check in manifest.get("runtime_keymap_mirrors", [])
+    )
+    if uses_cover_all and not missing:
+        return [
+            Result(
+                "runtime_keymap_mirror_covers_runtime_scenario_positions",
+                "runtime_keymap_mirror",
+                1,
+                1,
+                f"ok; cover_all includes {len(expected)} runtime scenario positions",
+            )
+        ]
     passed = len(expected) - len(missing)
     messages = [
         f"missing runtime mirror position L{layer}R{row}C{col}"
@@ -4449,11 +4512,24 @@ def runtime_keymap_mirror_fixture_positions(
 
 
 def check_runtime_keymap_mirror_fixture_coverage(
-    manifest: dict[str, Any], project_root: Path
+    manifest: dict[str, Any], config: dict[str, Any], project_root: Path
 ) -> list[Result]:
     expected = runtime_keymap_mirror_fixture_positions(manifest, project_root)
-    actual = manifest_runtime_keymap_mirror_positions(manifest)
+    actual = manifest_runtime_keymap_mirror_positions(manifest, config)
     missing = sorted(expected - actual)
+    uses_cover_all = any(
+        check.get("cover_all") is True for check in manifest.get("runtime_keymap_mirrors", [])
+    )
+    if uses_cover_all and not missing:
+        return [
+            Result(
+                "runtime_keymap_mirror_covers_non_no_fixture_cells",
+                "runtime_keymap_mirror",
+                1,
+                1,
+                f"ok; cover_all includes {len(expected)} non-No runtime fixture cells",
+            )
+        ]
     passed = len(expected) - len(missing)
     messages = [
         f"missing non-No runtime fixture mirror position L{layer}R{row}C{col}"
@@ -5735,7 +5811,7 @@ def run(
     results.extend(check_runtime_keymap_mirrors(manifest, keyboard, project_root))
     results.extend(check_runtime_keymap_mirror_position_inventory(manifest, keyboard))
     results.extend(check_runtime_keymap_mirror_coverage(manifest, keyboard))
-    results.extend(check_runtime_keymap_mirror_fixture_coverage(manifest, project_root))
+    results.extend(check_runtime_keymap_mirror_fixture_coverage(manifest, keyboard, project_root))
     results.extend(check_runtime_scenario_tests(manifest, project_root))
     results.extend(check_runtime_combo_scenario_coverage(manifest, keyboard))
     results.extend(check_makefile_task_invariants(manifest, project_root))

@@ -4613,6 +4613,7 @@ fn porting_coverage_includes_exact_rmk_inventory_gates() {
     let keyboard = keyboard_toml();
     let layers = keyboard["layout"]["layers"].as_integer().unwrap();
     let rows = keyboard["layout"]["rows"].as_integer().unwrap();
+    let cols = keyboard["layout"]["cols"].as_integer().unwrap();
     let expected_keymap_shape_total = 1 + layers + layers * rows;
     let expected_combo_total = keyboard["behavior"]["combo"]["combos"]
         .as_array()
@@ -4630,12 +4631,15 @@ fn porting_coverage_includes_exact_rmk_inventory_gates() {
         .unwrap()
         .iter()
         .find(|mirror| {
-            mirror["id"].as_str().unwrap()
-                == "runtime_lalapad_keymap_mirrors_shipped_scenario_cells"
+            mirror["id"].as_str().unwrap() == "runtime_lalapad_keymap_mirrors_shipped_keymap"
         })
         .expect("runtime keymap mirror gate is missing");
-    let expected_runtime_keymap_mirror_total =
-        runtime_keymap_mirror["positions"].as_array().unwrap().len() as i64;
+    assert_eq!(runtime_keymap_mirror["cover_all"].as_bool(), Some(true));
+    assert!(
+        runtime_keymap_mirror.get("positions").is_none(),
+        "runtime keymap mirror should cover the shipped keymap without a hand-maintained coordinate subset"
+    );
+    let expected_runtime_keymap_mirror_total = layers * rows * cols;
     for runtime_scenario in manifest["runtime_scenario_tests"].as_array().unwrap() {
         if runtime_scenario["file"].as_str().unwrap()
             == "vendor/rmk-0.8.2/tests/keyboard_lalapad_zmk_scenarios_test.rs"
@@ -4736,7 +4740,7 @@ fn porting_coverage_includes_exact_rmk_inventory_gates() {
 
     let runtime_keymap_mirror_result = results
         .iter()
-        .find(|result| result["id"] == "runtime_lalapad_keymap_mirrors_shipped_scenario_cells")
+        .find(|result| result["id"] == "runtime_lalapad_keymap_mirrors_shipped_keymap")
         .expect("runtime keymap mirror coverage result is missing");
     assert_eq!(
         runtime_keymap_mirror_result["kind"],
@@ -5843,17 +5847,35 @@ shape_ok = pc.check_runtime_keymap_mirror_fixture_shape(manifest, keyboard, Path
 ok = pc.check_runtime_keymap_mirrors(manifest, keyboard, Path("."))[0]
 inventory_ok = pc.check_runtime_keymap_mirror_position_inventory(manifest, keyboard)[0]
 coverage_ok = pc.check_runtime_keymap_mirror_coverage(manifest, keyboard)[0]
-fixture_coverage_ok = pc.check_runtime_keymap_mirror_fixture_coverage(manifest, Path("."))[0]
+fixture_coverage_ok = pc.check_runtime_keymap_mirror_fixture_coverage(
+    manifest, keyboard, Path(".")
+)[0]
 
 bad_keyboard = copy.deepcopy(keyboard)
 bad_keyboard["layout"]["keymap"][0][3][4] = "LCtrl"
 keyboard_drift = pc.check_runtime_keymap_mirrors(manifest, bad_keyboard, Path("."))[0]
 
+non_scenario_bad_keyboard = copy.deepcopy(keyboard)
+non_scenario_bad_keyboard["layout"]["keymap"][0][0][2] = "LCtrl"
+non_scenario_keyboard_drift = pc.check_runtime_keymap_mirrors(
+    manifest, non_scenario_bad_keyboard, Path(".")
+)[0]
+
+spaced_modifier_keyboard = copy.deepcopy(keyboard)
+spaced_modifier_keyboard["layout"]["keymap"][1][6][0] = "WM(Left, LCtrl | LGui)"
+spaced_modifier_ok = pc.check_runtime_keymap_mirrors(
+    manifest, spaced_modifier_keyboard, Path(".")
+)[0]
+
+all_positions = [
+    {"layer": layer, "row": row, "col": col}
+    for layer, row, col in pc.all_keymap_positions(keyboard)
+]
 missing_position_manifest = copy.deepcopy(manifest)
-mirror_positions = missing_position_manifest["runtime_keymap_mirrors"][0]["positions"]
+missing_position_manifest["runtime_keymap_mirrors"][0].pop("cover_all", None)
 missing_position_manifest["runtime_keymap_mirrors"][0]["positions"] = [
     position
-    for position in mirror_positions
+    for position in all_positions
     if not (
         position["layer"] == 0
         and position["row"] == 3
@@ -5864,10 +5886,14 @@ missing_position = pc.check_runtime_keymap_mirror_coverage(
     missing_position_manifest, keyboard
 )[0]
 missing_fixture_position = pc.check_runtime_keymap_mirror_fixture_coverage(
-    missing_position_manifest, Path(".")
+    missing_position_manifest, keyboard, Path(".")
 )[0]
 
 duplicate_position_manifest = copy.deepcopy(manifest)
+duplicate_position_manifest["runtime_keymap_mirrors"][0].pop("cover_all", None)
+duplicate_position_manifest["runtime_keymap_mirrors"][0]["positions"] = copy.deepcopy(
+    all_positions
+)
 duplicate_position_manifest["runtime_keymap_mirrors"][0]["positions"].append(
     copy.deepcopy(duplicate_position_manifest["runtime_keymap_mirrors"][0]["positions"][0])
 )
@@ -5876,6 +5902,10 @@ duplicate_position = pc.check_runtime_keymap_mirror_position_inventory(
 )[0]
 
 out_of_bounds_manifest = copy.deepcopy(manifest)
+out_of_bounds_manifest["runtime_keymap_mirrors"][0].pop("cover_all", None)
+out_of_bounds_manifest["runtime_keymap_mirrors"][0]["positions"] = copy.deepcopy(
+    all_positions
+)
 out_of_bounds_manifest["runtime_keymap_mirrors"][0]["positions"].append(
     {"layer": 99, "row": 0, "col": 0}
 )
@@ -5884,6 +5914,16 @@ out_of_bounds_position = pc.check_runtime_keymap_mirror_position_inventory(
 )[0]
 
 new_runtime_manifest = copy.deepcopy(manifest)
+new_runtime_manifest["runtime_keymap_mirrors"][0].pop("cover_all", None)
+new_runtime_manifest["runtime_keymap_mirrors"][0]["positions"] = [
+    position
+    for position in all_positions
+    if not (
+        position["layer"] == 0
+        and position["row"] == 4
+        and position["col"] == 5
+    )
+]
 new_runtime_manifest["runtime_scenario_tests"].append({
     "id": "runtime_new_unmirrored_coordinate",
     "file": "vendor/rmk-0.8.2/tests/keyboard_lalapad_zmk_scenarios_test.rs",
@@ -5901,7 +5941,7 @@ with tempfile.TemporaryDirectory() as root_dir:
     scenario = Path("vendor/rmk-0.8.2/tests/keyboard_lalapad_zmk_scenarios_test.rs").read_text(
         encoding="utf-8"
     )
-    scenario = scenario.replace("k!(Kp7)", "k!(Kp8)", 1)
+    scenario = scenario.replace("k!(Q), k!(W), k!(E),", "k!(Q), k!(W), k!(Escape),", 1)
     (scenario_dir / "keyboard_lalapad_zmk_scenarios_test.rs").write_text(
         scenario, encoding="utf-8"
     )
@@ -5914,11 +5954,7 @@ with tempfile.TemporaryDirectory() as root_dir:
     scenario = Path("vendor/rmk-0.8.2/tests/keyboard_lalapad_zmk_scenarios_test.rs").read_text(
         encoding="utf-8"
     )
-    scenario = scenario.replace(
-        "lt(2, KeyCode::Enter), a!(No), k!(Language2), a!(No), a!(No)]",
-        "lt(2, KeyCode::Enter), a!(No), k!(Language2), a!(No)]",
-        1,
-    )
+    scenario = scenario.replace(", k!(Backslash)]", "]", 1)
     (scenario_dir / "keyboard_lalapad_zmk_scenarios_test.rs").write_text(
         scenario, encoding="utf-8"
     )
@@ -5936,6 +5972,8 @@ print(json.dumps({
     "coverage_ok": pack(coverage_ok),
     "fixture_coverage_ok": pack(fixture_coverage_ok),
     "keyboard_drift": pack(keyboard_drift),
+    "non_scenario_keyboard_drift": pack(non_scenario_keyboard_drift),
+    "spaced_modifier_ok": pack(spaced_modifier_ok),
     "missing_position": pack(missing_position),
     "missing_fixture_position": pack(missing_fixture_position),
     "duplicate_position": pack(duplicate_position),
@@ -5960,23 +5998,23 @@ print(json.dumps({
     assert_eq!(parsed["shape_ok"]["passed"].as_i64(), Some(33));
     assert_eq!(parsed["shape_ok"]["ok"], true);
     assert_eq!(parsed["ok"]["kind"], "runtime_keymap_mirror");
-    assert_eq!(parsed["ok"]["total"].as_i64(), Some(60));
-    assert_eq!(parsed["ok"]["passed"].as_i64(), Some(60));
+    assert_eq!(parsed["ok"]["total"].as_i64(), Some(336));
+    assert_eq!(parsed["ok"]["passed"].as_i64(), Some(336));
     assert_eq!(parsed["ok"]["ok"], true);
     assert_eq!(parsed["inventory_ok"]["kind"], "runtime_keymap_mirror");
-    assert_eq!(parsed["inventory_ok"]["total"].as_i64(), Some(60));
-    assert_eq!(parsed["inventory_ok"]["passed"].as_i64(), Some(60));
+    assert_eq!(parsed["inventory_ok"]["total"].as_i64(), Some(1));
+    assert_eq!(parsed["inventory_ok"]["passed"].as_i64(), Some(1));
     assert_eq!(parsed["inventory_ok"]["ok"], true);
     assert_eq!(parsed["coverage_ok"]["kind"], "runtime_keymap_mirror");
-    assert_eq!(parsed["coverage_ok"]["total"].as_i64(), Some(29));
-    assert_eq!(parsed["coverage_ok"]["passed"].as_i64(), Some(29));
+    assert_eq!(parsed["coverage_ok"]["total"].as_i64(), Some(1));
+    assert_eq!(parsed["coverage_ok"]["passed"].as_i64(), Some(1));
     assert_eq!(parsed["coverage_ok"]["ok"], true);
     assert_eq!(
         parsed["fixture_coverage_ok"]["kind"],
         "runtime_keymap_mirror"
     );
-    assert_eq!(parsed["fixture_coverage_ok"]["total"].as_i64(), Some(60));
-    assert_eq!(parsed["fixture_coverage_ok"]["passed"].as_i64(), Some(60));
+    assert_eq!(parsed["fixture_coverage_ok"]["total"].as_i64(), Some(1));
+    assert_eq!(parsed["fixture_coverage_ok"]["passed"].as_i64(), Some(1));
     assert_eq!(parsed["fixture_coverage_ok"]["ok"], true);
 
     assert_eq!(parsed["keyboard_drift"]["kind"], "runtime_keymap_mirror");
@@ -5993,6 +6031,24 @@ print(json.dumps({
             .unwrap()
             .contains("LCtrl")
     );
+
+    assert_eq!(
+        parsed["non_scenario_keyboard_drift"]["kind"],
+        "runtime_keymap_mirror"
+    );
+    assert_eq!(parsed["non_scenario_keyboard_drift"]["ok"], false);
+    assert!(
+        parsed["non_scenario_keyboard_drift"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("L0R0C2")
+    );
+
+    assert_eq!(
+        parsed["spaced_modifier_ok"]["kind"],
+        "runtime_keymap_mirror"
+    );
+    assert_eq!(parsed["spaced_modifier_ok"]["ok"], true);
 
     assert_eq!(parsed["missing_position"]["kind"], "runtime_keymap_mirror");
     assert_eq!(parsed["missing_position"]["ok"], false);
@@ -6057,13 +6113,13 @@ print(json.dumps({
         parsed["fixture_drift"]["message"]
             .as_str()
             .unwrap()
-            .contains("L1R0C8")
+            .contains("L0R0C2")
     );
     assert!(
         parsed["fixture_drift"]["message"]
             .as_str()
             .unwrap()
-            .contains("k!(Kp8)")
+            .contains("k!(Escape)")
     );
 
     assert_eq!(

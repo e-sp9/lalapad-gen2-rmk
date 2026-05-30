@@ -9,7 +9,8 @@ use rmk::hid::Report;
 use rmk::keyboard::Keyboard;
 use rmk::types::action::{Action, KeyAction};
 use rmk::types::keycode::KeyCode;
-use rmk::{a, k, layer};
+use rmk::types::modifier::ModifierCombination;
+use rmk::{a, k, layer, mo, mt, shifted, th, wm};
 use rmk_types::action::{MorseMode, MorseProfile};
 use rusty_fork::rusty_fork_test;
 
@@ -32,40 +33,40 @@ const fn lt(layer: u8, key: KeyCode) -> KeyAction {
 fn lalapad_keymap() -> [[[KeyAction; 12]; 7]; 4] {
     [
         layer!([
-            [k!(Q), k!(W), a!(No), a!(No), a!(No), a!(No), a!(No), k!(Y), k!(U), a!(No), a!(No), a!(No)],
-            [k!(A), k!(S), k!(D), k!(F), a!(No), a!(No), a!(No), k!(H), k!(J), k!(K), a!(No), a!(No)],
-            [a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), k!(N), a!(No), a!(No), a!(No), a!(No)],
-            [a!(No), a!(No), a!(No), a!(No), lt(1, KeyCode::Space), a!(No), a!(No), lt(2, KeyCode::Enter), a!(No), k!(Language2), a!(No), a!(No)],
-            [a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No)],
-            [a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No)],
-            [a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No)]
+            [k!(Q), k!(W), k!(E), k!(R), k!(T), a!(No), a!(No), k!(Y), k!(U), k!(I), k!(O), k!(P)],
+            [k!(A), k!(S), k!(D), k!(F), k!(G), a!(No), a!(No), k!(H), k!(J), k!(K), k!(L), th!(Minus, Equal)],
+            [mt!(Z, ModifierCombination::LSHIFT), k!(X), k!(C), k!(V), k!(B), a!(No), a!(No), k!(N), k!(M), k!(Comma), k!(Dot), k!(Slash)],
+            [k!(LCtrl), k!(LGui), k!(LAlt), k!(LCtrl), lt(1, KeyCode::Space), k!(LShift), k!(Backspace), lt(2, KeyCode::Enter), mo!(2), k!(Language2), k!(Language1), k!(Backslash)],
+            [a!(No), a!(No), k!(Right), k!(Down), k!(Left), k!(Up), k!(Up), k!(Left), k!(Down), k!(Right), a!(No), a!(No)],
+            [k!(MouseBtn1), k!(MouseBtn2), k!(MouseBtn3), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), k!(MouseBtn1), k!(MouseBtn2), k!(MouseBtn3)],
+            [k!(MouseBtn4), k!(MouseBtn5), wm!(Tab, ModifierCombination::LGUI), wm!(D, ModifierCombination::LGUI), k!(LCtrl), a!(No), a!(No), k!(MouseBtn4), k!(MouseBtn5), wm!(Tab, ModifierCombination::LGUI), wm!(D, ModifierCombination::LGUI), k!(LCtrl)]
         ]),
         layer!([
-            [a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), k!(NumLock), k!(Kp7), a!(No), a!(No), a!(No)],
-            [a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(Transparent), k!(Kp4), a!(No), a!(No), a!(No)],
-            [a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(Transparent), a!(No), a!(No), a!(No), a!(No)],
-            [a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent), a!(No), a!(Transparent), a!(Transparent), k!(Kp0), a!(No), a!(No)],
-            [a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No)],
-            [a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No)],
-            [a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No)]
+            [k!(Kc1), k!(Kc2), k!(Kc3), k!(Kc4), k!(Kc5), a!(No), a!(No), k!(NumLock), k!(Kp7), k!(Kp8), k!(Kp9), k!(KpPlus)],
+            [k!(Kc6), k!(Kc7), k!(Kc8), k!(Kc9), k!(Kc0), a!(No), a!(No), a!(Transparent), k!(Kp4), k!(Kp5), k!(Kp6), k!(KpMinus)],
+            [k!(F6), k!(F7), k!(F8), k!(F9), k!(F10), a!(No), a!(No), a!(Transparent), k!(Kp1), k!(Kp2), k!(Kp3), k!(KpAsterisk)],
+            [a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent), k!(Delete), a!(Transparent), a!(Transparent), k!(Kp0), k!(KpDot), k!(KpSlash)],
+            [a!(No), a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent), a!(No)],
+            [a!(Transparent), a!(Transparent), a!(Transparent), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(Transparent), a!(Transparent), a!(Transparent)],
+            [wm!(Left, ModifierCombination::LCTRL | ModifierCombination::LGUI), wm!(Right, ModifierCombination::LCTRL | ModifierCombination::LGUI), a!(Transparent), a!(Transparent), a!(Transparent), a!(No), a!(No), wm!(Left, ModifierCombination::LCTRL | ModifierCombination::LGUI), wm!(Right, ModifierCombination::LCTRL | ModifierCombination::LGUI), a!(Transparent), a!(Transparent), a!(Transparent)]
         ]),
         layer!([
-            [a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), k!(PageUp), k!(Home), a!(No), a!(No), a!(No)],
-            [a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), k!(PageDown), a!(No), a!(No), a!(No), a!(No)],
-            [a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(Transparent), a!(No), a!(No), a!(No), a!(No)],
+            [shifted!(Kc1), shifted!(Kc2), shifted!(Kc3), shifted!(Kc4), shifted!(Kc5), a!(No), a!(No), k!(PageUp), k!(Home), k!(Up), k!(End), k!(PrintScreen)],
+            [shifted!(Kc6), shifted!(Kc7), shifted!(Kc8), shifted!(Kc9), shifted!(Kc0), a!(No), a!(No), k!(PageDown), k!(Left), k!(Down), k!(Right), k!(ScrollLock)],
+            [k!(Grave), k!(Quote), k!(Semicolon), k!(LeftBracket), k!(RightBracket), a!(No), a!(No), a!(Transparent), k!(MouseBtn4), a!(Transparent), k!(MouseBtn5), k!(Pause)],
             [a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent)],
-            [a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No)],
-            [a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No)],
-            [a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No)]
+            [a!(No), a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent), a!(No)],
+            [a!(Transparent), a!(Transparent), a!(Transparent), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(Transparent), a!(Transparent), a!(Transparent)],
+            [a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent), a!(No), a!(No), a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent)]
         ]),
         layer!([
-            [a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), k!(User7), k!(User0), a!(No), a!(No), a!(No)],
-            [a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), k!(Reboot), a!(No), a!(No), a!(No), a!(No)],
-            [a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No)],
+            [k!(F1), k!(F2), k!(F3), k!(F4), k!(F5), a!(No), a!(No), k!(User7), k!(User0), k!(User1), k!(User2), k!(User3)],
+            [k!(F6), k!(F7), k!(F8), k!(F9), k!(F10), a!(No), a!(No), k!(Reboot), k!(Bootloader), k!(User6), k!(User8), a!(Transparent)],
+            [k!(F11), k!(F12), k!(F13), k!(F14), k!(F15), a!(No), a!(No), k!(User9), k!(User10), k!(User11), k!(User12), k!(User13)],
             [a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent)],
-            [a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No)],
-            [a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No)],
-            [a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No)]
+            [a!(No), a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent), a!(No)],
+            [a!(Transparent), a!(Transparent), a!(Transparent), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), a!(Transparent), a!(Transparent), a!(Transparent)],
+            [a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent), a!(No), a!(No), a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent), a!(Transparent)]
         ]),
     ]
 }

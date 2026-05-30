@@ -3458,71 +3458,10 @@ tap = { row = 3, col = 9 }
 expected_output = "Kp0"
 
 [[runtime_keymap_mirrors]]
-id = "runtime_lalapad_keymap_mirrors_shipped_scenario_cells"
+id = "runtime_lalapad_keymap_mirrors_shipped_keymap"
 file = "vendor/rmk-0.8.2/tests/keyboard_lalapad_zmk_scenarios_test.rs"
 function = "lalapad_keymap"
-positions = [
-  { layer = 0, row = 0, col = 0 },
-  { layer = 0, row = 0, col = 1 },
-  { layer = 0, row = 0, col = 7 },
-  { layer = 0, row = 0, col = 8 },
-  { layer = 0, row = 1, col = 0 },
-  { layer = 0, row = 1, col = 1 },
-  { layer = 0, row = 1, col = 2 },
-  { layer = 0, row = 1, col = 3 },
-  { layer = 0, row = 1, col = 7 },
-  { layer = 0, row = 1, col = 8 },
-  { layer = 0, row = 1, col = 9 },
-  { layer = 0, row = 2, col = 7 },
-  { layer = 0, row = 3, col = 4 },
-  { layer = 0, row = 3, col = 7 },
-  { layer = 0, row = 3, col = 9 },
-  { layer = 1, row = 0, col = 7 },
-  { layer = 1, row = 0, col = 8 },
-  { layer = 1, row = 1, col = 7 },
-  { layer = 1, row = 1, col = 8 },
-  { layer = 1, row = 2, col = 7 },
-  { layer = 1, row = 3, col = 0 },
-  { layer = 1, row = 3, col = 1 },
-  { layer = 1, row = 3, col = 2 },
-  { layer = 1, row = 3, col = 3 },
-  { layer = 1, row = 3, col = 4 },
-  { layer = 1, row = 3, col = 5 },
-  { layer = 1, row = 3, col = 7 },
-  { layer = 1, row = 3, col = 8 },
-  { layer = 1, row = 3, col = 9 },
-  { layer = 2, row = 0, col = 7 },
-  { layer = 2, row = 0, col = 8 },
-  { layer = 2, row = 1, col = 7 },
-  { layer = 2, row = 2, col = 7 },
-  { layer = 2, row = 3, col = 0 },
-  { layer = 2, row = 3, col = 1 },
-  { layer = 2, row = 3, col = 2 },
-  { layer = 2, row = 3, col = 3 },
-  { layer = 2, row = 3, col = 4 },
-  { layer = 2, row = 3, col = 5 },
-  { layer = 2, row = 3, col = 6 },
-  { layer = 2, row = 3, col = 7 },
-  { layer = 2, row = 3, col = 8 },
-  { layer = 2, row = 3, col = 9 },
-  { layer = 2, row = 3, col = 10 },
-  { layer = 2, row = 3, col = 11 },
-  { layer = 3, row = 0, col = 7 },
-  { layer = 3, row = 0, col = 8 },
-  { layer = 3, row = 1, col = 7 },
-  { layer = 3, row = 3, col = 0 },
-  { layer = 3, row = 3, col = 1 },
-  { layer = 3, row = 3, col = 2 },
-  { layer = 3, row = 3, col = 3 },
-  { layer = 3, row = 3, col = 4 },
-  { layer = 3, row = 3, col = 5 },
-  { layer = 3, row = 3, col = 6 },
-  { layer = 3, row = 3, col = 7 },
-  { layer = 3, row = 3, col = 8 },
-  { layer = 3, row = 3, col = 9 },
-  { layer = 3, row = 3, col = 10 },
-  { layer = 3, row = 3, col = 11 },
-]
+cover_all = true
 
 [[runtime_scenario_tests]]
 id = "runtime_shipped_keyboard_toml_keeps_thumb_layer_tap_bindings"
