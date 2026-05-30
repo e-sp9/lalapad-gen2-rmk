@@ -307,6 +307,8 @@ Real hardware results can be kept in a separate overlay file using the format
 shown in `tools/hardware_validation_evidence.example.toml` and passed with
 `--evidence path/to/evidence.toml`; this lets the manifest remain the stable
 requirement list while measured evidence drives the validation rate.
+Markdown reports include the retained `artifact_paths` values for each check,
+so release review can tie validation progress back to the captured bench files.
 Every hardware check declares non-empty `evidence_needles`; the classified
 hardware gate fails if a check lacks those required observation terms.
 Validated evidence must include `validated_at`, `tester`, `firmware_ref`, and

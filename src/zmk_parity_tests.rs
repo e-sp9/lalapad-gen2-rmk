@@ -1367,26 +1367,27 @@ fn migration_status_combines_software_and_hardware_progress() {
     assert!(stdout.contains("| right | 0 | 5 | 0.00% |"));
     assert!(stdout.contains("### Hardware Remaining"));
     assert!(
-        stdout
-            .contains("| ID | Area | Side | Status | Required artifacts | Required observations |")
+        stdout.contains(
+            "| ID | Area | Side | Status | Required artifacts | Required observations | Evidence artifact paths |"
+        )
     );
     assert!(stdout.contains(
-        "| iqs9151_right_i2c_identity | trackpad | right | requires_hardware | log | right, P0_04 SDA, P0_05 SCL, I2C activity, 0x56, product-number register, 0x1000, 0x09bc |"
+        "| iqs9151_right_i2c_identity | trackpad | right | requires_hardware | log | right, P0_04 SDA, P0_05 SCL, I2C activity, 0x56, product-number register, 0x1000, 0x09bc |  |"
     ));
     assert!(stdout.contains(
-        "| iqs9151_right_rdy_signal | trackpad | right | requires_hardware | scope | right, P1_11 RDY, D6, active-low, no-touch high, touch-event low |"
+        "| iqs9151_right_rdy_signal | trackpad | right | requires_hardware | scope | right, P1_11 RDY, D6, active-low, no-touch high, touch-event low |  |"
     ));
     assert!(stdout.contains(
-        "| trackpad_drag_cross_side | trackpad | both | requires_hardware | video | cross-side drag, right hold with left move, left hold with right move, left-button hold, host drag/select, release on held-finger lift, no stuck button |"
+        "| trackpad_drag_cross_side | trackpad | both | requires_hardware | video | cross-side drag, right hold with left move, left hold with right move, left-button hold, host drag/select, release on held-finger lift, no stuck button |  |"
     ));
     assert!(stdout.contains(
-        "| ble_split_pairing_reconnect | ble_split | both | requires_hardware | video, BLE trace | right central, left peripheral, BLE re-pair, reconnect right first, left Q, left A, right Y, right H |"
+        "| ble_split_pairing_reconnect | ble_split | both | requires_hardware | video, BLE trace | right central, left peripheral, BLE re-pair, reconnect right first, left Q, left A, right Y, right H |  |"
     ));
     assert!(stdout.contains(
-        "| vial_thumb_layer_taps | vial | both | requires_hardware | Vial screenshot, key-event log | Vial, Space, Enter, layer 1, layer 2, Space+Y, NumLock, Enter+Y, PageUp |"
+        "| vial_thumb_layer_taps | vial | both | requires_hardware | Vial screenshot, key-event log | Vial, Space, Enter, layer 1, layer 2, Space+Y, NumLock, Enter+Y, PageUp |  |"
     ));
     assert!(stdout.contains(
-        "| storage_reset_and_reflash | storage | both | requires_hardware | video | reset central UF2, reset peripheral UF2, normal central UF2, normal peripheral UF2, re-pair, Vial |"
+        "| storage_reset_and_reflash | storage | both | requires_hardware | video | reset central UF2, reset peripheral UF2, normal central UF2, normal peripheral UF2, re-pair, Vial |  |"
     ));
 
     let text = run_migration_status(&[
@@ -2360,7 +2361,7 @@ fn hardware_validation_markdown_report_lists_required_evidence() {
     assert!(stdout.contains("| right | 0 | 5 | 0.00% | `requires_hardware`=5 |"));
     assert!(stdout.contains("### Checks"));
     assert!(stdout.contains(
-        "| ID | Area | Side | Status | Requirement | Required evidence | Required artifacts | Required observations | Validated at | Tester | Firmware ref | Artifact/notes |"
+        "| ID | Area | Side | Status | Requirement | Required evidence | Required artifacts | Required observations | Validated at | Tester | Firmware ref | Artifact paths | Artifact/notes |"
     ));
     assert!(stdout.contains(
         "right, cursor, tap, vertical scroll, horizontal scroll, no cursor during scroll, no right-click during scroll, inertia continues, inertia stops on touch"
@@ -2807,6 +2808,163 @@ artifact_or_notes = "log: /tmp/right-i2c.log; right P0_04 SDA and P0_05 SCL show
     assert_eq!(parsed["by_side"]["right"]["validated"].as_i64(), Some(1));
     assert_eq!(parsed["by_side"]["right"]["rate"].as_f64(), Some(20.0));
     assert_eq!(parsed["errors"].as_array().unwrap().len(), 0);
+}
+
+#[test]
+fn hardware_validation_reports_evidence_artifact_paths() {
+    let artifact_root = std::env::temp_dir().join(format!(
+        "lalapad-hardware-evidence-paths-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&artifact_root);
+    let artifact_path = artifact_root.join("hardware-evidence/right-i2c.log");
+    std::fs::create_dir_all(artifact_path.parent().unwrap()).unwrap();
+    std::fs::write(&artifact_path, "right i2c hardware log\n").unwrap();
+    let evidence = r#"
+[[evidence]]
+id = "iqs9151_right_i2c_identity"
+status = "validated"
+validated_at = "2026-05-29"
+tester = "hardware bench"
+firmware_ref = "35b3f1f"
+artifact_paths = ["hardware-evidence/right-i2c.log"]
+artifact_or_notes = "log: /tmp/right-i2c.log; right P0_04 SDA and P0_05 SCL showed I2C activity from scan, address 0x56 ACKed, and product-number register 0x1000 read 0x09bc."
+"#;
+    let path = write_temp_file("hardware-validation-evidence-paths", evidence);
+    let markdown = run_hardware_validation(&[
+        "--evidence",
+        path.to_str().unwrap(),
+        "--evidence-artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--markdown",
+    ]);
+
+    assert!(
+        markdown.status.success(),
+        "hardware validation markdown should accept existing artifact_paths\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&markdown.stdout),
+        String::from_utf8_lossy(&markdown.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&markdown.stdout);
+    assert!(stdout.contains("Artifact paths"));
+    assert!(stdout.contains("hardware-evidence/right-i2c.log"));
+
+    let missing_evidence = evidence.replace(
+        "hardware-evidence/right-i2c.log",
+        "hardware-evidence/missing.log",
+    );
+    let missing_path = write_temp_file(
+        "hardware-validation-evidence-paths-missing",
+        &missing_evidence,
+    );
+    let missing_markdown = run_hardware_validation(&[
+        "--evidence",
+        missing_path.to_str().unwrap(),
+        "--evidence-artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--markdown",
+    ]);
+    assert!(
+        missing_markdown.status.success(),
+        "plain hardware validation markdown report should not hard-fail without require flags\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&missing_markdown.stdout),
+        String::from_utf8_lossy(&missing_markdown.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&missing_markdown.stdout).contains("`validated_invalid`"),
+        "markdown report should show the effective invalid status for validated evidence with missing artifact_paths"
+    );
+    let json = run_hardware_validation(&[
+        "--evidence",
+        missing_path.to_str().unwrap(),
+        "--evidence-artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--json",
+    ]);
+    assert!(
+        json.status.success(),
+        "plain hardware validation report should render missing artifact_paths as classified errors without a hard gate\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&json.stdout),
+        String::from_utf8_lossy(&json.stderr)
+    );
+    let parsed: serde_json::Value = serde_json::from_slice(&json.stdout).unwrap();
+    assert_eq!(parsed["validated"].as_i64(), Some(0));
+    assert!(
+        parsed["errors"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|error| error
+                .as_str()
+                .unwrap()
+                .contains("artifact_paths[0] file does not exist")),
+        "missing artifact_paths file should be reported in JSON errors"
+    );
+    let remaining = parsed["remaining"].as_array().unwrap();
+    assert_eq!(
+        remaining[0]["artifact_paths"].as_str(),
+        Some("hardware-evidence/missing.log")
+    );
+
+    let text = run_hardware_validation(&[
+        "--evidence",
+        missing_path.to_str().unwrap(),
+        "--evidence-artifact-root",
+        artifact_root.to_str().unwrap(),
+    ]);
+    assert!(
+        text.status.success(),
+        "plain hardware validation text report should not hard-fail without require flags\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&text.stdout),
+        String::from_utf8_lossy(&text.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&text.stdout)
+            .contains("artifact_paths: hardware-evidence/missing.log"),
+        "text report should show the artifact_paths value for invalid validated evidence"
+    );
+
+    let hard_hardware_gate = run_hardware_validation(&[
+        "--evidence",
+        missing_path.to_str().unwrap(),
+        "--evidence-artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--require-evidence-artifact-paths",
+    ]);
+    assert!(
+        !hard_hardware_gate.status.success(),
+        "--require-evidence-artifact-paths should fail hardware validation when a validated artifact path is missing\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&hard_hardware_gate.stdout),
+        String::from_utf8_lossy(&hard_hardware_gate.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&hard_hardware_gate.stderr)
+            .contains("artifact_paths[0] file does not exist"),
+        "hard hardware artifact path gate should explain the missing evidence file"
+    );
+
+    let hard_migration_gate = run_migration_status(&[
+        "--evidence",
+        missing_path.to_str().unwrap(),
+        "--evidence-artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--require-evidence-artifact-paths",
+    ]);
+    assert!(
+        !hard_migration_gate.status.success(),
+        "--require-evidence-artifact-paths should fail migration status when a validated artifact path is missing\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&hard_migration_gate.stdout),
+        String::from_utf8_lossy(&hard_migration_gate.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&hard_migration_gate.stdout)
+            .contains("artifact_paths[0] file does not exist"),
+        "hard migration artifact path gate should explain the missing evidence file"
+    );
+
+    let _ = std::fs::remove_file(&path);
+    let _ = std::fs::remove_file(&missing_path);
+    let _ = std::fs::remove_dir_all(&artifact_root);
 }
 
 #[test]

@@ -217,6 +217,13 @@ def evidence_artifacts_text(check: dict[str, Any]) -> str:
     return ", ".join(str(artifact) for artifact in check.get("evidence_artifacts", []))
 
 
+def artifact_paths_text(check: dict[str, Any]) -> str:
+    artifact_paths = check.get("artifact_paths", [])
+    if not isinstance(artifact_paths, list):
+        return ""
+    return ", ".join(str(path) for path in artifact_paths)
+
+
 def validate_validated_evidence(check_id: str, check: dict[str, Any]) -> list[str]:
     errors: list[str] = []
     validated_at = str(check.get("validated_at", "")).strip()
@@ -589,6 +596,7 @@ def summarize(
                 "evidence_artifacts": ", ".join(
                     str(artifact) for artifact in check.get("evidence_artifacts", [])
                 ),
+                "artifact_paths": artifact_paths_text(check),
             }
         )
 
@@ -851,24 +859,31 @@ def as_markdown(manifest: dict[str, Any], summary: HardwareValidationSummary) ->
     )
     for side, progress in summary.by_side.items():
         lines.append(progress_markdown_row("Side", side, progress))
+    effective_status = {
+        item["id"]: item["status"]
+        for item in summary.remaining
+        if item.get("status") == "validated_invalid"
+    }
     lines.extend(
         [
             "",
             "### Checks",
             "",
-            "| ID | Area | Side | Status | Requirement | Required evidence | Required artifacts | Required observations | Validated at | Tester | Firmware ref | Artifact/notes |",
-            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+            "| ID | Area | Side | Status | Requirement | Required evidence | Required artifacts | Required observations | Validated at | Tester | Firmware ref | Artifact paths | Artifact/notes |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
         ]
     )
     for check in manifest.get("checks", []):
         if not isinstance(check, dict):
             continue
         lines.append(
-            "| {id} | {area} | {side} | `{status}` | {requirement} | {evidence} | {evidence_artifacts} | {evidence_needles} | {validated_at} | {tester} | {firmware_ref} | {artifact_or_notes} |".format(
+            "| {id} | {area} | {side} | `{status}` | {requirement} | {evidence} | {evidence_artifacts} | {evidence_needles} | {validated_at} | {tester} | {firmware_ref} | {artifact_paths} | {artifact_or_notes} |".format(
                 id=markdown_escape(check.get("id", "")),
                 area=markdown_escape(check.get("area", "")),
                 side=markdown_escape(check.get("side", "")),
-                status=markdown_escape(check.get("status", "")),
+                status=markdown_escape(
+                    effective_status.get(str(check.get("id", "")), check.get("status", ""))
+                ),
                 requirement=markdown_escape(check.get("requirement", "")),
                 evidence=markdown_escape(check.get("evidence", "")),
                 evidence_artifacts=markdown_escape(evidence_artifacts_text(check)),
@@ -876,6 +891,7 @@ def as_markdown(manifest: dict[str, Any], summary: HardwareValidationSummary) ->
                 validated_at=markdown_escape(check.get("validated_at", "")),
                 tester=markdown_escape(check.get("tester", "")),
                 firmware_ref=markdown_escape(check.get("firmware_ref", "")),
+                artifact_paths=markdown_escape(artifact_paths_text(check)),
                 artifact_or_notes=markdown_escape(check.get("artifact_or_notes", "")),
             )
         )
@@ -981,11 +997,17 @@ def print_text(summary: HardwareValidationSummary) -> None:
     if summary.remaining:
         print("Hardware validation remaining:")
         for item in summary.remaining:
+            suffix_parts = [
+                f"artifacts: {item.get('evidence_artifacts', '')}",
+                f"needs: {item.get('evidence_needles', '')}",
+            ]
+            artifact_paths = item.get("artifact_paths", "")
+            if artifact_paths:
+                suffix_parts.append(f"artifact_paths: {artifact_paths}")
             print(
                 f"- {item['id']} ({item['area']}/{item['side']}): "
                 f"{item['status']} - {item['evidence']} "
-                f"[artifacts: {item.get('evidence_artifacts', '')}; "
-                f"needs: {item.get('evidence_needles', '')}]"
+                f"[{'; '.join(suffix_parts)}]"
             )
     if summary.errors:
         print("Hardware validation manifest errors:", file=sys.stderr)
@@ -1132,6 +1154,8 @@ def main() -> None:
         print_text(summary)
 
     if args.require_classified and not summary.classified:
+        raise SystemExit(1)
+    if args.require_evidence_artifact_paths and not summary.classified:
         raise SystemExit(1)
     if args.require_firmware_ref is not None and not summary.classified:
         raise SystemExit(1)

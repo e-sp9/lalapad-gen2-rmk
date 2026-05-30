@@ -514,11 +514,14 @@ def print_text(status: MigrationStatus) -> None:
         for item in hardware["remaining"]:
             needs = item.get("evidence_needles", "")
             artifacts = item.get("evidence_artifacts", "")
+            artifact_paths = item.get("artifact_paths", "")
             suffix_parts = []
             if artifacts:
                 suffix_parts.append(f"artifacts: {artifacts}")
             if needs:
                 suffix_parts.append(f"needs: {needs}")
+            if artifact_paths:
+                suffix_parts.append(f"artifact_paths: {artifact_paths}")
             suffix = f" [{'; '.join(suffix_parts)}]" if suffix_parts else ""
             print(f"- {item['id']} ({item['area']}/{item['side']}): {item['status']}{suffix}")
 
@@ -663,7 +666,17 @@ def print_markdown(status: MigrationStatus) -> None:
         print()
         print("### Hardware Remaining")
         print()
-        rows = [["ID", "Area", "Side", "Status", "Required artifacts", "Required observations"]]
+        rows = [
+            [
+                "ID",
+                "Area",
+                "Side",
+                "Status",
+                "Required artifacts",
+                "Required observations",
+                "Evidence artifact paths",
+            ]
+        ]
         rows.extend(
             [
                 str(item["id"]),
@@ -672,6 +685,7 @@ def print_markdown(status: MigrationStatus) -> None:
                 str(item["status"]),
                 str(item.get("evidence_artifacts", "")),
                 str(item.get("evidence_needles", "")),
+                str(item.get("artifact_paths", "")),
             ]
             for item in hardware["remaining"]
         )
@@ -752,6 +766,8 @@ def main() -> None:
                 print(f"- {failure['message']}", file=sys.stderr)
         raise SystemExit(1)
     if args.require_hardware_classified and not status.hardware["classified"]:
+        raise SystemExit(1)
+    if args.require_evidence_artifact_paths and not status.hardware["classified"]:
         raise SystemExit(1)
     if args.require_firmware_ref is not None and not status.hardware["classified"]:
         raise SystemExit(1)
