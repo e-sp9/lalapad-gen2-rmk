@@ -4441,6 +4441,117 @@ print(json.dumps({
 }
 
 #[test]
+fn porting_coverage_rejects_runtime_behavior_config_drift() {
+    let output = run_python(
+        r#"
+import copy
+import importlib.util
+import json
+import sys
+import tempfile
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("porting_coverage", "tools/porting_coverage.py")
+pc = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = pc
+spec.loader.exec_module(pc)
+
+manifest = pc.load_toml(Path("tools/porting_coverage_manifest.toml"))
+ids = {
+    "runtime_behavior_config_mirrors_keyboard_toml",
+    "runtime_combo_config_mirrors_keyboard_toml",
+}
+manifest["code_contains"] = [
+    check for check in manifest["code_contains"] if check["id"] in ids
+]
+ok = pc.check_code_contains(manifest, Path("."))
+
+with tempfile.TemporaryDirectory() as root_dir:
+    root = Path(root_dir)
+    scenario_dir = root / "vendor/rmk-0.8.2/tests"
+    scenario_dir.mkdir(parents=True)
+    scenario = Path("vendor/rmk-0.8.2/tests/keyboard_lalapad_zmk_scenarios_test.rs").read_text(
+        encoding="utf-8"
+    )
+    scenario = scenario.replace("tri_layer: Some([1, 2, 3]),", "tri_layer: Some([1, 3, 2]),", 1)
+    (scenario_dir / "keyboard_lalapad_zmk_scenarios_test.rs").write_text(
+        scenario, encoding="utf-8"
+    )
+    bad_behavior = pc.check_code_contains(manifest, root)
+
+with tempfile.TemporaryDirectory() as root_dir:
+    root = Path(root_dir)
+    scenario_dir = root / "vendor/rmk-0.8.2/tests"
+    scenario_dir.mkdir(parents=True)
+    scenario = Path("vendor/rmk-0.8.2/tests/keyboard_lalapad_zmk_scenarios_test.rs").read_text(
+        encoding="utf-8"
+    )
+    scenario = scenario.replace("timeout: Duration::from_millis(50),", "timeout: Duration::from_millis(5),", 1)
+    (scenario_dir / "keyboard_lalapad_zmk_scenarios_test.rs").write_text(
+        scenario, encoding="utf-8"
+    )
+    bad_combo = pc.check_code_contains(manifest, root)
+
+def pack(results):
+    return [result.__dict__ | {"ok": result.ok} for result in results]
+
+print(json.dumps({
+    "ok": pack(ok),
+    "bad_behavior": pack(bad_behavior),
+    "bad_combo": pack(bad_combo),
+}))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "runtime behavior config drift check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(
+        parsed["ok"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|result| result["ok"] == true),
+        "current runtime behavior mirror checks should pass"
+    );
+
+    let bad_behavior = parsed["bad_behavior"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "runtime_behavior_config_mirrors_keyboard_toml")
+        .expect("changed runtime behavior config mirror result is missing");
+    assert_eq!(bad_behavior["kind"], "code");
+    assert_eq!(bad_behavior["ok"], false);
+    assert!(
+        bad_behavior["message"]
+            .as_str()
+            .unwrap()
+            .contains("tri_layer: Some([1, 2, 3])")
+    );
+
+    let bad_combo = parsed["bad_combo"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "runtime_combo_config_mirrors_keyboard_toml")
+        .expect("changed runtime combo config mirror result is missing");
+    assert_eq!(bad_combo["kind"], "code");
+    assert_eq!(bad_combo["ok"], false);
+    assert!(
+        bad_combo["message"]
+            .as_str()
+            .unwrap()
+            .contains("timeout: Duration::from_millis(50)")
+    );
+}
+
+#[test]
 fn porting_coverage_rejects_thumb_layer_tap_declared_layer_drift() {
     let output = run_python(
         r#"

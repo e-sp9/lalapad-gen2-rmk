@@ -3096,6 +3096,37 @@ needles = [
   "write_sensor_chunks(ADDR_SNAP_ENABLE, &IQS9151_SNAP_ENABLE)",
 ]
 
+[[code_contains]]
+id = "runtime_behavior_config_mirrors_keyboard_toml"
+file = "vendor/rmk-0.8.2/tests/keyboard_lalapad_zmk_scenarios_test.rs"
+needles = [
+  "const FAST_LAYER: MorseProfile = MorseProfile::new(",
+  "Some(false),",
+  "Some(MorseMode::HoldOnOtherPress),",
+  "Some(200),",
+  "tri_layer: Some([1, 2, 3]),",
+  "enable_flow_tap: false,",
+  "prior_idle_time: embassy_time::Duration::from_millis(125),",
+  "default_profile: FAST_LAYER,",
+  "combo: lalapad_combos_config(),",
+]
+
+[[code_contains]]
+id = "runtime_combo_config_mirrors_keyboard_toml"
+file = "vendor/rmk-0.8.2/tests/keyboard_lalapad_zmk_scenarios_test.rs"
+needles = [
+  "fn lalapad_combos_config() -> CombosConfig",
+  "[k!(Q), k!(W)].to_vec(),",
+  "k!(Escape),",
+  "[k!(A), k!(S)].to_vec(),",
+  "k!(Tab),",
+  "[k!(J), k!(K)].to_vec(),",
+  "k!(Language1),",
+  "[k!(D), k!(F)].to_vec(),",
+  "k!(Language2),",
+  "timeout: Duration::from_millis(50),",
+]
+
 [[code_topology]]
 id = "central_controller_topology"
 file = "src/central.rs"
