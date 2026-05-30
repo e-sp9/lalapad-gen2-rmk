@@ -6229,6 +6229,17 @@ with tempfile.TemporaryDirectory() as tempdir:
 
 with tempfile.TemporaryDirectory() as tempdir:
     root = Path(tempdir)
+    write_cargo_project(root, Path("Cargo.toml").read_text())
+    vendor_text = (root / "vendor/rmk-0.8.2/Cargo.toml").read_text().replace(
+        '    "vial_lock",\n',
+        "",
+        1,
+    )
+    (root / "vendor/rmk-0.8.2/Cargo.toml").write_text(vendor_text)
+    bad_default_vial_lock_feature_result = pc.check_cargo_dependency_invariants(manifest, root)
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
     cargo = pc.load_toml(Path("Cargo.toml"))
     cargo.pop("patch", None)
     cargo_text = Path("Cargo.toml").read_text()
@@ -6249,6 +6260,7 @@ print(json.dumps({
     "bad_bin": pack(bad_bin_result),
     "bad_ble_storage_feature": pack(bad_ble_storage_feature_result),
     "bad_default_vial_feature": pack(bad_default_vial_feature_result),
+    "bad_default_vial_lock_feature": pack(bad_default_vial_lock_feature_result),
     "no_patch": pack(no_patch_result),
 }))
 "#,
@@ -6266,8 +6278,8 @@ print(json.dumps({
     assert_eq!(ok.len(), 1);
     assert_eq!(ok[0]["id"], "cargo_uses_local_rmk_0_8_2_patch");
     assert_eq!(ok[0]["kind"], "dependency");
-    assert_eq!(ok[0]["passed"].as_i64(), Some(25));
-    assert_eq!(ok[0]["total"].as_i64(), Some(25));
+    assert_eq!(ok[0]["passed"].as_i64(), Some(26));
+    assert_eq!(ok[0]["total"].as_i64(), Some(26));
     assert_eq!(ok[0]["ok"], true);
 
     let bad_features = &parsed["bad_features"][0];
@@ -6326,7 +6338,25 @@ print(json.dumps({
         bad_default_vial_feature["message"]
             .as_str()
             .unwrap()
+            .contains("vendor rmk feature 'default' closure missing 'vial_lock'")
+    );
+    assert!(
+        bad_default_vial_feature["message"]
+            .as_str()
+            .unwrap()
             .contains("vendor rmk feature 'default' closure missing 'host'")
+    );
+
+    let bad_default_vial_lock_feature = &parsed["bad_default_vial_lock_feature"][0];
+    assert_eq!(bad_default_vial_lock_feature["kind"], "dependency");
+    assert_eq!(bad_default_vial_lock_feature["passed"].as_i64(), Some(25));
+    assert_eq!(bad_default_vial_lock_feature["total"].as_i64(), Some(26));
+    assert_eq!(bad_default_vial_lock_feature["ok"], false);
+    assert!(
+        bad_default_vial_lock_feature["message"]
+            .as_str()
+            .unwrap()
+            .contains("vendor rmk feature 'default' closure missing 'vial_lock'")
     );
 
     let no_patch = &parsed["no_patch"][0];

@@ -315,8 +315,8 @@ disabled, while the RMK config gate pins `[host].vial_enabled = true` and the
 Vial unlock chord. They also pin the split firmware entrypoints to the expected
 `central` and `peripheral` binaries. The same dependency gate walks the
 vendored RMK feature graph and verifies that the default feature closure still
-reaches `vial` and `host`, and that the enabled BLE features still resolve to
-`storage`.
+reaches `vial`, `vial_lock`, and `host`, and that the enabled BLE features
+still resolve to `storage`.
 The build-task checks pin the cargo-make release path as well: release builds
 must run the flash-layout config guard, objcopy the central and peripheral
 ELFs into matching HEX files, convert both halves to nRF52840 UF2 artifacts,
