@@ -19,6 +19,21 @@ gate and real-device validation rate stay separate.
 6. Test two-finger vertical scroll, then two-finger horizontal scroll. Confirm that scroll does not also move the cursor or emit right-click taps during continuous movement. Flick once and release to confirm inertia continues briefly, then stops when a finger touches the pad again.
 7. Hold one finger still on either trackpad until left mouse button hold starts, then move the other trackpad. Confirm the host performs drag/select and releases the selection when the held finger is lifted.
 
+## Thumb Layer-Tap Check
+
+Use a host key-event viewer after flashing the current firmware and re-pairing
+BLE. Vial layout inspection alone is not enough, because Vial can show the
+configured `LT(...)` key while host output is still affected by stale storage,
+tap-hold timing, or an incorrect RMK action.
+
+1. Open the keyboard in Vial and confirm the thumb positions show Space as
+   layer 1 and Enter as layer 2.
+2. Tap Space and Enter normally and confirm they still emit Space and Enter.
+3. Hold Space, press Y, release Y, then release Space. Confirm the host sees
+   `NumLock`, proving the Space hold path selected layer 1.
+4. Hold Enter, press Y, release Y, then release Enter. Confirm the host sees
+   `PageUp`, proving the Enter hold path selected layer 2.
+
 The current diagnostic firmware intentionally sends a tiny left/right cursor nudge about every two seconds while IQS9151 initialization or degraded coordinate polling is failing. Use that as the first split:
 
 - Diagnostic nudge appears, but touch does not work: RMK controller execution and HID reporting are alive; focus on IQS9151 I2C/product/config/RDY.

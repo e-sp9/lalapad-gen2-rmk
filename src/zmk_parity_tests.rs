@@ -1207,7 +1207,7 @@ fn migration_status_combines_software_and_hardware_progress() {
     assert!(stdout.contains("### Hardware Remaining"));
     assert!(stdout.contains("| ID | Area | Side | Status | Required observations |"));
     assert!(stdout.contains(
-        "| vial_thumb_layer_taps | vial | both | requires_hardware | Vial, Space, Enter, layer 1, layer 2 |"
+        "| vial_thumb_layer_taps | vial | both | requires_hardware | Vial, Space, Enter, layer 1, layer 2, Space+Y, NumLock, Enter+Y, PageUp |"
     ));
 
     let text = run_migration_status(&[
@@ -1954,7 +1954,9 @@ fn hardware_validation_markdown_report_lists_required_evidence() {
         "| ID | Area | Side | Status | Requirement | Required evidence | Required observations | Validated at | Tester | Firmware ref | Artifact/notes |"
     ));
     assert!(stdout.contains("right, cursor, tap, vertical scroll, horizontal scroll"));
-    assert!(stdout.contains("Vial, Space, Enter, layer 1, layer 2"));
+    assert!(
+        stdout.contains("Vial, Space, Enter, layer 1, layer 2, Space+Y, NumLock, Enter+Y, PageUp")
+    );
     for required in [
         "iqs9151_right_i2c_identity",
         "left_trackpad_split_cursor_tap_scroll",
@@ -2507,6 +2509,10 @@ artifact_or_notes = "log: /tmp/right-i2c.log; I2C scan found 0x56 and product re
                 && error.contains("'Enter'")
                 && error.contains("'layer 1'")
                 && error.contains("'layer 2'")
+                && error.contains("'Space+Y'")
+                && error.contains("'NumLock'")
+                && error.contains("'Enter+Y'")
+                && error.contains("'PageUp'")
         }),
         "required observations should not match inside larger words or numbers: {errors:?}"
     );
