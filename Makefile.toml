@@ -276,6 +276,7 @@ set -- \
   --require-zmk-source-commit \
   --require-software-complete \
   --require-hardware-classified \
+  --require-evidence-inventory \
   --require-evidence-artifact-paths \
   --require-hardware-validated \
   --require-firmware-ref "$FIRMWARE_REF"
@@ -318,6 +319,7 @@ set -- \
   --require-zmk-source-commit \
   --require-software-complete \
   --require-hardware-classified \
+  --require-evidence-inventory \
   --require-evidence-artifact-paths \
   --require-hardware-validated \
   --require-firmware-ref "$firmware_ref"

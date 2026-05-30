@@ -414,7 +414,7 @@ def build_status(args: argparse.Namespace) -> MigrationStatus:
         args.evidence_artifact_root,
         required_firmware_ref,
         required_artifact_pair_sha256,
-        args.require_hardware_validated,
+        args.require_evidence_inventory or args.require_hardware_validated,
         args.require_evidence_artifact_paths or args.require_hardware_validated,
         artifact_errors,
     )
@@ -740,6 +740,7 @@ def main() -> None:
     parser.add_argument("--require-hardware-classified", action="store_true")
     parser.add_argument("--require-release-ready", action="store_true")
     parser.add_argument("--require-evidence-artifact-paths", action="store_true")
+    parser.add_argument("--require-evidence-inventory", action="store_true")
     parser.add_argument("--require-hardware-validated", action="store_true")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--markdown", action="store_true")
@@ -773,6 +774,8 @@ def main() -> None:
     if args.require_hardware_classified and not status.hardware["classified"]:
         raise SystemExit(1)
     if args.require_evidence_artifact_paths and not status.hardware["classified"]:
+        raise SystemExit(1)
+    if args.require_evidence_inventory and not status.hardware["classified"]:
         raise SystemExit(1)
     if args.require_firmware_ref is not None and not status.hardware["classified"]:
         raise SystemExit(1)

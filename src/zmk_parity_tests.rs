@@ -1803,6 +1803,28 @@ fn migration_status_accepts_complete_hardware_evidence_for_final_gate() {
         "--require-hardware-classified",
         "--require-hardware-validated",
     ]);
+    let missing_inventory_explicit_output = run_migration_status(&[
+        "--coverage-baseline",
+        "tools/porting_coverage_baseline.toml",
+        "--hardware-baseline",
+        "tools/hardware_validation_baseline.toml",
+        "--zmk-keymap",
+        zmk_keymap,
+        "--evidence",
+        missing_inventory_path.to_str().unwrap(),
+        "--firmware-artifact-manifest",
+        artifact_path.to_str().unwrap(),
+        "--artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--evidence-artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--require-zmk-source",
+        "--require-firmware-ref",
+        firmware_ref,
+        "--require-software-complete",
+        "--require-hardware-classified",
+        "--require-evidence-inventory",
+    ]);
     let _ = std::fs::remove_file(&missing_inventory_path);
     assert!(
         !missing_inventory_output.status.success(),
@@ -1814,6 +1836,12 @@ fn migration_status_accepts_complete_hardware_evidence_for_final_gate() {
         String::from_utf8_lossy(&missing_inventory_output.stdout)
             .contains("missing metadata.hardware_check_inventory_sha256"),
         "missing-inventory failure should explain the evidence metadata requirement"
+    );
+    assert!(
+        !missing_inventory_explicit_output.status.success(),
+        "migration status accepted evidence without inventory metadata under --require-evidence-inventory\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&missing_inventory_explicit_output.stdout),
+        String::from_utf8_lossy(&missing_inventory_explicit_output.stderr)
     );
 
     let missing_artifact_manifest_output = run_migration_status(&[
@@ -5013,6 +5041,7 @@ fn local_validation_entrypoints_match_ci_gates() {
             && migration_status_final_task
                 .contains("../zmk-config-LalaPadGen2/config/lalapadgen2.keymap")
             && migration_status_final_task.contains("--require-hardware-validated")
+            && migration_status_final_task.contains("--require-evidence-inventory")
             && migration_status_final_task.contains("--require-evidence-artifact-paths")
             && migration_status_final_task
                 .contains("--evidence-artifact-root \"${EVIDENCE_ARTIFACT_ROOT:-.}\"")
@@ -5045,6 +5074,7 @@ fn local_validation_entrypoints_match_ci_gates() {
             && migration_status_final_current_task.contains("--require-software-complete")
             && migration_status_final_current_task.contains("--require-hardware-classified")
             && migration_status_final_current_task.contains("--require-hardware-validated")
+            && migration_status_final_current_task.contains("--require-evidence-inventory")
             && migration_status_final_current_task.contains("--require-evidence-artifact-paths")
             && migration_status_final_current_task
                 .contains("--require-firmware-ref \"$firmware_ref\"")
