@@ -164,7 +164,8 @@ python3 tools/hardware_validation.py --evidence hardware-validation-evidence.loc
 ```
 
 `cargo make porting-coverage` first runs the RMK host-runtime thumb layer-tap
-scenario suite and the project host parity test suite, then
+scenario suite, the project host parity test suite, and the vendored RMK
+behavior regression suite, then
 `tools/porting_coverage.py` reads
 `tools/porting_coverage_manifest.toml` and,
 when the upstream ZMK checkout from the manifest is present, also parses
@@ -181,9 +182,13 @@ implementation status summary. `--require-porting-complete`
 makes both metrics hard gates, so release builds fail if any source item is
 unclassified or any explicit implementation status is non-implemented. The
 `cargo make migration-status*` entrypoints also run the same RMK ZMK-derived
-runtime scenario suite before reporting a migration percentage, so a stale
-Space/Enter/system tri-layer runtime regression cannot be hidden by static
-coverage alone. The
+runtime scenario suite, project host parity tests, and vendored RMK behavior
+regression suite before reporting a migration percentage, so a stale
+Space/Enter/system tri-layer or RMK tap/hold behavior regression cannot be
+hidden by static coverage alone. The
+vendored RMK behavior suite uses `--tests`, so it intentionally re-runs the
+LaLaPad scenario test binary while also covering the broader upstream RMK host
+regression suite. The
 text and JSON reports also include coverage grouped by result kind, making it
 clear whether a regression is in RMK keymap/config checks, ZMK source
 inventory, DTS/Kconfig mirrors, Rust constants, or firmware code needles. The
@@ -310,8 +315,9 @@ file sizes and SHA256 hashes so `artifact_or_notes` can point to an exact
 artifact set. `cargo make firmware-artifact-manifest-current` records the same
 hashes in `firmware-artifacts.local.json` and requires a clean current tag or
 commit for its `firmware_ref`. `cargo make
-hardware-validation-session-current` runs the RMK ZMK-derived runtime scenarios
-and the current-ref firmware artifact manifest task, then writes
+hardware-validation-session-current` runs the RMK ZMK-derived runtime
+scenarios, project host parity tests, RMK behavior regression suite, and the
+current-ref firmware artifact manifest task, then writes
 `hardware-validation-evidence.local.toml`,
 `hardware-validation-checklist.local.md`, and `migration-status.local.md` for a
 single hardware bench session; its evidence overlay is prefilled with both the

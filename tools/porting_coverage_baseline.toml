@@ -2,7 +2,7 @@
 passed = 3659
 total = 3659
 result_count = 606
-result_inventory_sha256 = "9c9af8f6b5190b214d03c166cbd7a4b5d5e2c0bdab95a91811b7d9169744c61c"
+result_inventory_sha256 = "51143319faf9b18054eb09ba02d065ed658cc7f3b2f55e70ad1efd30fc8b4ad2"
 
 [coverage.by_kind.behavior]
 passed = 10

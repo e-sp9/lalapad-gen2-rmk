@@ -639,8 +639,8 @@ fn firmware_ci_runs_complete_porting_gate_before_builds() {
     assert!(
         porting_coverage_task.contains(complete_required_flag)
             && porting_coverage_task
-                .contains("dependencies = [\"rmk-zmk-scenario-tests\", \"host-parity-tests\"]"),
-        "cargo make porting-coverage should require the complete porting gate, runtime scenarios, and host parity tests"
+                .contains("dependencies = [\"rmk-zmk-scenario-tests\", \"host-parity-tests\", \"rmk-behavior-tests\"]"),
+        "cargo make porting-coverage should require the complete porting gate, runtime scenarios, host parity tests, and RMK behavior tests"
     );
 }
 
@@ -2542,8 +2542,8 @@ fn local_validation_entrypoints_match_ci_gates() {
             && porting_coverage_task.contains("tools/porting_coverage_baseline.toml")
             && porting_coverage_task.contains("--require-porting-complete")
             && porting_coverage_task
-                .contains("dependencies = [\"rmk-zmk-scenario-tests\", \"host-parity-tests\"]"),
-        "cargo make porting-coverage should require complete implementation status, host parity tests, and a stable denominator baseline"
+                .contains("dependencies = [\"rmk-zmk-scenario-tests\", \"host-parity-tests\", \"rmk-behavior-tests\"]"),
+        "cargo make porting-coverage should require complete implementation status, host parity tests, RMK behavior tests, and a stable denominator baseline"
     );
     assert!(
         host_parity_tests_task.contains("command = \"cargo\"")
@@ -2587,13 +2587,13 @@ fn local_validation_entrypoints_match_ci_gates() {
             && migration_status_task.contains("--require-software-complete")
             && migration_status_task.contains("--require-hardware-classified")
             && migration_status_task
-                .contains("dependencies = [\"rmk-zmk-scenario-tests\", \"host-parity-tests\"]"),
-        "cargo make migration-status should expose the combined release dashboard gate and run runtime scenarios plus host parity first"
+                .contains("dependencies = [\"rmk-zmk-scenario-tests\", \"host-parity-tests\", \"rmk-behavior-tests\"]"),
+        "cargo make migration-status should expose the combined release dashboard gate and run runtime scenarios, host parity, and RMK behavior first"
     );
     assert!(
         migration_status_report_task.contains("tools/migration_status.py")
             && migration_status_report_task
-                .contains("dependencies = [\"rmk-zmk-scenario-tests\", \"host-parity-tests\"]")
+                .contains("dependencies = [\"rmk-zmk-scenario-tests\", \"host-parity-tests\", \"rmk-behavior-tests\"]")
             && migration_status_report_task.contains("--coverage-baseline")
             && migration_status_report_task.contains("--hardware-baseline")
             && migration_status_report_task.contains("--require-zmk-source")
@@ -2618,7 +2618,7 @@ fn local_validation_entrypoints_match_ci_gates() {
         migration_status_final_task.contains("HARDWARE_EVIDENCE")
             && migration_status_final_task.contains("FIRMWARE_REF")
             && migration_status_final_task
-                .contains("dependencies = [\"rmk-zmk-scenario-tests\", \"host-parity-tests\"]")
+                .contains("dependencies = [\"rmk-zmk-scenario-tests\", \"host-parity-tests\", \"rmk-behavior-tests\"]")
             && migration_status_final_task
                 .contains("--hardware-baseline tools/hardware_validation_baseline.toml")
             && migration_status_final_task.contains("--require-zmk-source")
@@ -2644,7 +2644,7 @@ fn local_validation_entrypoints_match_ci_gates() {
     assert!(
         migration_status_final_current_task.contains("HARDWARE_EVIDENCE")
             && migration_status_final_current_task
-                .contains("dependencies = [\"clean-current-git-ref\", \"rmk-zmk-scenario-tests\", \"host-parity-tests\"]")
+                .contains("dependencies = [\"clean-current-git-ref\", \"rmk-zmk-scenario-tests\", \"host-parity-tests\", \"rmk-behavior-tests\"]")
             && migration_status_final_current_task
                 .contains("git status --porcelain --untracked-files=normal")
             && migration_status_final_current_task.contains("git describe --tags --exact-match")
@@ -2720,7 +2720,7 @@ fn local_validation_entrypoints_match_ci_gates() {
     );
     assert!(
         hardware_validation_session_current_task.contains(
-            "dependencies = [\"clean-current-git-ref\", \"firmware-artifact-manifest-current\", \"rmk-zmk-scenario-tests\", \"host-parity-tests\"]",
+            "dependencies = [\"clean-current-git-ref\", \"firmware-artifact-manifest-current\", \"rmk-zmk-scenario-tests\", \"host-parity-tests\", \"rmk-behavior-tests\"]",
         ) && hardware_validation_session_current_task
             .contains("git status --porcelain --untracked-files=normal")
             && hardware_validation_session_current_task
@@ -6718,7 +6718,7 @@ with tempfile.TemporaryDirectory() as tempdir:
 with tempfile.TemporaryDirectory() as tempdir:
     root = Path(tempdir)
     (root / "Makefile.toml").write_text(
-        Path("Makefile.toml").read_text().replace('dependencies = ["rmk-zmk-scenario-tests", "host-parity-tests"]', 'dependencies = []', 1),
+        Path("Makefile.toml").read_text().replace('dependencies = ["rmk-zmk-scenario-tests", "host-parity-tests", "rmk-behavior-tests"]', 'dependencies = []', 1),
         encoding="utf-8",
     )
     bad_porting_coverage_task = pc.check_makefile_task_invariants(manifest, root)
@@ -6737,7 +6737,7 @@ with tempfile.TemporaryDirectory() as tempdir:
     before, marker, after = makefile.partition("[tasks.migration-status]")
     assert marker
     (root / "Makefile.toml").write_text(
-        before + marker + after.replace('dependencies = ["rmk-zmk-scenario-tests", "host-parity-tests"]', 'dependencies = []', 1),
+        before + marker + after.replace('dependencies = ["rmk-zmk-scenario-tests", "host-parity-tests", "rmk-behavior-tests"]', 'dependencies = []', 1),
         encoding="utf-8",
     )
     bad_migration_status_task = pc.check_makefile_task_invariants(manifest, root)
@@ -6821,8 +6821,8 @@ with tempfile.TemporaryDirectory() as tempdir:
     root = Path(tempdir)
     (root / "Makefile.toml").write_text(
         Path("Makefile.toml").read_text().replace(
-            'dependencies = ["clean-current-git-ref", "firmware-artifact-manifest-current", "rmk-zmk-scenario-tests", "host-parity-tests"]',
-            'dependencies = ["firmware-artifact-manifest-current", "clean-current-git-ref", "rmk-zmk-scenario-tests", "host-parity-tests"]',
+            'dependencies = ["clean-current-git-ref", "firmware-artifact-manifest-current", "rmk-zmk-scenario-tests", "host-parity-tests", "rmk-behavior-tests"]',
+            'dependencies = ["firmware-artifact-manifest-current", "clean-current-git-ref", "rmk-zmk-scenario-tests", "host-parity-tests", "rmk-behavior-tests"]',
             1,
         ),
         encoding="utf-8",
@@ -6921,7 +6921,7 @@ print(json.dumps({
         .unwrap()
         .iter()
         .find(|result| {
-            result["id"] == "makefile_porting_coverage_runs_runtime_scenarios_and_host_parity_first"
+            result["id"] == "makefile_porting_coverage_runs_runtime_host_and_rmk_behavior_first"
         })
         .expect("changed porting coverage task result is missing");
     assert_eq!(bad_porting_coverage_task["kind"], "build_task");
@@ -6930,7 +6930,7 @@ print(json.dumps({
         bad_porting_coverage_task["message"]
             .as_str()
             .unwrap()
-            .contains("tasks.porting-coverage.dependencies missing required values ['rmk-zmk-scenario-tests', 'host-parity-tests']")
+            .contains("tasks.porting-coverage.dependencies missing required values ['rmk-zmk-scenario-tests', 'host-parity-tests', 'rmk-behavior-tests']")
     );
 
     let bad_host_parity_task = parsed["bad_host_parity_task"]
@@ -6953,7 +6953,7 @@ print(json.dumps({
         .unwrap()
         .iter()
         .find(|result| {
-            result["id"] == "makefile_migration_status_runs_runtime_scenarios_and_host_parity_first"
+            result["id"] == "makefile_migration_status_runs_runtime_host_and_rmk_behavior_first"
         })
         .expect("changed migration status task result is missing");
     assert_eq!(bad_migration_status_task["kind"], "build_task");
@@ -6962,7 +6962,7 @@ print(json.dumps({
         bad_migration_status_task["message"]
             .as_str()
             .unwrap()
-            .contains("tasks.migration-status.dependencies missing required values ['rmk-zmk-scenario-tests', 'host-parity-tests']")
+            .contains("tasks.migration-status.dependencies missing required values ['rmk-zmk-scenario-tests', 'host-parity-tests', 'rmk-behavior-tests']")
     );
 
     let bad_family = parsed["bad_family"]
@@ -7124,7 +7124,7 @@ print(json.dumps({
         bad_current_hardware_session_dependency_order["message"]
             .as_str()
             .unwrap()
-            .contains("tasks.hardware-validation-session-current.dependencies expected ['clean-current-git-ref', 'firmware-artifact-manifest-current', 'rmk-zmk-scenario-tests', 'host-parity-tests']")
+            .contains("tasks.hardware-validation-session-current.dependencies expected ['clean-current-git-ref', 'firmware-artifact-manifest-current', 'rmk-zmk-scenario-tests', 'host-parity-tests', 'rmk-behavior-tests']")
     );
 
     let bad_current_final_task = parsed["bad_current_final_task"]

@@ -296,13 +296,15 @@ Run:
 cargo make porting-coverage
 cargo make migration-status
 cargo make host-parity-tests
+cargo make rmk-behavior-tests
 ```
 
 The firmware GitHub Actions workflow checks out `e-sp9/zmk-config-LalaPadGen2`,
 parses `vial.json`, RMK/Cargo/manifest TOML, and flash layout, runs this
-source-backed complete-porting gate, runs the host-side parity test suite as
-part of the same local porting gate, and runs the vendored RMK
-hold-on-other-press behavior regression suite before building release binaries.
+source-backed complete-porting gate, runs the host-side parity test suite and
+vendored RMK behavior regression suite as part of the same local porting gate,
+and keeps a standalone vendored RMK behavior regression step visible before
+building release binaries.
 The gate
 must report `100.00%` coverage and `100.00%` implementation status against the
 committed upstream checkout used by CI. The
@@ -422,10 +424,14 @@ cargo make migration-status-report
 ```
 
 The `cargo make migration-status*` entrypoints run
-`cargo make rmk-zmk-scenario-tests` before calculating the reported migration
+`cargo make rmk-zmk-scenario-tests`, `cargo make host-parity-tests`, and
+`cargo make rmk-behavior-tests` before calculating the reported migration
 percentage. This keeps the monitor tied to the vendored RMK runtime scenarios
-for Space, Enter, and the system tri-layer instead of relying only on static
-keymap/config coverage.
+for Space, Enter, and the system tri-layer plus the broader RMK tap/hold,
+layer, combo, macro, and one-shot regression suite instead of relying only on
+static keymap/config coverage.
+`cargo make rmk-behavior-tests` uses `--tests`, so it intentionally re-runs the
+LaLaPad scenario test binary while exercising the full vendored RMK host suite.
 
 To re-run the vendored RMK host regression suite locally, including tap/hold,
 layer, combo, macro, and one-shot behavior, run:
@@ -528,5 +534,6 @@ only to a moving file name or host-side state. `--evidence-template` accepts
 hash before bench observations are added.
 Use `cargo make hardware-validation-session-current` to prepare a complete
 current-ref bench packet in one step: RMK ZMK-derived runtime scenario results,
-rebuilt UF2 artifact hashes, a firmware-ref and pair-SHA-prefilled evidence
-overlay, a hardware checklist, and a local Markdown migration status report.
+project host parity and RMK behavior regression results, rebuilt UF2 artifact
+hashes, a firmware-ref and pair-SHA-prefilled evidence overlay, a hardware
+checklist, and a local Markdown migration status report.
