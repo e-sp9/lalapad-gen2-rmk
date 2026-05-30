@@ -469,7 +469,11 @@ flashed; placeholders and moving refs such as `main`, `latest`, and `HEAD` are
 rejected. `artifact_or_notes` must describe concrete observed evidence such as
 a photo, log, probe reading, Vial observation, or similar check-specific note,
 and must mention the check-specific observation terms declared by
-`evidence_needles` in the hardware validation manifest.
+`evidence_needles` in the hardware validation manifest. Required observation
+words alone, such as only `right cursor tap vertical scroll horizontal scroll`,
+do not count as concrete evidence unless the note also points to a log, photo,
+probe/scope/multimeter reading, serial/I2C output, Vial observation, or similar
+bench artifact.
 `--require-firmware-ref` only rejects stale validated evidence; combine it with
 `--require-validated` when all checks must be proven for that exact firmware.
 The combined migration gate requires `--firmware-artifact-manifest` whenever

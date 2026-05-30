@@ -63,10 +63,11 @@ GENERIC_ARTIFACT_VALUES = frozenset(
         "synthetic complete evidence overlay for gate testing",
     }
 )
-ARTIFACT_SIGNAL_RE = re.compile(
-    r"(0x[0-9a-f]+|/|\\|\.log\b|\.txt\b|\.png\b|\.jpg\b|\.jpeg\b|\.mp4\b|"
-    r"photo|video|screenshot|log|probe|scope|serial|i2c|register|rdy|vial|"
-    r"ble|pair|uf2|cursor|scroll|tap|rgb|charge)",
+CONCRETE_EVIDENCE_RE = re.compile(
+    r"(0x[0-9a-f]+|/|\\|\.log\b|\.txt\b|\.csv\b|\.png\b|\.jpg\b|\.jpeg\b|\.mp4\b|"
+    r"photo|video|screenshot|log|probe|scope|oscilloscope|logic analyzer|"
+    r"multimeter|serial|i2c|register|rdy|vial observation|vial screenshot|"
+    r"ble trace|pairing log|uf2)",
     re.IGNORECASE,
 )
 EVIDENCE_UPDATE_FIELDS = (
@@ -207,7 +208,7 @@ def validate_validated_evidence(check_id: str, check: dict[str, Any]) -> list[st
         errors.append(
             f"{check_id}: artifact_or_notes must include a specific photo/log/probe/Vial observation note"
         )
-    elif artifact_or_notes and not ARTIFACT_SIGNAL_RE.search(artifact_or_notes):
+    elif artifact_or_notes and not CONCRETE_EVIDENCE_RE.search(artifact_or_notes):
         errors.append(
             f"{check_id}: artifact_or_notes must include a concrete photo/log/probe/Vial observation note"
         )

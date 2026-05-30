@@ -2377,6 +2377,14 @@ validated_at = "2026-05-29"
 tester = "bench operator"
 firmware_ref = "35b3f1f"
 artifact_or_notes = "manual observation completed"
+
+[[evidence]]
+id = "right_trackpad_cursor_tap_scroll"
+status = "validated"
+validated_at = "2026-05-29"
+tester = "bench operator"
+firmware_ref = "35b3f1f"
+artifact_or_notes = "right cursor tap vertical scroll horizontal scroll"
 "#;
     let path = write_temp_file("hardware-validation-placeholder-evidence", evidence);
     let output = run_hardware_validation(&["--evidence", path.to_str().unwrap(), "--json"]);
@@ -2434,6 +2442,12 @@ artifact_or_notes = "manual observation completed"
             "artifact_or_notes must include a concrete photo/log/probe/Vial observation note"
         )),
         "generic artifact_or_notes without a concrete signal should be rejected: {errors:?}"
+    );
+    assert!(
+        errors.iter().any(|error| error.contains(
+            "right_trackpad_cursor_tap_scroll: artifact_or_notes must include a concrete photo/log/probe/Vial observation note"
+        )),
+        "behavior keywords alone should not count as concrete hardware evidence: {errors:?}"
     );
     assert!(
         !require_output.status.success(),
