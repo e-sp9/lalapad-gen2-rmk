@@ -2,8 +2,8 @@
 # Then run:
 #
 #   python3 tools/hardware_validation.py --evidence path/to/evidence.toml --markdown
-#   python3 tools/hardware_validation.py --evidence path/to/evidence.toml --require-validated
 #   python3 tools/hardware_validation.py --evidence path/to/evidence.toml --require-firmware-ref <tag-or-commit>
+#   python3 tools/hardware_validation.py --evidence path/to/evidence.toml --require-validated --require-firmware-ref <tag-or-commit>
 # Generate a complete overlay with a pre-filled firmware ref:
 #   python3 tools/hardware_validation.py --evidence-template --firmware-ref-template <tag-or-commit> > hardware-validation-evidence.local.toml
 # Generate an artifact-bound overlay after creating firmware-artifacts.local.json:
@@ -17,15 +17,16 @@
 # scope traces.
 #
 # Evidence entries are overlays keyed by check id from
-# tools/hardware_validation_manifest.toml. Keep the generated
-# metadata.hardware_check_inventory_sha256 so the evidence is tied to the
-# current check inventory. Keep artifact_or_notes specific: include a photo/log
-# path, probe reading, or Vial observation note, include every required artifact
-# listed by `evidence_artifacts`, and include every required observation listed
-# by `evidence_needles` for that check. Set firmware_ref to the release tag,
-# commit hash, or other immutable firmware identifier that was flashed during
-# the hardware test. Do not use placeholders or moving refs such as
-# main/latest/HEAD, and do not mark simulated, synthetic, mock, or host-only
+# tools/hardware_validation_manifest.toml. Start from the generated template
+# for final validation, or update the [metadata] table manually. Keep the
+# generated metadata.hardware_check_inventory_sha256 so the evidence is tied to
+# the current check inventory. Keep artifact_or_notes specific: include a
+# photo/log path, probe reading, or Vial observation note, include every
+# required artifact listed by `evidence_artifacts`, and include every required
+# observation listed by `evidence_needles` for that check. Set firmware_ref to
+# the release tag, commit hash, or other immutable firmware identifier that was
+# flashed during the hardware test. Do not use placeholders or moving refs such
+# as main/latest/HEAD, and do not mark simulated, synthetic, mock, or host-only
 # output as validated hardware evidence. validated_at must be a real YYYY-MM-DD
 # date that is not in the future.
 

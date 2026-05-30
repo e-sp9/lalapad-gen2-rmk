@@ -5406,8 +5406,19 @@ fn local_validation_entrypoints_match_ci_gates() {
     );
     assert!(
         HARDWARE_VALIDATION_EVIDENCE_EXAMPLE_TOML
+            .contains("tools/hardware_validation.py --evidence path/to/evidence.toml --require-validated --require-firmware-ref <tag-or-commit>"),
+        "hardware evidence example should document complete validation with both all-check and firmware-ref gates"
+    );
+    assert!(
+        HARDWARE_VALIDATION_EVIDENCE_EXAMPLE_TOML
             .contains("tools/hardware_validation.py --evidence-template --firmware-ref-template <tag-or-commit>"),
         "hardware evidence example should document firmware_ref-prefilled template generation"
+    );
+    assert!(
+        HARDWARE_VALIDATION_EVIDENCE_EXAMPLE_TOML.contains("Start from the generated template")
+            && HARDWARE_VALIDATION_EVIDENCE_EXAMPLE_TOML
+                .contains("for final validation, or update the [metadata] table manually"),
+        "hardware evidence example should steer final validation toward generated inventory metadata"
     );
     assert!(
         HARDWARE_VALIDATION_EVIDENCE_EXAMPLE_TOML
