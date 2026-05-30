@@ -246,7 +246,12 @@ fn porting_coverage_complete_gate_accepts_explicit_status_completion() {
     assert!(stdout.contains("Porting coverage by kind:"));
     assert!(stdout.contains("- code_topology: 54/54 = 100.00%"));
     assert!(stdout.contains("- gpio_flag_mirror: 36/36 = 100.00%"));
-    assert!(stdout.contains("- release_workflow: 45/45 = 100.00%"));
+    let release_workflow = baseline_by_kind["release_workflow"].as_table().unwrap();
+    let release_passed = release_workflow["passed"].as_integer().unwrap();
+    let release_total = release_workflow["total"].as_integer().unwrap();
+    assert!(stdout.contains(&format!(
+        "- release_workflow: {release_passed}/{release_total} = 100.00%"
+    )));
     assert!(stdout.contains("- rmk_patch: 59/59 = 100.00%"));
     assert!(stdout.contains("- scenario:"));
     assert!(stdout.contains("- split: 100/100 = 100.00%"));
@@ -2501,6 +2506,7 @@ artifact_or_notes = "duplicate"
 fn local_validation_entrypoints_match_ci_gates() {
     let clean_current_git_ref_task = makefile_task_block("clean-current-git-ref");
     let porting_coverage_task = makefile_task_block("porting-coverage");
+    let rmk_config_schema_task = makefile_task_block("rmk-config-schema");
     let rmk_behavior_tests_task = makefile_task_block("rmk-behavior-tests");
     let rmk_zmk_scenario_tests_task = makefile_task_block("rmk-zmk-scenario-tests");
     let migration_status_task = makefile_task_block("migration-status");
@@ -2537,6 +2543,12 @@ fn local_validation_entrypoints_match_ci_gates() {
         "cargo make porting-coverage should require complete implementation status and a stable denominator baseline"
     );
     assert!(
+        rmk_config_schema_task.contains("rmkit get-chip --keyboard-toml-path keyboard.toml")
+            && rmk_config_schema_task
+                .contains("rmkit get-project-name --keyboard-toml-path keyboard.toml"),
+        "cargo make rmk-config-schema should validate keyboard.toml with rmkit before RMK-dependent gates"
+    );
+    assert!(
         rmk_behavior_tests_task.contains("KEYBOARD_TOML_PATH=\"$rmk_host_keyboard\"")
             && rmk_behavior_tests_task.contains("vendor/rmk-0.8.2/Cargo.toml")
             && rmk_behavior_tests_task.contains("--target x86_64-unknown-linux-gnu")
@@ -2546,6 +2558,7 @@ fn local_validation_entrypoints_match_ci_gates() {
     );
     assert!(
         rmk_zmk_scenario_tests_task.contains("KEYBOARD_TOML_PATH=\"$rmk_host_keyboard\"")
+            && rmk_zmk_scenario_tests_task.contains("dependencies = [\"rmk-config-schema\"]")
             && rmk_zmk_scenario_tests_task.contains("vendor/rmk-0.8.2/Cargo.toml")
             && rmk_zmk_scenario_tests_task.contains("--target x86_64-unknown-linux-gnu")
             && rmk_zmk_scenario_tests_task.contains("--test keyboard_lalapad_zmk_scenarios_test")
@@ -6672,6 +6685,14 @@ ok = pc.check_makefile_task_invariants(manifest, Path("."))
 with tempfile.TemporaryDirectory() as tempdir:
     root = Path(tempdir)
     (root / "Makefile.toml").write_text(
+        Path("Makefile.toml").read_text().replace("rmkit get-project-name --keyboard-toml-path keyboard.toml", "rmkit get-project-name keyboard.toml", 1),
+        encoding="utf-8",
+    )
+    bad_rmk_config_schema_task = pc.check_makefile_task_invariants(manifest, root)
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    (root / "Makefile.toml").write_text(
         Path("Makefile.toml").read_text().replace('dependencies = ["rmk-zmk-scenario-tests"]', 'dependencies = []', 1),
         encoding="utf-8",
     )
@@ -6788,6 +6809,7 @@ def pack(results):
 
 print(json.dumps({
     "ok": pack(ok),
+    "bad_rmk_config_schema_task": pack(bad_rmk_config_schema_task),
     "bad_porting_coverage_task": pack(bad_porting_coverage_task),
     "bad_migration_status_task": pack(bad_migration_status_task),
     "bad_family": pack(bad_family),
@@ -6814,19 +6836,34 @@ print(json.dumps({
 
     let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     let ok = parsed["ok"].as_array().unwrap();
-    assert_eq!(ok.len(), 20);
+    assert_eq!(ok.len(), 21);
     assert!(ok.iter().all(|result| result["kind"] == "build_task"));
     assert_eq!(
         ok.iter()
             .map(|result| result["passed"].as_i64().unwrap())
             .sum::<i64>(),
-        65
+        68
     );
     assert_eq!(
         ok.iter()
             .map(|result| result["total"].as_i64().unwrap())
             .sum::<i64>(),
-        65
+        68
+    );
+
+    let bad_rmk_config_schema_task = parsed["bad_rmk_config_schema_task"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "makefile_rmk_config_schema_guard")
+        .expect("changed RMK config schema task result is missing");
+    assert_eq!(bad_rmk_config_schema_task["kind"], "build_task");
+    assert_eq!(bad_rmk_config_schema_task["ok"], false);
+    assert!(
+        bad_rmk_config_schema_task["message"]
+            .as_str()
+            .unwrap()
+            .contains("rmkit get-project-name --keyboard-toml-path keyboard.toml")
     );
 
     let bad_porting_coverage_task = parsed["bad_porting_coverage_task"]
@@ -7136,13 +7173,13 @@ print(json.dumps({
         ok.iter()
             .map(|result| result["passed"].as_i64().unwrap())
             .sum::<i64>(),
-        45
+        47
     );
     assert_eq!(
         ok.iter()
             .map(|result| result["total"].as_i64().unwrap())
             .sum::<i64>(),
-        45
+        47
     );
 
     let bad_migration_gate = parsed["bad_migration_gate"]

@@ -7,11 +7,18 @@ install_crate = { crate_name = "flip-link", binary = "flip-link", test_arg = ["-
 [tasks.build]
 command = "cargo"
 args = ["build", "--release"]
-dependencies = ["install-llvm-tools", "flip-link", "flash-layout-config"]
+dependencies = ["install-llvm-tools", "flip-link", "flash-layout-config", "rmk-config-schema"]
 
 [tasks.flash-layout-config]
 command = "python3"
 args = ["tools/check_flash_layout.py", "--config-only"]
+
+[tasks.rmk-config-schema]
+install_crate = { crate_name = "rmkit", binary = "rmkit", test_arg = ["--help"] }
+script = '''
+rmkit get-chip --keyboard-toml-path keyboard.toml
+rmkit get-project-name --keyboard-toml-path keyboard.toml
+'''
 
 [tasks.porting-coverage]
 command = "python3"
@@ -40,6 +47,7 @@ cargo test \
 '''
 
 [tasks.rmk-zmk-scenario-tests]
+dependencies = ["rmk-config-schema"]
 script = '''
 rmk_host_keyboard="$(mktemp "${TMPDIR:-/tmp}/lalapad-rmk-host-test.XXXXXX.toml")"
 trap 'rm -f "$rmk_host_keyboard"' EXIT

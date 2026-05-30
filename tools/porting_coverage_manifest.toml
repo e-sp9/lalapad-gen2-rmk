@@ -2820,13 +2820,21 @@ id = "makefile_build_runs_release_with_flash_layout_config"
 task = "build"
 command = "cargo"
 args_contains = ["build", "--release"]
-dependencies_include = ["install-llvm-tools", "flip-link", "flash-layout-config"]
+dependencies_include = ["install-llvm-tools", "flip-link", "flash-layout-config", "rmk-config-schema"]
 
 [[makefile_task_invariants]]
 id = "makefile_flash_layout_config_guard"
 task = "flash-layout-config"
 command = "python3"
 args_contains = ["tools/check_flash_layout.py", "--config-only"]
+
+[[makefile_task_invariants]]
+id = "makefile_rmk_config_schema_guard"
+task = "rmk-config-schema"
+script_contains = [
+  "rmkit get-chip --keyboard-toml-path keyboard.toml",
+  "rmkit get-project-name --keyboard-toml-path keyboard.toml",
+]
 
 [[makefile_task_invariants]]
 id = "makefile_objcopy_central_hex"
@@ -2913,6 +2921,7 @@ script_contains = [
 [[makefile_task_invariants]]
 id = "makefile_rmk_zmk_scenario_tests_run_runtime_subset"
 task = "rmk-zmk-scenario-tests"
+dependencies_include = ["rmk-config-schema"]
 script_contains = [
   "KEYBOARD_TOML_PATH=\"$rmk_host_keyboard\"",
   "vendor/rmk-0.8.2/Cargo.toml",
@@ -2996,6 +3005,8 @@ file = ".github/workflows/firmware.yml"
 needles = [
   "Checkout upstream ZMK config",
   "repository: e-sp9/zmk-config-LalaPadGen2",
+  "command -v rmkit",
+  "cargo make rmk-config-schema",
   "cargo make porting-coverage",
   "python3 tools/migration_status.py",
   "--coverage-baseline tools/porting_coverage_baseline.toml",

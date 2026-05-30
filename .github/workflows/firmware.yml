@@ -98,11 +98,13 @@ jobs:
           command -v cargo-objcopy      >/dev/null || cargo install --locked cargo-binutils
           command -v cargo-hex-to-uf2   >/dev/null || cargo install --locked cargo-hex-to-uf2
           command -v cargo-make         >/dev/null || cargo install --locked cargo-make
+          command -v rmkit              >/dev/null || cargo install --locked rmkit
 
       - name: Verify RMK config and flash layout
         run: |
           python3 -m json.tool vial.json >/tmp/lalapad-vial-check.json
           python3 -c 'import tomllib; [tomllib.load(open(path, "rb")) for path in ("keyboard.toml", "Cargo.toml", "Makefile.toml", "tools/porting_coverage_manifest.toml", "tools/porting_coverage_baseline.toml", "tools/hardware_validation_manifest.toml", "tools/hardware_validation_baseline.toml", "tools/hardware_validation_evidence.example.toml")]; print("toml ok")'
+          cargo make rmk-config-schema
           python3 tools/check_flash_layout.py --config-only
           python3 tools/hardware_validation.py --markdown >> "$GITHUB_STEP_SUMMARY"
           python3 tools/hardware_validation.py \
