@@ -5253,6 +5253,7 @@ fn local_validation_entrypoints_match_ci_gates() {
         "cargo make hardware-validation-session-current",
         "tools/hardware_validation.py --evidence-template --firmware-ref-template <tag-or-commit>",
         "tools/hardware_validation.py --evidence-template --artifact-pair-sha256-template <sha256>",
+        "Hardware evidence keeps the generated `metadata.hardware_check_inventory_sha256`",
         "tools/hardware_validation.py --evidence path/to/evidence.toml --markdown",
         "tools/hardware_validation.py --evidence path/to/evidence.toml --require-validated --require-firmware-ref <tag-or-commit>",
         "cargo make reset-uf2 --release",
@@ -5403,6 +5404,7 @@ fn local_validation_entrypoints_match_ci_gates() {
             && RELEASE_MD.contains("FIRMWARE_ARTIFACT_MANIFEST")
             && RELEASE_MD.contains("EVIDENCE_ARTIFACT_ROOT")
             && RELEASE_MD.contains("artifact_paths")
+            && RELEASE_MD.contains("metadata.hardware_check_inventory_sha256")
             && RELEASE_MD.contains("non-empty file in `artifact_paths`")
             && RELEASE_MD.contains("Full validation: pass")
             && RELEASE_MD.contains("if the announcement claims complete hardware validation"),
