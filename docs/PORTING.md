@@ -435,7 +435,11 @@ It also requires each validated hardware evidence entry to include at least one
 existing `artifact_paths` file. Relative paths are resolved from
 `EVIDENCE_ARTIFACT_ROOT` when set, otherwise from the current directory, so the
 pass condition is tied to actual captured videos, logs, photos, screenshots, or
-scope traces rather than text notes alone.
+scope traces rather than text notes alone. The file type must also match the
+check's `evidence_artifacts`; for example, a `video` requirement cannot be
+satisfied by only attaching a `.log` file. Each retained file must be named by
+path or basename in `artifact_or_notes`, and separate required artifact types
+must have separate retained files.
 
 For evidence captured from the current clean commit, the current-ref variant
 derives the exact tag or short commit automatically and refuses tracked or

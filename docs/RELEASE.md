@@ -77,6 +77,10 @@ validated note must also mention the per-check evidence artifact types listed by
 `key-event log`, and each validated entry must list at least one existing file
 in `artifact_paths`. Relative evidence artifact paths are resolved under
 `EVIDENCE_ARTIFACT_ROOT` when set, or from the current directory otherwise.
+The retained file types must match the required artifact types; a video-only
+check cannot pass final validation with only a text log attached. Every
+retained file must also be named by path or basename in `artifact_or_notes`,
+and separate required artifact types must have separate retained files.
 Simulated, synthetic, mock, or host-only output is not valid hardware evidence.
 `cargo make hardware-validation-session-current` pre-fills
 that hash in the local evidence overlay generated for a clean current-ref bench

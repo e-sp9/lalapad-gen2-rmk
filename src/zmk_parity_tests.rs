@@ -148,20 +148,59 @@ fn complete_hardware_evidence_overlay_inner(
         evidence.push_str("validated_at = \"2026-05-29\"\n");
         evidence.push_str("tester = \"hardware bench fixture\"\n");
         evidence.push_str(&format!("firmware_ref = \"{firmware_ref}\"\n"));
-        if let Some(root) = artifact_root {
-            let artifact_path = format!("hardware-evidence/{check_id}.txt");
-            let full_artifact_path = root.join(&artifact_path);
-            std::fs::create_dir_all(full_artifact_path.parent().unwrap()).unwrap();
-            std::fs::write(
-                &full_artifact_path,
-                format!("hardware evidence fixture for {check_id}\n"),
-            )
-            .unwrap();
-            evidence.push_str(&format!("artifact_paths = [\"{artifact_path}\"]\n"));
-        }
+        let artifact_paths = artifact_root
+            .map(|root| {
+                check["evidence_artifacts"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|artifact| {
+                        let artifact_name = artifact.as_str().unwrap();
+                        let artifact_slug = artifact_name
+                            .to_ascii_lowercase()
+                            .replace(|c: char| !c.is_ascii_alphanumeric(), "-")
+                            .trim_matches('-')
+                            .to_string();
+                        let extension = match artifact_name {
+                            "BLE trace" => "pcapng",
+                            "Vial screenshot" | "photo" | "scope" => "png",
+                            "video" => "mp4",
+                            "key-event log" | "log" | "multimeter" => "log",
+                            _ => "txt",
+                        };
+                        let artifact_path =
+                            format!("hardware-evidence/{check_id}-{artifact_slug}.{extension}");
+                        let full_artifact_path = root.join(&artifact_path);
+                        std::fs::create_dir_all(full_artifact_path.parent().unwrap()).unwrap();
+                        std::fs::write(
+                            &full_artifact_path,
+                            format!("hardware evidence fixture for {check_id} {artifact_name}\n"),
+                        )
+                        .unwrap();
+                        artifact_path
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        let artifact_path_notes = if artifact_paths.is_empty() {
+            format!("/tmp/lalapad-hardware-bench-{check_id}.txt")
+        } else {
+            artifact_paths.join("; ")
+        };
         evidence.push_str(&format!(
-            "artifact_or_notes = \"log: /tmp/lalapad-hardware-bench-{check_id}.txt; bench hardware evidence for {check_id}; artifact {evidence_artifacts}; observed {evidence_needles}\"\n",
+            "artifact_or_notes = \"log: {artifact_path_notes}; bench hardware evidence for {check_id}; artifact {evidence_artifacts}; observed {evidence_needles}\"\n",
         ));
+        if artifact_root.is_some() {
+            evidence.push_str("artifact_paths = [");
+            evidence.push_str(
+                &artifact_paths
+                    .iter()
+                    .map(|path| format!("\"{path}\""))
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            );
+            evidence.push_str("]\n");
+        }
     }
     evidence
 }
@@ -3142,8 +3181,203 @@ artifact_or_notes = "log: /tmp/right-i2c.log; right P0_04 SDA and P0_05 SCL show
         "hard migration artifact path gate should explain the missing evidence file"
     );
 
+    let wrong_kind_artifact = artifact_root.join("hardware-evidence/right-trackpad.log");
+    std::fs::write(&wrong_kind_artifact, "right trackpad text log, not video\n").unwrap();
+    let wrong_kind_evidence = r#"
+[[evidence]]
+id = "right_trackpad_cursor_tap_scroll"
+status = "validated"
+validated_at = "2026-05-29"
+tester = "hardware bench"
+firmware_ref = "35b3f1f"
+artifact_paths = ["hardware-evidence/right-trackpad.log"]
+artifact_or_notes = "log: hardware-evidence/right-trackpad.log; video observation captured separately; right cursor tap vertical scroll horizontal scroll no cursor during scroll no right-click during scroll inertia continues inertia stops on touch."
+"#;
+    let wrong_kind_path = write_temp_file(
+        "hardware-validation-evidence-paths-wrong-kind",
+        wrong_kind_evidence,
+    );
+    let wrong_kind_json = run_hardware_validation(&[
+        "--evidence",
+        wrong_kind_path.to_str().unwrap(),
+        "--evidence-artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--json",
+    ]);
+    assert!(
+        wrong_kind_json.status.success(),
+        "plain hardware validation report should not hard-fail for wrong artifact kind without require flags\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&wrong_kind_json.stdout),
+        String::from_utf8_lossy(&wrong_kind_json.stderr)
+    );
+    let wrong_kind_parsed: serde_json::Value =
+        serde_json::from_slice(&wrong_kind_json.stdout).unwrap();
+    assert_eq!(wrong_kind_parsed["validated"].as_i64(), Some(0));
+    assert!(
+        wrong_kind_parsed["errors"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|error| error
+                .as_str()
+                .unwrap()
+                .contains("artifact_paths must include a distinct 'video' evidence file")),
+        "wrong artifact path kind should be reported in JSON errors"
+    );
+
+    let unrelated_video_artifact = artifact_root.join("hardware-evidence/storage-reset.mp4");
+    std::fs::write(
+        &unrelated_video_artifact,
+        "unrelated storage reset video fixture\n",
+    )
+    .unwrap();
+    let unrelated_video_evidence = wrong_kind_evidence
+        .replace(
+            "hardware-evidence/right-trackpad.log",
+            "hardware-evidence/storage-reset.mp4",
+        )
+        .replace(
+            "log: hardware-evidence/storage-reset.mp4",
+            "video: /tmp/right-trackpad.mp4",
+        );
+    let unrelated_video_path = write_temp_file(
+        "hardware-validation-evidence-paths-unrelated-video",
+        &unrelated_video_evidence,
+    );
+    let unrelated_video_json = run_hardware_validation(&[
+        "--evidence",
+        unrelated_video_path.to_str().unwrap(),
+        "--evidence-artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--json",
+    ]);
+    assert!(
+        unrelated_video_json.status.success(),
+        "plain hardware validation report should not hard-fail for unrelated artifact path without require flags\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&unrelated_video_json.stdout),
+        String::from_utf8_lossy(&unrelated_video_json.stderr)
+    );
+    let unrelated_video_parsed: serde_json::Value =
+        serde_json::from_slice(&unrelated_video_json.stdout).unwrap();
+    assert_eq!(unrelated_video_parsed["validated"].as_i64(), Some(0));
+    assert!(
+        unrelated_video_parsed["errors"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|error| error
+                .as_str()
+                .unwrap()
+                .contains("must be referenced by path or basename in artifact_or_notes")),
+        "unrelated artifact path should be rejected unless artifact_or_notes names it"
+    );
+
+    let video_artifact = artifact_root.join("hardware-evidence/right-trackpad.mp4");
+    std::fs::write(&video_artifact, "right trackpad video fixture\n").unwrap();
+    let video_evidence = wrong_kind_evidence.replace(
+        "hardware-evidence/right-trackpad.log",
+        "hardware-evidence/right-trackpad.mp4",
+    );
+    let video_path = write_temp_file("hardware-validation-evidence-paths-video", &video_evidence);
+    let video_json = run_hardware_validation(&[
+        "--evidence",
+        video_path.to_str().unwrap(),
+        "--evidence-artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--json",
+    ]);
+    assert!(
+        video_json.status.success(),
+        "hardware validation should accept a video artifact path for video evidence\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&video_json.stdout),
+        String::from_utf8_lossy(&video_json.stderr)
+    );
+    let video_parsed: serde_json::Value = serde_json::from_slice(&video_json.stdout).unwrap();
+    assert_eq!(video_parsed["validated"].as_i64(), Some(1));
+
+    let charge_artifact = artifact_root.join("hardware-evidence/charge.jpg");
+    std::fs::write(&charge_artifact, "charge photo fixture\n").unwrap();
+    let charge_photo_only_evidence = r#"
+[[evidence]]
+id = "charge_indicator_pins"
+status = "validated"
+validated_at = "2026-05-29"
+tester = "hardware bench"
+firmware_ref = "35b3f1f"
+artifact_paths = ["hardware-evidence/charge.jpg"]
+artifact_or_notes = "photo and multimeter: hardware-evidence/charge.jpg; right P0_17 charge-state active-low USB charging low not charging high P0_10 charge LED LED on low LED off high."
+"#;
+    let charge_photo_only_path = write_temp_file(
+        "hardware-validation-evidence-paths-charge-photo-only",
+        charge_photo_only_evidence,
+    );
+    let charge_photo_only_json = run_hardware_validation(&[
+        "--evidence",
+        charge_photo_only_path.to_str().unwrap(),
+        "--evidence-artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--json",
+    ]);
+    assert!(
+        charge_photo_only_json.status.success(),
+        "plain hardware validation report should not hard-fail for incomplete charge artifacts without require flags\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&charge_photo_only_json.stdout),
+        String::from_utf8_lossy(&charge_photo_only_json.stderr)
+    );
+    let charge_photo_only_parsed: serde_json::Value =
+        serde_json::from_slice(&charge_photo_only_json.stdout).unwrap();
+    assert_eq!(charge_photo_only_parsed["validated"].as_i64(), Some(0));
+    assert!(
+        charge_photo_only_parsed["errors"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|error| error
+                .as_str()
+                .unwrap()
+                .contains("distinct 'multimeter' evidence file")),
+        "photo-only charge evidence should not satisfy the separate multimeter artifact"
+    );
+
+    let multimeter_artifact = artifact_root.join("hardware-evidence/charge-multimeter.log");
+    std::fs::write(&multimeter_artifact, "multimeter reading fixture\n").unwrap();
+    let charge_complete_evidence = charge_photo_only_evidence
+        .replace(
+            "artifact_paths = [\"hardware-evidence/charge.jpg\"]",
+            "artifact_paths = [\"hardware-evidence/charge.jpg\", \"hardware-evidence/charge-multimeter.log\"]",
+        )
+        .replace(
+            "hardware-evidence/charge.jpg; right",
+            "hardware-evidence/charge.jpg; hardware-evidence/charge-multimeter.log; right",
+        );
+    let charge_complete_path = write_temp_file(
+        "hardware-validation-evidence-paths-charge-complete",
+        &charge_complete_evidence,
+    );
+    let charge_complete_json = run_hardware_validation(&[
+        "--evidence",
+        charge_complete_path.to_str().unwrap(),
+        "--evidence-artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--json",
+    ]);
+    assert!(
+        charge_complete_json.status.success(),
+        "hardware validation should accept distinct photo and multimeter artifact paths\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&charge_complete_json.stdout),
+        String::from_utf8_lossy(&charge_complete_json.stderr)
+    );
+    let charge_complete_parsed: serde_json::Value =
+        serde_json::from_slice(&charge_complete_json.stdout).unwrap();
+    assert_eq!(charge_complete_parsed["validated"].as_i64(), Some(1));
+
     let _ = std::fs::remove_file(&path);
     let _ = std::fs::remove_file(&missing_path);
+    let _ = std::fs::remove_file(&wrong_kind_path);
+    let _ = std::fs::remove_file(&unrelated_video_path);
+    let _ = std::fs::remove_file(&video_path);
+    let _ = std::fs::remove_file(&charge_photo_only_path);
+    let _ = std::fs::remove_file(&charge_complete_path);
     let _ = std::fs::remove_dir_all(&artifact_root);
 }
 
@@ -3274,6 +3508,39 @@ status = "requires_hardware"
             "missing/invalid evidence_needles should be reported for {check_id}: {stderr}"
         );
     }
+}
+
+#[test]
+fn hardware_validation_rejects_unknown_evidence_artifact_types() {
+    let manifest = r#"
+[[checks]]
+id = "unknown_artifact_type"
+area = "trackpad"
+side = "right"
+requirement = "A hardware-only behavior is documented."
+evidence = "Run the documented hardware check."
+evidence_artifacts = ["screen recording"]
+evidence_needles = ["right"]
+source = "docs/TRACKPAD_HARDWARE_CHECK.md#firmware-baseline"
+status = "requires_hardware"
+"#;
+    let path = write_temp_file("hardware-validation-unknown-artifact-type", manifest);
+    let output =
+        run_hardware_validation(&["--manifest", path.to_str().unwrap(), "--require-classified"]);
+    let _ = std::fs::remove_file(&path);
+
+    assert!(
+        !output.status.success(),
+        "hardware manifest with unknown evidence artifact type unexpectedly passed"
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains(
+            "unknown_artifact_type: evidence_artifacts contains unknown artifact type(s): 'screen recording'"
+        ),
+        "unknown evidence_artifacts type should be reported\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
 }
 
 #[test]
@@ -3796,7 +4063,9 @@ fn hardware_validation_can_generate_bench_checklist() {
             "checklist should include firmware_ref capture guidance"
         );
         assert!(
-            stdout.contains("artifact_paths: paths to the captured video/log/photo/scope files"),
+            stdout.contains(
+                "artifact_paths: captured files named in artifact_or_notes and matching required artifact types"
+            ),
             "checklist should include artifact_paths capture guidance"
         );
         assert!(

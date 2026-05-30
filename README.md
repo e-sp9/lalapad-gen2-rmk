@@ -388,7 +388,11 @@ For final validation, each validated evidence entry must also list at least one
 real file in `artifact_paths`; relative paths are resolved under
 `EVIDENCE_ARTIFACT_ROOT` when that environment variable is set, or the current
 directory otherwise. Use those files for the captured videos, photos, logs, or
-scope traces referenced by `artifact_or_notes`.
+scope traces referenced by `artifact_or_notes`; the path types must also match
+the check's required artifacts, so a `video` check needs a video file, a
+`Vial screenshot` check needs an image file, and a `BLE trace` check needs a
+trace or log file. Each retained file must be named by path or basename in
+`artifact_or_notes`, and separate required artifact types need separate files.
 For the combined final gate, run the cargo-make task so the RMK runtime
 scenario suite runs before the migration dashboard is evaluated:
 

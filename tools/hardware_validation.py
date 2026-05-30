@@ -102,6 +102,21 @@ BRANCH_REF_RE = re.compile(
     r"(?:main|master|develop|development|dev|trunk)[A-Za-z0-9._/-]*$",
     re.IGNORECASE,
 )
+IMAGE_SUFFIXES = frozenset({".png", ".jpg", ".jpeg", ".webp"})
+TEXT_LOG_SUFFIXES = frozenset({".log", ".txt", ".csv", ".json"})
+VIDEO_SUFFIXES = frozenset({".mp4", ".mov", ".mkv", ".webm"})
+BLE_TRACE_SUFFIXES = frozenset({".pcap", ".pcapng", ".log", ".txt", ".csv"})
+SCOPE_SUFFIXES = IMAGE_SUFFIXES | frozenset({".csv", ".log", ".txt"})
+ARTIFACT_PATH_SUFFIXES = {
+    "ble trace": BLE_TRACE_SUFFIXES,
+    "key-event log": TEXT_LOG_SUFFIXES,
+    "log": TEXT_LOG_SUFFIXES,
+    "multimeter": IMAGE_SUFFIXES | TEXT_LOG_SUFFIXES,
+    "photo": IMAGE_SUFFIXES,
+    "scope": SCOPE_SUFFIXES,
+    "vial screenshot": IMAGE_SUFFIXES,
+    "video": VIDEO_SUFFIXES,
+}
 
 
 @dataclass
@@ -213,6 +228,16 @@ def validate_evidence_artifacts_schema(check_id: str, check: dict[str, Any]) -> 
         isinstance(artifact, str) and artifact.strip() for artifact in evidence_artifacts
     ):
         return [f"{check_id}: evidence_artifacts must be a non-empty string array"]
+    unknown_artifacts = [
+        artifact
+        for artifact in evidence_artifacts
+        if artifact.strip().lower() not in ARTIFACT_PATH_SUFFIXES
+    ]
+    if unknown_artifacts:
+        return [
+            f"{check_id}: evidence_artifacts contains unknown artifact type(s): "
+            + ", ".join(repr(artifact) for artifact in unknown_artifacts)
+        ]
     return []
 
 
@@ -233,6 +258,13 @@ def artifact_paths_text(check: dict[str, Any]) -> str:
     if not isinstance(artifact_paths, list):
         return ""
     return ", ".join(str(path) for path in artifact_paths)
+
+
+def artifact_path_is_referenced(artifact_path: str, artifact_or_notes: str) -> bool:
+    normalized_note = artifact_or_notes.replace("\\", "/").lower()
+    normalized_path = artifact_path.strip().replace("\\", "/").lower()
+    basename = Path(normalized_path).name
+    return normalized_path in normalized_note or (basename and basename in normalized_note)
 
 
 def validate_validated_evidence(check_id: str, check: dict[str, Any]) -> list[str]:
@@ -331,6 +363,8 @@ def validate_evidence_artifact_paths(
         errors.append(f"{check_id}: artifact_paths must list at least one evidence artifact file")
 
     root = artifact_root.resolve()
+    resolved_paths: list[tuple[str, Path]] = []
+    artifact_or_notes = str(check.get("artifact_or_notes", "")).strip()
     for index, artifact_path in enumerate(artifact_paths):
         if not isinstance(artifact_path, str) or not artifact_path.strip():
             errors.append(f"{check_id}: artifact_paths[{index}] must be a non-empty path string")
@@ -351,6 +385,40 @@ def validate_evidence_artifact_paths(
             errors.append(
                 f"{check_id}: artifact_paths[{index}] file does not exist: {artifact_path}"
             )
+            continue
+        if not artifact_path_is_referenced(artifact_path, artifact_or_notes):
+            errors.append(
+                f"{check_id}: artifact_paths[{index}] must be referenced by path or basename "
+                "in artifact_or_notes"
+            )
+            continue
+        resolved_paths.append((artifact_path, resolved_path))
+    if resolved_paths:
+        evidence_artifacts = check.get("evidence_artifacts", [])
+        if not isinstance(evidence_artifacts, list):
+            evidence_artifacts = []
+        used_paths: set[int] = set()
+        for artifact in evidence_artifacts:
+            artifact_name = str(artifact).strip()
+            expected_suffixes = ARTIFACT_PATH_SUFFIXES.get(artifact_name.lower())
+            if expected_suffixes is None:
+                continue
+            matched_index = next(
+                (
+                    index
+                    for index, (_raw_path, path) in enumerate(resolved_paths)
+                    if index not in used_paths and path.suffix.lower() in expected_suffixes
+                ),
+                None,
+            )
+            if matched_index is None:
+                expected = ", ".join(sorted(expected_suffixes))
+                errors.append(
+                    f"{check_id}: artifact_paths must include a distinct {artifact_name!r} "
+                    f"evidence file referenced in artifact_or_notes with one of: {expected}"
+                )
+            else:
+                used_paths.add(matched_index)
     return errors
 
 
@@ -848,6 +916,7 @@ def as_evidence_template(
         "# The metadata hash binds this evidence file to the current hardware validation manifest.",
         "# Change status to \"validated\" only when validated_at, tester, firmware_ref, and artifact_or_notes are filled.",
         "# Final validation also requires artifact_paths to list real evidence files under the evidence artifact root.",
+        "# Each artifact_paths entry must be named in artifact_or_notes and match a required evidence artifact type.",
         "# If artifact_or_notes is prefilled with firmware artifact pair_sha256, keep it and append the observed evidence after it.",
         "",
         "[metadata]",
@@ -1043,7 +1112,7 @@ def as_checklist(
             else:
                 lines.append("    - firmware_ref: flashed immutable tag or commit")
             lines.append(
-                "    - artifact_paths: paths to the captured video/log/photo/scope files"
+                "    - artifact_paths: captured files named in artifact_or_notes and matching required artifact types"
             )
             lines.append(
                 "    - artifact_or_notes: concrete photo/log/probe/Vial observation "
