@@ -220,6 +220,87 @@ fn porting_coverage_complete_gate_accepts_explicit_status_completion() {
 }
 
 #[test]
+fn porting_coverage_requires_evidence_for_non_direct_porting_statuses() {
+    let output = run_porting_coverage(&["--json"]);
+    assert!(
+        output.status.success(),
+        "porting coverage failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let evidence_bucket = &parsed["by_kind"]["porting_status_evidence"];
+    assert_eq!(evidence_bucket["passed"], evidence_bucket["total"]);
+    assert_eq!(evidence_bucket["total"].as_i64(), Some(34));
+
+    let missing_evidence_manifest = PORTING_COVERAGE_MANIFEST_TOML.replacen(
+        "evidence = [\n  \"rust_byte_array:iqs9151_main_config_bytes\",\n  \"code:iqs9151_config_image_write_path\",\n]\n",
+        "",
+        1,
+    );
+    let missing_path = write_temp_file(
+        "porting-coverage-missing-status-evidence",
+        &missing_evidence_manifest,
+    );
+    let missing = run_porting_coverage(&["--manifest", missing_path.to_str().unwrap()]);
+    let _ = std::fs::remove_file(&missing_path);
+    assert!(
+        !missing.status.success(),
+        "porting coverage accepted missing non-direct status evidence\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&missing.stdout),
+        String::from_utf8_lossy(&missing.stderr)
+    );
+    let missing_stdout = String::from_utf8_lossy(&missing.stdout);
+    assert!(missing_stdout.contains("porting_status_evidence"));
+    assert!(missing_stdout.contains("has no evidence refs"));
+
+    let stale_evidence_manifest = PORTING_COVERAGE_MANIFEST_TOML.replacen(
+        "rust_const:two_finger_pinch_wheel_gain",
+        "rust_const:missing_pinch_evidence",
+        1,
+    );
+    let stale_path = write_temp_file(
+        "porting-coverage-stale-status-evidence",
+        &stale_evidence_manifest,
+    );
+    let stale = run_porting_coverage(&["--manifest", stale_path.to_str().unwrap()]);
+    let _ = std::fs::remove_file(&stale_path);
+    assert!(
+        !stale.status.success(),
+        "porting coverage accepted stale non-direct status evidence\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&stale.stdout),
+        String::from_utf8_lossy(&stale.stderr)
+    );
+    assert!(String::from_utf8_lossy(&stale.stdout).contains("did not match any result"));
+
+    let misleading_evidence_manifest = PORTING_COVERAGE_MANIFEST_TOML.replacen(
+        "rust_const:two_finger_pinch_wheel_gain",
+        "rust_const:trackpad_dynamic_scale_default",
+        1,
+    );
+    let misleading_path = write_temp_file(
+        "porting-coverage-misleading-status-evidence",
+        &misleading_evidence_manifest,
+    );
+    let misleading = run_porting_coverage(&[
+        "--manifest",
+        misleading_path.to_str().unwrap(),
+        "--coverage-baseline",
+        "tools/porting_coverage_baseline.toml",
+    ]);
+    let _ = std::fs::remove_file(&misleading_path);
+    assert!(
+        !misleading.status.success(),
+        "porting coverage baseline accepted misleading but passing status evidence\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&misleading.stdout),
+        String::from_utf8_lossy(&misleading.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&misleading.stderr).contains("coverage.result_inventory_sha256")
+    );
+}
+
+#[test]
 fn porting_coverage_baseline_matches_current_denominator() {
     let output = run_porting_coverage(&[
         "--coverage-baseline",

@@ -3493,6 +3493,66 @@ def porting_status_summary(manifest: dict[str, Any]) -> PortingStatusSummary:
     )
 
 
+def check_porting_status_evidence(
+    manifest: dict[str, Any], results: list[Result]
+) -> list[Result]:
+    results_by_ref = {f"{result.kind}:{result.id}": result for result in results}
+    evidence_results: list[Result] = []
+    for entry in collect_porting_status_entries(manifest):
+        status = entry["status"]
+        if status not in {"ported_by_behavior", "ported_by_config_image"}:
+            continue
+        section = entry["section"]
+        source = entry["source"]
+        manifest_entries = manifest.get(section, [])
+        manifest_entry = next(
+            (
+                candidate
+                for candidate in manifest_entries
+                if str(candidate.get("source_const", candidate.get("id", ""))) == source
+            ),
+            {},
+        )
+        evidence_refs = list(manifest_entry.get("evidence", []))
+        if not evidence_refs:
+            evidence_results.append(
+                Result(
+                    f"porting_status_evidence.{section}.{source}.missing",
+                    "porting_status_evidence",
+                    0,
+                    1,
+                    f"{section}.{source} has no evidence refs for status {status!r}",
+                )
+            )
+            continue
+        for index, ref in enumerate(evidence_refs):
+            result_id = f"porting_status_evidence.{section}.{source}.{index}.{ref}"
+            passed = 0
+            messages: list[str] = []
+            if not isinstance(ref, str) or ":" not in ref:
+                messages.append(f"{section}.{source} evidence ref {ref!r} must be 'kind:id'")
+            else:
+                evidence = results_by_ref.get(ref)
+                if evidence is None:
+                    messages.append(
+                        f"{section}.{source} evidence ref {ref!r} did not match any result"
+                    )
+                elif not evidence.ok:
+                    messages.append(f"{section}.{source} evidence ref {ref!r} is failing")
+                else:
+                    passed = 1
+            evidence_results.append(
+                Result(
+                    result_id,
+                    "porting_status_evidence",
+                    passed,
+                    1,
+                    "ok" if not messages else "; ".join(messages),
+                )
+            )
+    return evidence_results
+
+
 def coverage_by_kind(results: list[Result]) -> dict[str, CoverageBucket]:
     by_kind: dict[str, CoverageBucket] = {}
     for result in results:
@@ -3701,6 +3761,43 @@ def extract_rust_function_scope(text: str, function_name: str) -> str | None:
             if depth == 0:
                 return text[match.start() : index + 1]
     return None
+
+
+def check_rust_unit_tests(manifest: dict[str, Any], project_root: Path) -> list[Result]:
+    results: list[Result] = []
+    for check in manifest.get("rust_unit_tests", []):
+        target_file = str(check["file"])
+        function_name = str(check["function"])
+        needles = list(check["needles"])
+        try:
+            text = (project_root / target_file).read_text()
+        except OSError as e:
+            results.append(Result(check["id"], "rust_unit_test", 0, len(needles), str(e)))
+            continue
+        function_scope = extract_rust_function_scope(text, function_name)
+        if function_scope is None:
+            results.append(
+                Result(
+                    check["id"],
+                    "rust_unit_test",
+                    0,
+                    len(needles),
+                    f"{target_file} missing function {function_name!r}",
+                )
+            )
+            continue
+        passed = sum(1 for needle in needles if needle in function_scope)
+        missing = [needle for needle in needles if needle not in function_scope]
+        results.append(
+            Result(
+                check["id"],
+                "rust_unit_test",
+                passed,
+                len(needles),
+                "ok" if not missing else f"{target_file}::{function_name} missing {missing!r}",
+            )
+        )
+    return results
 
 
 def check_runtime_scenario_tests(manifest: dict[str, Any], project_root: Path) -> list[Result]:
@@ -4811,6 +4908,7 @@ def run(
     results.extend(check_code_contains(manifest, project_root))
     results.extend(check_code_topology(manifest, project_root))
     results.extend(check_file_contains_invariants(manifest, project_root))
+    results.extend(check_rust_unit_tests(manifest, project_root))
     results.extend(check_runtime_scenario_tests(manifest, project_root))
     results.extend(check_makefile_task_invariants(manifest, project_root))
     results.extend(check_trackpad_virtual_buttons(manifest, keyboard, project_root))
@@ -4824,6 +4922,7 @@ def run(
             require_zmk_source,
         )
     )
+    results.extend(check_porting_status_evidence(manifest, results))
     return results
 
 

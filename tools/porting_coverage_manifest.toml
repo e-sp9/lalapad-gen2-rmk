@@ -1507,6 +1507,10 @@ source_const = "IQS9151_ADDR_ATI_MULTIPLIERS"
 source_value = 4474
 status = "ported_by_config_image"
 reason = "The current RMK port writes the extracted configuration bytes and selected target/count overrides, not standalone ATI multiplier overrides."
+evidence = [
+  "rust_byte_array:iqs9151_main_config_bytes",
+  "code:iqs9151_config_image_write_path",
+]
 
 [[iqs9151_register_porting]]
 source_const = "IQS9151_ADDR_ATI_SETTINGS"
@@ -1543,6 +1547,10 @@ source_const = "IQS9151_ADDR_OTHER_SETTINGS"
 source_value = 4544
 status = "ported_by_config_image"
 reason = "RMK carries the upstream other-settings data in the extracted configuration image instead of exposing it as a standalone runtime write."
+evidence = [
+  "rust_byte_array:iqs9151_main_config_bytes",
+  "code:iqs9151_config_image_write_path",
+]
 
 [[iqs9151_register_porting]]
 source_const = "IQS9151_ADDR_TRACKPAD_SETTINGS"
@@ -1687,6 +1695,11 @@ source_const = "IQS9151_SFG_PRESS_HOLD"
 source_value = 8
 status = "ported_by_behavior"
 reason = "RMK recognizes press-hold/tap-drag from coordinate timing instead of the IQS9151 built-in press-hold gesture bit."
+evidence = [
+  "rust_unit_test:iqs9151_one_finger_tapdrag_behavior_test",
+  "rust_const:iqs9151_one_finger_presshold_enabled",
+  "rust_const:one_finger_tapdrag_gap",
+]
 
 [[iqs9151_bit_porting]]
 source_const = "IQS9151_TFG_TWO_TAP"
@@ -1699,30 +1712,59 @@ source_const = "IQS9151_TFG_TWO_PRESS_HOLD"
 source_value = 8
 status = "ported_by_behavior"
 reason = "RMK recognizes two-finger tap-drag from coordinate timing instead of the IQS9151 built-in press-hold gesture bit."
+evidence = [
+  "rust_unit_test:iqs9151_two_finger_tapdrag_behavior_test",
+  "rust_const:iqs9151_two_finger_presshold_enabled",
+  "rust_const:iqs9151_two_finger_tapdrag_gap",
+]
 
 [[iqs9151_bit_porting]]
 source_const = "IQS9151_TFG_ZOOM_IN"
 source_value = 16
 status = "ported_by_behavior"
 reason = "RMK derives pinch direction and wheel reports from two-finger distance changes rather than the IQS9151 built-in zoom-in bit."
+evidence = [
+  "rust_unit_test:iqs9151_pinch_behavior_test",
+  "rust_const:iqs9151_two_finger_pinch_enabled",
+  "rust_const:two_finger_pinch_start_distance",
+  "rust_const:two_finger_pinch_wheel_gain",
+]
 
 [[iqs9151_bit_porting]]
 source_const = "IQS9151_TFG_ZOOM_OUT"
 source_value = 32
 status = "ported_by_behavior"
 reason = "RMK derives pinch direction and wheel reports from two-finger distance changes rather than the IQS9151 built-in zoom-out bit."
+evidence = [
+  "rust_unit_test:iqs9151_pinch_behavior_test",
+  "rust_const:iqs9151_two_finger_pinch_enabled",
+  "rust_const:two_finger_pinch_start_distance",
+  "rust_const:two_finger_pinch_wheel_gain",
+]
 
 [[iqs9151_bit_porting]]
 source_const = "IQS9151_TFG_VSCROLL"
 source_value = 64
 status = "ported_by_behavior"
 reason = "RMK derives vertical scroll from two-finger centroid/relative motion instead of the IQS9151 built-in vertical-scroll bit."
+evidence = [
+  "rust_unit_test:iqs9151_scroll_behavior_test",
+  "rust_const:iqs9151_scroll_y_enabled",
+  "rust_const:two_finger_scroll_start_move",
+  "rust_const:trackpad_normal_scroll_divisor",
+]
 
 [[iqs9151_bit_porting]]
 source_const = "IQS9151_TFG_HSCROLL"
 source_value = 128
 status = "ported_by_behavior"
 reason = "RMK derives horizontal pan from two-finger centroid/relative motion instead of the IQS9151 built-in horizontal-scroll bit."
+evidence = [
+  "rust_unit_test:iqs9151_scroll_hid_axis_behavior_test",
+  "rust_const:iqs9151_scroll_x_enabled",
+  "rust_const:two_finger_scroll_start_move",
+  "rust_const:trackpad_normal_scroll_divisor",
+]
 
 [[iqs9151_bit_porting]]
 source_const = "IQS9151_SYS_CTRL_SW_RESET"
@@ -1759,12 +1801,20 @@ source_const = "IQS9151_CFG_SNAP_EVENT_EN"
 source_value = 32768
 status = "ported_by_config_image"
 reason = "RMK writes the upstream configuration image and only exposes standalone overrides for event mode and selected touch/gesture event bits."
+evidence = [
+  "rust_byte_array:iqs9151_main_config_bytes",
+  "code:iqs9151_config_image_write_path",
+]
 
 [[iqs9151_bit_porting]]
 source_const = "IQS9151_CFG_SWITCH_EVENT_EN"
 source_value = 16384
 status = "ported_by_config_image"
 reason = "RMK writes the upstream configuration image and does not expose a standalone switch-event override."
+evidence = [
+  "rust_byte_array:iqs9151_main_config_bytes",
+  "code:iqs9151_config_image_write_path",
+]
 
 [[iqs9151_bit_porting]]
 source_const = "IQS9151_CFG_TP_TOUCH_EVENT_EN"
@@ -1777,12 +1827,20 @@ source_const = "IQS9151_CFG_ALP_EVENT_EN"
 source_value = 4096
 status = "ported_by_config_image"
 reason = "RMK writes the upstream configuration image and does not expose a standalone ALP-event override."
+evidence = [
+  "rust_byte_array:iqs9151_main_config_bytes",
+  "code:iqs9151_config_image_write_path",
+]
 
 [[iqs9151_bit_porting]]
 source_const = "IQS9151_CFG_RE_ATI_EVENT_EN"
 source_value = 2048
 status = "ported_by_config_image"
 reason = "RMK writes the upstream configuration image and does not expose a standalone re-ATI-event override."
+evidence = [
+  "rust_byte_array:iqs9151_main_config_bytes",
+  "code:iqs9151_config_image_write_path",
+]
 
 [[iqs9151_bit_porting]]
 source_const = "IQS9151_CFG_TP_EVENT_EN"
@@ -2898,6 +2956,18 @@ id = "rmk_low_speed_includes_tri_layer_delta"
 file = "src/iqs9151.rs"
 needles = ["matches!(layer, 1 | 2 | 3)"]
 
+[[code_contains]]
+id = "iqs9151_config_image_write_path"
+file = "src/iqs9151.rs"
+needles = [
+  "async fn configure_sensor_settings",
+  "write_sensor_chunks(ADDR_SETTINGS_MINOR, &IQS9151_MAIN_CONFIG)",
+  "write_sensor_chunks(ADDR_ALP_COMPENSATION, &IQS9151_ALP_COMPENSATION)",
+  "write_sensor_chunks(ADDR_RX_TX_MAPPING, &IQS9151_RX_TX_MAPPING)",
+  "write_sensor_chunks(ADDR_CHANNEL_DISABLE, &IQS9151_CHANNEL_DISABLE)",
+  "write_sensor_chunks(ADDR_SNAP_ENABLE, &IQS9151_SNAP_ENABLE)",
+]
+
 [[code_topology]]
 id = "central_controller_topology"
 file = "src/central.rs"
@@ -2940,6 +3010,56 @@ forbidden = [
   "Iqs9151MotionOutput::HidReport",
   "Iqs9151KeyboardController::new_central",
   "RgbLedWidget::new(red, green, blue, true, true)",
+]
+
+[[rust_unit_tests]]
+id = "iqs9151_one_finger_tapdrag_behavior_test"
+file = "src/iqs9151.rs"
+function = "keeps_left_button_held_for_one_finger_tap_drag_reentry"
+needles = [
+  "TrackpadButton::LeftClick",
+  "pressed: true",
+  "pressed: false",
+]
+
+[[rust_unit_tests]]
+id = "iqs9151_two_finger_tapdrag_behavior_test"
+file = "src/iqs9151.rs"
+function = "two_finger_direct_paths_cover_relative_reentry_release_and_tapdrag"
+needles = [
+  "TrackpadButton::RightClick",
+  "pressed: true",
+  "Scroll(TrackpadScrollDelta",
+]
+
+[[rust_unit_tests]]
+id = "iqs9151_pinch_behavior_test"
+file = "src/iqs9151.rs"
+function = "emits_pinch_button_and_wheel_for_two_finger_distance_motion"
+needles = [
+  "TrackpadGestureEvent::PinchStarted",
+  "TrackpadGestureEvent::PinchWheel",
+  "TrackpadButton::Pinch",
+]
+
+[[rust_unit_tests]]
+id = "iqs9151_scroll_behavior_test"
+file = "src/iqs9151.rs"
+function = "emits_scroll_for_two_finger_centroid_motion"
+needles = [
+  "TrackpadGestureEvent::Scroll",
+  "TrackpadScrollDelta",
+  "y: 70",
+]
+
+[[rust_unit_tests]]
+id = "iqs9151_scroll_hid_axis_behavior_test"
+file = "src/iqs9151.rs"
+function = "scales_scroll_with_zmk_normal_divisor"
+needles = [
+  "config.scroll_event",
+  "wheel: 8",
+  "pan: 5",
 ]
 
 [[combos]]

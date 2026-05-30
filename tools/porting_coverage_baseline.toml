@@ -1,8 +1,8 @@
 [coverage]
-passed = 3179
-total = 3179
-result_count = 531
-result_inventory_sha256 = "c9c529f3db06b10d0d569562b6ae5c1da830e6e5f1e5a8e4852a24a01bf11c72"
+passed = 3234
+total = 3234
+result_count = 571
+result_inventory_sha256 = "f08d39704d4ae222808be8b970dab355365e1091e6c1bc7b8e1d2479b1507914"
 
 [coverage.by_kind.behavior]
 passed = 10
@@ -17,8 +17,8 @@ passed = 93
 total = 93
 
 [coverage.by_kind.code]
-passed = 21
-total = 21
+passed = 27
+total = 27
 
 [coverage.by_kind.code_topology]
 passed = 28
@@ -68,6 +68,10 @@ total = 3
 passed = 59
 total = 59
 
+[coverage.by_kind.porting_status_evidence]
+passed = 34
+total = 34
+
 [coverage.by_kind.release_workflow]
 passed = 32
 total = 32
@@ -79,6 +83,10 @@ total = 10
 [coverage.by_kind.rust_const]
 passed = 134
 total = 134
+
+[coverage.by_kind.rust_unit_test]
+passed = 15
+total = 15
 
 [coverage.by_kind.rust_const_inventory]
 passed = 33

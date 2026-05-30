@@ -206,6 +206,14 @@ register-address inventory, upstream IQS9151 register and bit-flag porting
 classifications, product/register address values, reset/gesture bits,
 IQS9151 feature-enable flags, dynamic-scale bounds, initialization byte-array
 checksums, and selected ZMK driver thresholds.
+For source constants that are intentionally marked `ported_by_behavior` or
+`ported_by_config_image`, the manifest must also point at concrete passing
+coverage results. A reason string alone is not enough for those classifications
+to contribute to a 100% software migration rate, and each evidence reference is
+part of the coverage result inventory so changing it requires an intentional
+baseline update. Behavior-based classifications should reference recognizer or
+report-path unit-test coverage, while config-image classifications should
+reference both byte-array parity and the sensor write path.
 Source-backed checks also verify the ZMK global Kconfig flags,
 left/right IQS9151 Kconfig parity, trackpad listener split routing, and
 tap/gesture timing constants that are mirrored into RMK. The gate also verifies
