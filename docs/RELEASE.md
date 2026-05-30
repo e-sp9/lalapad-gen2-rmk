@@ -53,21 +53,9 @@ announced, then run:
 HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit FIRMWARE_ARTIFACT_MANIFEST=firmware-artifacts.local.json cargo make migration-status-final
 ```
 
-This wraps the same final migration status gate, resolving `ZMK_KEYMAP` first
-when it is set and otherwise using the standard upstream checkout path:
-
-```sh
-python3 tools/migration_status.py --evidence path/to/evidence.toml \
-  --coverage-baseline tools/porting_coverage_baseline.toml \
-  --hardware-baseline tools/hardware_validation_baseline.toml \
-  --zmk-keymap zmk-config-LalaPadGen2/config/lalapadgen2.keymap \
-  --firmware-artifact-manifest firmware-artifacts.local.json \
-  --require-zmk-source \
-  --require-software-complete \
-  --require-hardware-classified \
-  --require-hardware-validated \
-  --require-firmware-ref <tag-or-commit>
-```
+This wraps the same final migration status gate after running the RMK
+ZMK-derived runtime scenario suite. It resolves `ZMK_KEYMAP` first when it is
+set and otherwise uses the standard upstream checkout path.
 
 The command must report `Full validation: pass`. If it fails, the release may
 still be source-complete, but it is not yet fully validated against real

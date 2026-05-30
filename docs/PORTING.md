@@ -276,7 +276,7 @@ Run:
 
 ```sh
 cargo make porting-coverage
-python3 tools/migration_status.py --coverage-baseline tools/porting_coverage_baseline.toml --hardware-baseline tools/hardware_validation_baseline.toml --require-zmk-source --require-software-complete --require-hardware-classified
+cargo make migration-status
 ```
 
 The firmware GitHub Actions workflow checks out `e-sp9/zmk-config-LalaPadGen2`,
@@ -364,22 +364,9 @@ by area, by side, and by remaining check, including required observation terms,
 so the path from 0/12 to 12/12 stays visible in GitHub Actions summaries. A
 true final hardware claim should add `--require-hardware-validated
 --require-firmware-ref <tag-or-commit>`.
-The full release-validation command is:
-
-```sh
-python3 tools/migration_status.py --coverage-baseline tools/porting_coverage_baseline.toml \
-  --hardware-baseline tools/hardware_validation_baseline.toml \
-  --zmk-keymap zmk-config-LalaPadGen2/config/lalapadgen2.keymap \
-  --evidence path/to/evidence.toml \
-  --firmware-artifact-manifest firmware-artifacts.local.json \
-  --require-zmk-source \
-  --require-software-complete \
-  --require-hardware-classified \
-  --require-hardware-validated \
-  --require-firmware-ref <tag-or-commit>
-```
-
-The same final gate is available as:
+The full release-validation command should use the cargo-make entrypoint so
+the RMK runtime scenario suite runs before the migration dashboard is
+evaluated:
 
 ```sh
 HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit FIRMWARE_ARTIFACT_MANIFEST=firmware-artifacts.local.json cargo make migration-status-final

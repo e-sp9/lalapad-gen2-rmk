@@ -2731,10 +2731,9 @@ fn local_validation_entrypoints_match_ci_gates() {
     );
     for required in [
         "cargo make porting-coverage",
-        "tools/migration_status.py --coverage-baseline tools/porting_coverage_baseline.toml --hardware-baseline tools/hardware_validation_baseline.toml --require-zmk-source --require-software-complete --require-hardware-classified",
+        "cargo make migration-status",
         "cargo make migration-status-report",
         "HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-report",
-        "tools/migration_status.py --coverage-baseline tools/porting_coverage_baseline.toml --hardware-baseline tools/hardware_validation_baseline.toml --zmk-keymap zmk-config-LalaPadGen2/config/lalapadgen2.keymap --evidence path/to/evidence.toml --firmware-artifact-manifest firmware-artifacts.local.json --require-zmk-source --require-software-complete --require-hardware-classified --require-hardware-validated --require-firmware-ref <tag-or-commit>",
         "HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit FIRMWARE_ARTIFACT_MANIFEST=firmware-artifacts.local.json cargo make migration-status-final",
         "HARDWARE_EVIDENCE=hardware-validation-evidence.local.toml cargo make migration-status-final-current",
         "tools/hardware_validation.py --hardware-baseline tools/hardware_validation_baseline.toml --require-classified",
@@ -2800,6 +2799,7 @@ fn local_validation_entrypoints_match_ci_gates() {
     );
     assert!(
         README_MD.contains("cargo make migration-status-report")
+            && README_MD.contains("cargo make migration-status")
             && README_MD.contains("cargo make rmk-zmk-scenario-tests")
             && README_MD.contains("cargo make rmk-behavior-tests")
             && README_MD.contains("python3 tools/firmware_artifact_manifest.py --require-uf2 > firmware-artifacts.local.json")
@@ -2808,9 +2808,10 @@ fn local_validation_entrypoints_match_ci_gates() {
             && README_MD.contains("cargo make hardware-validation-session-current")
             && README_MD.contains("--artifact-pair-sha256-template <sha256>")
             && README_MD.contains("HARDWARE_EVIDENCE=hardware-validation-evidence.local.toml cargo make migration-status-final-current")
-            && README_MD.contains("--firmware-artifact-manifest firmware-artifacts.local.json")
+            && README_MD.contains("FIRMWARE_ARTIFACT_MANIFEST")
             && README_MD.contains("HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-report")
             && PORTING_MD.contains("cargo make migration-status-report")
+            && PORTING_MD.contains("cargo make migration-status")
             && PORTING_MD.contains("cargo make rmk-zmk-scenario-tests")
             && PORTING_MD.contains("cargo make rmk-behavior-tests")
             && PORTING_MD.contains("python3 tools/firmware_artifact_manifest.py --require-uf2 > firmware-artifacts.local.json")
@@ -2818,9 +2819,17 @@ fn local_validation_entrypoints_match_ci_gates() {
             && PORTING_MD.contains("cargo make hardware-validation-evidence-template-current")
             && PORTING_MD.contains("cargo make hardware-validation-session-current")
             && PORTING_MD.contains("--artifact-pair-sha256-template <sha256>")
-            && PORTING_MD.contains("--firmware-artifact-manifest firmware-artifacts.local.json")
+            && PORTING_MD.contains("FIRMWARE_ARTIFACT_MANIFEST")
             && PORTING_MD.contains("HARDWARE_EVIDENCE=hardware-validation-evidence.local.toml cargo make migration-status-final-current"),
         "README and porting notes should document the local Markdown migration dashboard, RMK behavior regression suite, artifact manifest, current-ref evidence template, and current-ref final gate"
+    );
+    assert!(
+        !README_MD.contains("python3 tools/migration_status.py --coverage-baseline")
+            && !PORTING_MD.contains("python3 tools/migration_status.py --coverage-baseline")
+            && !RELEASE_MD.contains("python3 tools/migration_status.py --coverage-baseline")
+            && !PULL_REQUEST_TEMPLATE_MD
+                .contains("python3 tools/migration_status.py --coverage-baseline"),
+        "user-facing validation docs should prefer cargo make migration-status entrypoints so RMK runtime scenarios run first"
     );
     assert!(
         PORTING_MD.contains("HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-report"),
@@ -2854,10 +2863,9 @@ fn local_validation_entrypoints_match_ci_gates() {
     );
     assert!(
         RELEASE_MD.contains("HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit FIRMWARE_ARTIFACT_MANIFEST=firmware-artifacts.local.json cargo make migration-status-final")
-            && RELEASE_MD.contains("--hardware-baseline tools/hardware_validation_baseline.toml")
-            && RELEASE_MD.contains("--zmk-keymap zmk-config-LalaPadGen2/config/lalapadgen2.keymap")
-            && RELEASE_MD.contains("--firmware-artifact-manifest firmware-artifacts.local.json")
-            && RELEASE_MD.contains("--require-zmk-source")
+            && RELEASE_MD.contains("RMK\nZMK-derived runtime scenario suite")
+            && RELEASE_MD.contains("ZMK_KEYMAP")
+            && RELEASE_MD.contains("FIRMWARE_ARTIFACT_MANIFEST")
             && RELEASE_MD.contains("Full validation: pass")
             && RELEASE_MD.contains("if the announcement claims complete hardware validation"),
         "release guide should require the final migration status gate before complete hardware-validation claims"

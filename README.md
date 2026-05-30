@@ -131,7 +131,7 @@ python3 -c 'import tomllib; [tomllib.load(open(path, "rb")) for path in ("keyboa
 rmkit get-chip --keyboard-toml-path keyboard.toml
 rmkit get-project-name --keyboard-toml-path keyboard.toml
 cargo make porting-coverage
-python3 tools/migration_status.py --coverage-baseline tools/porting_coverage_baseline.toml --hardware-baseline tools/hardware_validation_baseline.toml --require-zmk-source --require-software-complete --require-hardware-classified
+cargo make migration-status
 cargo make migration-status-report
 cargo make rmk-zmk-scenario-tests
 cargo make rmk-behavior-tests
@@ -316,29 +316,17 @@ current firmware ref and the generated artifact `pair_sha256`. Generated
 `hardware-validation-evidence*.toml`,
 `hardware-validation-checklist*.md`, `migration-status*.md`, and
 `firmware-artifacts*.json` files are ignored by default.
-For the combined final gate, run:
-
-```shell
-python3 tools/migration_status.py --coverage-baseline tools/porting_coverage_baseline.toml \
-  --hardware-baseline tools/hardware_validation_baseline.toml \
-  --zmk-keymap zmk-config-LalaPadGen2/config/lalapadgen2.keymap \
-  --evidence path/to/evidence.toml \
-  --firmware-artifact-manifest firmware-artifacts.local.json \
-  --require-zmk-source \
-  --require-software-complete \
-  --require-hardware-classified \
-  --require-hardware-validated \
-  --require-firmware-ref <tag-or-commit>
-```
-
-It must report `Full validation: pass` before claiming source-backed and
-real-device validation are both complete for that firmware. The equivalent
-cargo-make task uses `firmware-artifacts.local.json` by default, or
-`FIRMWARE_ARTIFACT_MANIFEST` when set:
+For the combined final gate, run the cargo-make task so the RMK runtime
+scenario suite runs before the migration dashboard is evaluated:
 
 ```shell
 HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit FIRMWARE_ARTIFACT_MANIFEST=firmware-artifacts.local.json cargo make migration-status-final
 ```
+
+It must report `Full validation: pass` before claiming source-backed and
+real-device validation are both complete for that firmware. The task uses
+`firmware-artifacts.local.json` by default, or `FIRMWARE_ARTIFACT_MANIFEST`
+when set.
 
 For hardware evidence collected from the current clean commit, this variant
 derives the exact tag or short commit automatically and refuses tracked or
