@@ -13,6 +13,7 @@ import argparse
 import hashlib
 import json
 import re
+import subprocess
 import sys
 import tomllib
 from dataclasses import dataclass
@@ -5598,6 +5599,54 @@ def default_zmk_keymap_path(manifest: dict[str, Any]) -> Path:
     return Path("/nonexistent/zmk-keymap")
 
 
+def resolve_zmk_keymap_path(
+    manifest: dict[str, Any], zmk_keymap_path: Path | None
+) -> Path:
+    return zmk_keymap_path if zmk_keymap_path is not None else default_zmk_keymap_path(manifest)
+
+
+def git_output(cwd: Path, args: list[str]) -> str | None:
+    try:
+        output = subprocess.run(
+            ["git", *args],
+            cwd=cwd,
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=2,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if output.returncode != 0:
+        return None
+    return output.stdout.strip()
+
+
+def zmk_source_reference(zmk_keymap_path: Path) -> dict[str, Any]:
+    keymap_path = zmk_keymap_path
+    available = keymap_path.exists()
+    reference: dict[str, Any] = {
+        "keymap_path": str(keymap_path),
+        "available": available,
+        "repo_path": "",
+        "git_commit": "",
+        "git_dirty": None,
+    }
+    if not available:
+        return reference
+
+    git_cwd = keymap_path.parent
+    repo_path = git_output(git_cwd, ["rev-parse", "--show-toplevel"])
+    if not repo_path:
+        return reference
+    reference["repo_path"] = repo_path
+    reference["git_commit"] = git_output(git_cwd, ["rev-parse", "HEAD"]) or ""
+    status = git_output(git_cwd, ["status", "--porcelain"])
+    reference["git_dirty"] = None if status is None else bool(status)
+    return reference
+
+
 def run(
     manifest_path: Path,
     keyboard_path: Path,
@@ -5635,7 +5684,7 @@ def run(
             manifest,
             keyboard,
             project_root,
-            zmk_keymap_path if zmk_keymap_path is not None else default_zmk_keymap_path(manifest),
+            resolve_zmk_keymap_path(manifest, zmk_keymap_path),
             require_zmk_source,
         )
     )
@@ -5643,11 +5692,25 @@ def run(
     return results
 
 
-def print_text(results: list[Result], status_summary: PortingStatusSummary) -> None:
+def print_text(
+    results: list[Result],
+    status_summary: PortingStatusSummary,
+    zmk_source: dict[str, Any],
+) -> None:
     passed = sum(result.passed for result in results)
     total = sum(result.total for result in results)
     rate = 100.0 if total == 0 else passed * 100.0 / total
     print(f"Porting coverage: {passed}/{total} = {rate:.2f}%")
+    dirty = zmk_source.get("git_dirty")
+    dirty_text = "unknown" if dirty is None else "yes" if dirty else "no"
+    print(
+        "ZMK source: "
+        f"path={zmk_source.get('keymap_path') or 'n/a'} "
+        f"available={'yes' if zmk_source.get('available') else 'no'} "
+        f"repo={zmk_source.get('repo_path') or 'n/a'} "
+        f"git_commit={zmk_source.get('git_commit') or 'n/a'} "
+        f"dirty={dirty_text}"
+    )
     by_kind = coverage_by_kind(results)
     if by_kind:
         print("Porting coverage by kind:")
@@ -5702,8 +5765,10 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
 
-    results = run(args.manifest, args.keyboard_toml, args.zmk_keymap, args.require_zmk_source)
     manifest = load_toml(args.manifest)
+    zmk_keymap_path = resolve_zmk_keymap_path(manifest, args.zmk_keymap)
+    zmk_source = zmk_source_reference(zmk_keymap_path)
+    results = run(args.manifest, args.keyboard_toml, zmk_keymap_path, args.require_zmk_source)
     status_summary = porting_status_summary(manifest)
     passed = sum(result.passed for result in results)
     total = sum(result.total for result in results)
@@ -5749,6 +5814,7 @@ def main(argv: list[str]) -> int:
                         "by_status": status_summary.by_status,
                         "remaining": status_summary.remaining,
                     },
+                    "zmk_source": zmk_source,
                     "baseline_errors": baseline_failures,
                     "results": [result.__dict__ | {"ok": result.ok} for result in results],
                 },
@@ -5757,7 +5823,7 @@ def main(argv: list[str]) -> int:
             )
         )
     else:
-        print_text(results, status_summary)
+        print_text(results, status_summary, zmk_source)
 
     ok = passed == total
     if args.require_porting_complete and status_summary.implemented != status_summary.total:

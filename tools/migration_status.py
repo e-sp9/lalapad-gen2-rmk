@@ -23,6 +23,7 @@ class SoftwareStatus:
     passed: int
     total: int
     rate: float | None
+    zmk_source: dict[str, Any]
     by_kind: dict[str, dict[str, int | float | None]]
     implementation: dict[str, Any]
     complete: bool
@@ -49,13 +50,15 @@ def software_status(
     require_zmk_source: bool,
     coverage_baseline_path: Path | None,
 ) -> SoftwareStatus:
+    manifest = porting_coverage.load_toml(manifest_path)
+    resolved_zmk_keymap = porting_coverage.resolve_zmk_keymap_path(manifest, zmk_keymap_path)
+    zmk_source = porting_coverage.zmk_source_reference(resolved_zmk_keymap)
     results = porting_coverage.run(
         manifest_path,
         keyboard_path,
-        zmk_keymap_path,
+        resolved_zmk_keymap,
         require_zmk_source,
     )
-    manifest = porting_coverage.load_toml(manifest_path)
     implementation = porting_coverage.porting_status_summary(manifest)
     passed = sum(result.passed for result in results)
     total = sum(result.total for result in results)
@@ -115,6 +118,7 @@ def software_status(
         passed=passed,
         total=total,
         rate=None if total == 0 else passed / total,
+        zmk_source=zmk_source,
         by_kind=by_kind_json,
         implementation={
             "total": implementation.total,
@@ -382,6 +386,7 @@ def as_json(status: MigrationStatus) -> dict[str, Any]:
             "passed": status.software.passed,
             "total": status.software.total,
             "rate": status.software.rate,
+            "zmk_source": status.software.zmk_source,
             "by_kind": status.software.by_kind,
             "implementation": status.software.implementation,
             "complete": status.software.complete,
@@ -402,6 +407,16 @@ def print_text(status: MigrationStatus) -> None:
     print(
         "Software coverage: "
         f"{status.software.passed}/{status.software.total} = {percent(status.software.rate)}"
+    )
+    dirty = status.software.zmk_source.get("git_dirty")
+    dirty_text = "unknown" if dirty is None else "yes" if dirty else "no"
+    print(
+        "ZMK source: "
+        f"path={status.software.zmk_source.get('keymap_path') or 'n/a'} "
+        f"available={'yes' if status.software.zmk_source.get('available') else 'no'} "
+        f"repo={status.software.zmk_source.get('repo_path') or 'n/a'} "
+        f"git_commit={status.software.zmk_source.get('git_commit') or 'n/a'} "
+        f"dirty={dirty_text}"
     )
     print(
         "Software implementation: "
@@ -504,6 +519,17 @@ def print_markdown(status: MigrationStatus) -> None:
                 ],
             ]
         )
+    )
+    print()
+    dirty = status.software.zmk_source.get("git_dirty")
+    dirty_text = "unknown" if dirty is None else "yes" if dirty else "no"
+    print(
+        "ZMK source: "
+        f"`{hardware_validation.markdown_escape(status.software.zmk_source.get('keymap_path') or 'n/a')}`; "
+        f"available={'yes' if status.software.zmk_source.get('available') else 'no'}; "
+        f"repo=`{hardware_validation.markdown_escape(status.software.zmk_source.get('repo_path') or 'n/a')}`; "
+        f"git_commit=`{hardware_validation.markdown_escape(status.software.zmk_source.get('git_commit') or 'n/a')}`; "
+        f"dirty={dirty_text}"
     )
     print()
     print(

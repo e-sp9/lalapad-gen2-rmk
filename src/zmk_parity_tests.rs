@@ -278,6 +278,111 @@ fn porting_coverage_complete_gate_accepts_explicit_status_completion() {
     assert!(stdout.contains("- vial_user_key_semantics: 57/57 = 100.00%"));
     assert!(stdout.contains("- zmk_source_cell:"));
     assert!(stdout.contains("Porting status: 69/69 = 100.00% implemented"));
+    assert!(stdout.contains("ZMK source: path="));
+    assert!(stdout.contains("git_commit="));
+}
+
+#[test]
+fn migration_dashboards_report_zmk_source_reference() {
+    let Some(zmk_config_dir) = default_zmk_config_dir() else {
+        return;
+    };
+    let zmk_keymap = zmk_config_dir.join("lalapadgen2.keymap");
+    let zmk_keymap = zmk_keymap.to_str().unwrap();
+
+    let coverage =
+        run_porting_coverage(&["--json", "--zmk-keymap", zmk_keymap, "--require-zmk-source"]);
+    assert!(
+        coverage.status.success(),
+        "porting coverage failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&coverage.stdout),
+        String::from_utf8_lossy(&coverage.stderr)
+    );
+    let parsed: serde_json::Value = serde_json::from_slice(&coverage.stdout).unwrap();
+    let zmk_source = &parsed["zmk_source"];
+    assert_eq!(zmk_source["available"].as_bool(), Some(true));
+    assert!(
+        zmk_source["keymap_path"]
+            .as_str()
+            .unwrap()
+            .ends_with("config/lalapadgen2.keymap")
+    );
+    if let Some(commit) = zmk_source["git_commit"]
+        .as_str()
+        .filter(|commit| !commit.is_empty())
+    {
+        assert!(
+            commit.len() == 40 && commit.chars().all(|ch| ch.is_ascii_hexdigit()),
+            "ZMK source git_commit should be a full immutable commit hash, got {commit:?}"
+        );
+    }
+    assert!(
+        zmk_source["git_dirty"].is_boolean() || zmk_source["git_dirty"].is_null(),
+        "ZMK source dirty state should be reported as a boolean or unknown"
+    );
+    assert!(
+        zmk_source["repo_path"]
+            .as_str()
+            .is_some_and(|repo| !repo.is_empty()),
+        "ZMK source JSON should include the Git repository path when available"
+    );
+
+    let migration = run_migration_status(&[
+        "--json",
+        "--coverage-baseline",
+        "tools/porting_coverage_baseline.toml",
+        "--hardware-baseline",
+        "tools/hardware_validation_baseline.toml",
+        "--zmk-keymap",
+        zmk_keymap,
+        "--require-zmk-source",
+        "--require-software-complete",
+        "--require-hardware-classified",
+    ]);
+    assert!(
+        migration.status.success(),
+        "migration status failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&migration.stdout),
+        String::from_utf8_lossy(&migration.stderr)
+    );
+    let migration_json: serde_json::Value = serde_json::from_slice(&migration.stdout).unwrap();
+    assert_eq!(
+        migration_json["software"]["zmk_source"]["keymap_path"],
+        parsed["zmk_source"]["keymap_path"]
+    );
+
+    let migration_text = run_migration_status(&[
+        "--coverage-baseline",
+        "tools/porting_coverage_baseline.toml",
+        "--hardware-baseline",
+        "tools/hardware_validation_baseline.toml",
+        "--zmk-keymap",
+        zmk_keymap,
+        "--require-zmk-source",
+    ]);
+    assert!(
+        String::from_utf8_lossy(&migration_text.stdout).contains("ZMK source: path=")
+            && String::from_utf8_lossy(&migration_text.stdout).contains(" repo="),
+        "text migration dashboard should show the ZMK source reference"
+    );
+
+    let migration_markdown = run_migration_status(&[
+        "--markdown",
+        "--coverage-baseline",
+        "tools/porting_coverage_baseline.toml",
+        "--hardware-baseline",
+        "tools/hardware_validation_baseline.toml",
+        "--zmk-keymap",
+        zmk_keymap,
+        "--require-zmk-source",
+    ]);
+    let markdown_stdout = String::from_utf8_lossy(&migration_markdown.stdout);
+    assert!(
+        markdown_stdout.contains("ZMK source:")
+            && markdown_stdout.contains("repo=`")
+            && markdown_stdout.contains("git_commit=`"),
+        "Markdown migration dashboard should show the ZMK source repo and commit"
+    );
 }
 
 #[test]

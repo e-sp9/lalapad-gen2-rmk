@@ -352,6 +352,9 @@ ZMK source inventories, Kconfig/DTS mirrors, Cargo dependency resolution, Rust
 constants, IQS9151 byte arrays, local RMK composite mouse and dynamic-scale
 storage patch invariants, Vial identity and custom-key semantics, or firmware
 code-needle checks instead of treating the total percentage as a black box.
+They also include the ZMK keymap path, source availability, Git repository
+path, Git commit, and dirty state so the migration percentage can be traced
+back to the exact upstream checkout used as the source contract.
 The Vial checks also pin a normalized KLE geometry signature, so row grouping,
 spacing directives, and half-size thumb/trackpad controls cannot drift while
 the same matrix coordinates remain present.
