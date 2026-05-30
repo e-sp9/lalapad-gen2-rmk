@@ -2856,6 +2856,16 @@ fn hardware_validation_can_generate_complete_evidence_template() {
             stdout.contains(check["source"].as_str().unwrap()),
             "evidence template should include source comments for {check_id}"
         );
+        assert!(
+            stdout.contains("# Copy aid after this item passes on hardware:"),
+            "evidence template should include artifact_or_notes copy aid for {check_id}"
+        );
+        assert!(
+            stdout.contains(
+                "# artifact_or_notes = \"<photo/log/probe/Vial path or reading>; observed:"
+            ),
+            "evidence template copy aid should preserve the empty artifact_or_notes field while showing required observation text"
+        );
         for needle in check["evidence_needles"].as_array().unwrap() {
             assert!(
                 stdout.contains(needle.as_str().unwrap()),
@@ -2929,6 +2939,11 @@ fn hardware_validation_can_generate_bench_checklist() {
             ),
             "checklist should include artifact_or_notes capture guidance"
         );
+        assert!(
+            stdout
+                .contains("copy aid after pass: <photo/log/probe/Vial path or reading>; observed:"),
+            "checklist should include a copy aid with required observation terms"
+        );
         for needle in check["evidence_needles"].as_array().unwrap() {
             assert!(
                 stdout.contains(needle.as_str().unwrap()),
@@ -2987,6 +3002,12 @@ fn hardware_validation_evidence_template_can_prefill_firmware_ref() {
                 .unwrap()
                 .contains(pair_sha256)),
         "all template entries should prefill the requested artifact pair SHA256"
+    );
+    assert!(
+        stdout.contains(&format!(
+            "# artifact_or_notes = \"firmware artifact pair_sha256 {pair_sha256}; <photo/log/probe/Vial path or reading>; observed:"
+        )),
+        "artifact-bound template should include pair SHA in the copy aid"
     );
 }
 
@@ -3121,6 +3142,14 @@ validated_at = "2026-05-29"
 tester = "bench operator"
 firmware_ref = "35b3f1f"
 artifact_or_notes = "TODO log: /tmp/left-trackpad.log; left split cursor tap vertical scroll horizontal scroll no cursor during scroll no right-click during scroll inertia continues inertia stops on touch"
+
+[[evidence]]
+id = "iqs9151_right_rdy_signal"
+status = "validated"
+validated_at = "2026-05-29"
+tester = "bench operator"
+firmware_ref = "35b3f1f"
+artifact_or_notes = "<photo/log/probe/Vial path or reading>; observed: right, P1_11 RDY, D6, active-low, no-touch high, touch-event low"
 "#;
     let path = write_temp_file("hardware-validation-placeholder-evidence", evidence);
     let output = run_hardware_validation(&["--evidence", path.to_str().unwrap(), "--json"]);
@@ -3192,9 +3221,42 @@ artifact_or_notes = "TODO log: /tmp/left-trackpad.log; left split cursor tap ver
         "artifact_or_notes with TODO marker should not count even if it has a log path and all required observations: {errors:?}"
     );
     assert!(
+        errors.iter().any(|error| error.contains(
+            "iqs9151_right_rdy_signal: artifact_or_notes must not contain placeholder markers"
+        )),
+        "unresolved copy-aid placeholder should not count even if it includes a concrete keyword and all required observations: {errors:?}"
+    );
+    assert!(
         !require_output.status.success(),
         "placeholder hardware evidence unexpectedly passed --require-classified"
     );
+}
+
+#[test]
+fn hardware_validation_allows_voltage_comparisons_in_validated_evidence() {
+    let evidence = r#"
+[[evidence]]
+id = "iqs9151_right_rdy_signal"
+status = "validated"
+validated_at = "2026-05-29"
+tester = "bench operator"
+firmware_ref = "35b3f1f"
+artifact_or_notes = "scope: /tmp/right-rdy.csv; right P1_11 RDY D6 active-low touch-event low <0.4V and no-touch high >2.8V."
+"#;
+    let path = write_temp_file("hardware-validation-voltage-evidence", evidence);
+    let output = run_hardware_validation(&["--evidence", path.to_str().unwrap(), "--json"]);
+    let _ = std::fs::remove_file(&path);
+
+    assert!(
+        output.status.success(),
+        "voltage comparison hardware evidence json report failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(parsed["validated"].as_i64(), Some(1));
+    assert_eq!(parsed["classified"].as_bool(), Some(true));
+    assert_eq!(parsed["errors"].as_array().unwrap().len(), 0);
 }
 
 #[test]

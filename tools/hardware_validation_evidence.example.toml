@@ -8,6 +8,10 @@
 #   python3 tools/hardware_validation.py --evidence-template --firmware-ref-template <tag-or-commit> > hardware-validation-evidence.local.toml
 # Generate an artifact-bound overlay after creating firmware-artifacts.local.json:
 #   python3 tools/hardware_validation.py --evidence-template --firmware-ref-template <tag-or-commit> --artifact-pair-sha256-template <sha256> > hardware-validation-evidence.local.toml
+# The generated overlay includes a commented artifact_or_notes copy aid for
+# each check. Keep the generated pair_sha256 prefix when present, then replace
+# the path/reading placeholder with real bench evidence and leave every
+# required observation term in the completed note.
 #
 # Evidence entries are overlays keyed by check id from
 # tools/hardware_validation_manifest.toml. Keep artifact_or_notes specific:

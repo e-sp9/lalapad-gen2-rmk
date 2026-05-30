@@ -83,6 +83,10 @@ PLACEHOLDER_NOTE_MARKER_RE = re.compile(
     r"\b(todo|tbd|placeholder|unknown)\b",
     re.IGNORECASE,
 )
+COPY_AID_PLACEHOLDER_RE = re.compile(
+    re.escape("<photo/log/probe/Vial path or reading>"),
+    re.IGNORECASE,
+)
 
 
 @dataclass
@@ -215,6 +219,8 @@ def validate_validated_evidence(check_id: str, check: dict[str, Any]) -> list[st
     if artifact_or_notes and is_placeholder_value(artifact_or_notes):
         errors.append(f"{check_id}: artifact_or_notes must describe the observed evidence")
     elif artifact_or_notes and PLACEHOLDER_NOTE_MARKER_RE.search(artifact_or_notes):
+        errors.append(f"{check_id}: artifact_or_notes must not contain placeholder markers")
+    elif artifact_or_notes and COPY_AID_PLACEHOLDER_RE.search(artifact_or_notes):
         errors.append(f"{check_id}: artifact_or_notes must not contain placeholder markers")
     elif artifact_or_notes and artifact_or_notes.strip().lower() in GENERIC_ARTIFACT_VALUES:
         errors.append(f"{check_id}: artifact_or_notes must describe the observed evidence")
@@ -582,6 +588,17 @@ def evidence_needles_text(check: dict[str, Any]) -> str:
     return ", ".join(str(needle) for needle in check.get("evidence_needles", []))
 
 
+def artifact_or_notes_copy_hint(check: dict[str, Any], artifact_prefix: str = "") -> str:
+    required_observations = evidence_needles_text(check)
+    parts = []
+    if artifact_prefix:
+        parts.append(artifact_prefix.strip().rstrip(";").strip())
+    parts.append("<photo/log/probe/Vial path or reading>")
+    if required_observations:
+        parts.append(f"observed: {required_observations}")
+    return "; ".join(parts)
+
+
 def toml_string(value: Any) -> str:
     return json.dumps(str(value))
 
@@ -634,6 +651,13 @@ def as_evidence_template(
             if evidence_needles:
                 lines.append("# Artifact/notes must mention:")
                 lines.extend(toml_comment(", ".join(str(needle) for needle in evidence_needles)))
+                lines.append("# Copy aid after this item passes on hardware:")
+                lines.extend(
+                    toml_comment(
+                        "artifact_or_notes = "
+                        + toml_string(artifact_or_notes_copy_hint(check, artifact_prefix))
+                    )
+                )
             lines.append("")
     return "\n".join(lines)
 
@@ -747,6 +771,10 @@ def as_checklist(manifest: dict[str, Any]) -> str:
             lines.append(
                 "    - artifact_or_notes: concrete photo/log/probe/Vial observation "
                 f"that mentions {evidence_needles_text(check)}"
+            )
+            lines.append(
+                "    - copy aid after pass: "
+                f"{artifact_or_notes_copy_hint(check)}"
             )
             lines.append("")
     return "\n".join(lines)
