@@ -311,6 +311,22 @@ def firmware_artifact_status(
                     errors.append(
                         f"firmware artifact manifest {path} {field} must be {expected_value}"
                     )
+            if expected_spec.kind == firmware_artifact_specs.DFU_ARTIFACT_KIND:
+                dfu = artifact.get("dfu_manifest")
+                if not isinstance(dfu, dict) or dfu.get("valid") is not True:
+                    errors.append(
+                        f"firmware artifact manifest {path} DFU manifest must be valid"
+                    )
+                else:
+                    app = dfu.get("application")
+                    if not isinstance(app, dict) or not all(
+                        isinstance(app.get(field), str) and app.get(field).strip()
+                        for field in ["bin_file", "dat_file"]
+                    ):
+                        errors.append(
+                            f"firmware artifact manifest {path} DFU manifest "
+                            "must include application bin_file and dat_file"
+                        )
         if path:
             artifact_path = Path(path)
             if artifact_path.is_absolute():
@@ -343,6 +359,18 @@ def firmware_artifact_status(
                                 f"firmware artifact manifest {path} sha256 {sha256!r} "
                                 f"does not match file {actual_sha256!r}"
                             )
+                        elif (
+                            expected_spec is not None
+                            and expected_spec.kind == firmware_artifact_specs.DFU_ARTIFACT_KIND
+                        ):
+                            actual_dfu = firmware_artifact_manifest.dfu_manifest(artifact_path)
+                            if actual_dfu.get("valid") is not True:
+                                reason = str(actual_dfu.get("error", "")).strip()
+                                suffix = f": {reason}" if reason else ""
+                                errors.append(
+                                    f"firmware artifact manifest {path} file DFU manifest "
+                                    f"must be valid{suffix}"
+                                )
 
     pair_digest_payload = json.dumps(
         [

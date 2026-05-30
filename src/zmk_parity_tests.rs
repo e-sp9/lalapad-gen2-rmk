@@ -2154,6 +2154,91 @@ dst.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
         "unknown firmware artifact rejection should be reported by migration status"
     );
 
+    let invalid_dfu_manifest_path =
+        artifact_path.with_file_name("invalid-dfu-firmware-artifacts.local.json");
+    let rewrite_invalid_dfu = Command::new("python3")
+        .arg("-c")
+        .arg(
+            r#"
+import hashlib
+import json
+import sys
+from pathlib import Path
+
+src = Path(sys.argv[1])
+dst = Path(sys.argv[2])
+root = Path(sys.argv[3])
+manifest = json.loads(src.read_text())
+dfu_path = "firmware/lalapad-gen2-rmk-central-dfu.zip"
+dfu_file = root / dfu_path
+dfu_file.parent.mkdir(parents=True, exist_ok=True)
+dfu_file.write_bytes(b"not a valid Nordic DFU zip")
+dfu_sha = hashlib.sha256(dfu_file.read_bytes()).hexdigest()
+manifest["artifacts"].append({
+    "path": dfu_path,
+    "role": "central",
+    "side": "right",
+    "kind": "adafruit-nrf52-dfu-zip",
+    "size": dfu_file.stat().st_size,
+    "sha256": dfu_sha,
+    "dfu_manifest": {
+        "valid": True,
+        "application": {"bin_file": "central.bin", "dat_file": "central.dat"},
+    },
+})
+manifest["artifact_count"] = len(manifest["artifacts"])
+pair_payload = json.dumps(
+    [
+        {
+            "path": artifact.get("path"),
+            "size": artifact.get("size"),
+            "sha256": artifact.get("sha256"),
+        }
+        for artifact in manifest["artifacts"]
+    ],
+    sort_keys=True,
+    separators=(",", ":"),
+).encode()
+manifest["pair_sha256"] = hashlib.sha256(pair_payload).hexdigest()
+dst.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+"#,
+        )
+        .arg(&artifact_path)
+        .arg(&invalid_dfu_manifest_path)
+        .arg(&artifact_root)
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .output()
+        .unwrap();
+    assert!(
+        rewrite_invalid_dfu.status.success(),
+        "failed to rewrite artifact manifest with invalid DFU metadata\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&rewrite_invalid_dfu.stdout),
+        String::from_utf8_lossy(&rewrite_invalid_dfu.stderr)
+    );
+    let invalid_dfu_manifest = run_migration_status(&[
+        "--coverage-baseline",
+        "tools/porting_coverage_baseline.toml",
+        "--hardware-baseline",
+        "tools/hardware_validation_baseline.toml",
+        "--firmware-artifact-manifest",
+        invalid_dfu_manifest_path.to_str().unwrap(),
+        "--artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--require-hardware-classified",
+    ]);
+    let _ = std::fs::remove_file(&invalid_dfu_manifest_path);
+    assert!(
+        !invalid_dfu_manifest.status.success(),
+        "migration status accepted an artifact manifest with invalid DFU metadata\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&invalid_dfu_manifest.stdout),
+        String::from_utf8_lossy(&invalid_dfu_manifest.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&invalid_dfu_manifest.stdout)
+            .contains("firmware/lalapad-gen2-rmk-central-dfu.zip file DFU manifest must be valid"),
+        "invalid DFU file should be reported by migration status"
+    );
+
     let missing_pair_sha = run_migration_status(&[
         "--coverage-baseline",
         "tools/porting_coverage_baseline.toml",
@@ -2857,6 +2942,34 @@ with tempfile.TemporaryDirectory() as tempdir:
         text=True,
     )
 
+    invalid_dfu = root / "firmware/lalapad-gen2-rmk-central-dfu.zip"
+    with zipfile.ZipFile(invalid_dfu, "w") as archive:
+        archive.writestr(
+            "manifest.json",
+            json.dumps({"manifest": {"application": {"firmware_size": 1}}}),
+        )
+    invalid_dfu_output = root / "invalid-dfu-firmware-artifacts.local.json"
+    invalid_dfu_output.write_text("stale\n")
+    failed_dfu = subprocess.run(
+        [
+            sys.executable,
+            "tools/firmware_artifact_manifest.py",
+            "--root",
+            str(root),
+            "--firmware-ref",
+            "v0.3.0",
+            "--require-uf2",
+            "--require-reset-uf2",
+            "--require-dfu",
+            "--output",
+            str(invalid_dfu_output),
+        ],
+        cwd=Path.cwd(),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+
     missing = root / "firmware/normal/lalapad-gen2-rmk-peripheral.uf2"
     missing.unlink()
     stale_output = root / "stale-firmware-artifacts.local.json"
@@ -2889,6 +3002,10 @@ print(json.dumps({
     "invalid_ref_stdout": invalid_ref.stdout,
     "invalid_ref_stderr": invalid_ref.stderr,
     "invalid_ref_output_exists_after_failure": invalid_ref_output.exists(),
+    "failed_dfu_code": failed_dfu.returncode,
+    "failed_dfu_stdout": failed_dfu.stdout,
+    "failed_dfu_stderr": failed_dfu.stderr,
+    "invalid_dfu_output_exists_after_failure": invalid_dfu_output.exists(),
     "central_uf2_sha256": hashlib.sha256(b"central uf2").hexdigest(),
     "failed_code": failed.returncode,
     "failed_stdout": failed.stdout,
@@ -2965,6 +3082,18 @@ print(json.dumps({
             .as_str()
             .unwrap()
             .contains("--firmware-ref must be an immutable flashed tag or commit")
+    );
+    assert_ne!(parsed["failed_dfu_code"].as_i64(), Some(0));
+    assert_eq!(parsed["failed_dfu_stdout"].as_str(), Some(""));
+    assert_eq!(
+        parsed["invalid_dfu_output_exists_after_failure"].as_bool(),
+        Some(false)
+    );
+    assert!(
+        parsed["failed_dfu_stderr"]
+            .as_str()
+            .unwrap()
+            .contains("manifest.application missing bin_file or dat_file")
     );
     assert_ne!(parsed["failed_code"].as_i64(), Some(0));
     assert_eq!(parsed["failed_stdout"].as_str(), Some(""));
@@ -4970,6 +5099,52 @@ fn hardware_validation_rejects_placeholder_template_bindings() {
         String::from_utf8_lossy(&unknown_artifact.stderr)
             .contains("firmware/normal/untracked-extra.uf2 is not a known artifact path"),
         "unknown firmware artifact rejection should name the unexpected path"
+    );
+
+    let mut invalid_dfu_manifest: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&artifact_manifest_path).unwrap()).unwrap();
+    invalid_dfu_manifest["artifacts"]
+        .as_array_mut()
+        .unwrap()
+        .push(serde_json::json!({
+            "path": "firmware/lalapad-gen2-rmk-central-dfu.zip",
+            "role": "central",
+            "side": "right",
+            "kind": "adafruit-nrf52-dfu-zip",
+            "size": 12,
+            "sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            "dfu_manifest": {"valid": false, "error": "manifest.json missing"},
+        }));
+    invalid_dfu_manifest["artifact_count"] = serde_json::Value::Number(
+        invalid_dfu_manifest["artifacts"]
+            .as_array()
+            .unwrap()
+            .len()
+            .into(),
+    );
+    let invalid_dfu_path =
+        artifact_manifest_path.with_file_name("invalid-dfu-template-firmware-artifacts.local.json");
+    std::fs::write(
+        &invalid_dfu_path,
+        serde_json::to_string_pretty(&invalid_dfu_manifest).unwrap(),
+    )
+    .unwrap();
+    let invalid_dfu = run_hardware_validation(&[
+        "--checklist",
+        "--firmware-artifact-manifest-template",
+        invalid_dfu_path.to_str().unwrap(),
+    ]);
+    let _ = std::fs::remove_file(&invalid_dfu_path);
+    assert!(
+        !invalid_dfu.status.success(),
+        "hardware validation accepted artifact manifest template with invalid DFU metadata\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&invalid_dfu.stdout),
+        String::from_utf8_lossy(&invalid_dfu.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&invalid_dfu.stderr)
+            .contains("firmware/lalapad-gen2-rmk-central-dfu.zip DFU manifest must be valid"),
+        "invalid DFU metadata rejection should name the affected artifact"
     );
 
     let mut wrong_metadata_manifest: serde_json::Value =

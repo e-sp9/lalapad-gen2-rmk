@@ -1004,6 +1004,20 @@ def firmware_artifact_manifest_errors(manifest: dict[str, Any]) -> list[str]:
                     errors.append(
                         f"firmware artifact manifest {path} {field} must be {expected_value}"
                     )
+        if artifact.get("kind") == firmware_artifact_specs.DFU_ARTIFACT_KIND:
+            dfu = artifact.get("dfu_manifest")
+            if not isinstance(dfu, dict) or dfu.get("valid") is not True:
+                errors.append(f"firmware artifact manifest {path} DFU manifest must be valid")
+            else:
+                app = dfu.get("application")
+                if not isinstance(app, dict) or not all(
+                    isinstance(app.get(field), str) and app.get(field).strip()
+                    for field in ["bin_file", "dat_file"]
+                ):
+                    errors.append(
+                        f"firmware artifact manifest {path} DFU manifest "
+                        "must include application bin_file and dat_file"
+                    )
         sha256 = str(artifact.get("sha256", "")).strip()
         if sha256 and not SHA256_RE.fullmatch(sha256):
             errors.append(

@@ -84,6 +84,8 @@ EXPECTED_METADATA_BY_PATH = {
 
 KNOWN_ARTIFACT_PATHS = frozenset(spec.path for spec in ARTIFACTS)
 
+DFU_ARTIFACT_KIND = "adafruit-nrf52-dfu-zip"
+
 HARDWARE_VALIDATION_REQUIRED_GROUPS = frozenset({"uf2", "reset_uf2"})
 
 HARDWARE_VALIDATION_REQUIRED_ARTIFACTS = tuple(
