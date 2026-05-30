@@ -3429,6 +3429,24 @@ def check_makefile_task_invariants(manifest: dict[str, Any], project_root: Path)
                     f"tasks.{task_name}.dependencies expected {expected_values!r}, got {actual_values!r}"
                 )
 
+        if "env_contains" in check:
+            total += 1
+            expected_env = dict(check["env_contains"])
+            actual_env = task.get("env", {})
+            if not isinstance(actual_env, dict):
+                actual_env = {}
+            missing_env: list[str] = []
+            for key, expected in expected_env.items():
+                expected_values = expected if isinstance(expected, list) else [expected]
+                actual_value = str(actual_env.get(key, ""))
+                for value in expected_values:
+                    if str(value) not in actual_value:
+                        missing_env.append(f"{key}={value}")
+            if not missing_env:
+                passed += 1
+            else:
+                messages.append(f"tasks.{task_name}.env missing required values {missing_env!r}")
+
         if "script_contains" in check:
             total += 1
             expected_values = list(check["script_contains"])

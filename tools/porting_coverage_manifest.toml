@@ -2820,6 +2820,7 @@ id = "makefile_host_parity_tests_run_full_project_host_suite"
 task = "host-parity-tests"
 command = "cargo"
 args_contains = ["test", "--lib", "--target", "x86_64-unknown-linux-gnu"]
+env_contains = { RUSTFLAGS = "-Dwarnings" }
 
 [[makefile_task_invariants]]
 id = "makefile_build_runs_release_with_flash_layout_config"
@@ -2918,6 +2919,7 @@ script_contains = [
 [[makefile_task_invariants]]
 id = "makefile_rmk_behavior_tests_run_full_host_suite"
 task = "rmk-behavior-tests"
+env_contains = { RUSTFLAGS = "-Dwarnings" }
 script_contains = [
   "KEYBOARD_TOML_PATH=\"$rmk_host_keyboard\"",
   "vendor/rmk-0.8.2/Cargo.toml",
@@ -2931,6 +2933,7 @@ script_contains = [
 id = "makefile_rmk_zmk_scenario_tests_run_runtime_subset"
 task = "rmk-zmk-scenario-tests"
 dependencies_include = ["rmk-config-schema"]
+env_contains = { RUSTFLAGS = "-Dwarnings" }
 script_contains = [
   "KEYBOARD_TOML_PATH=\"$rmk_host_keyboard\"",
   "vendor/rmk-0.8.2/Cargo.toml",

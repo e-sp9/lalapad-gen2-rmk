@@ -257,7 +257,10 @@ are also mirrored against the RMK Morse timing settings. Use
 mandatory in another checkout layout. The firmware CI checks out
 `e-sp9/zmk-config-LalaPadGen2`, parses `vial.json`, RMK/Cargo/manifest TOML,
 and flash layout, runs this source-backed complete-porting gate, and then runs
-the host-side parity test suite before building release binaries.
+the host-side parity test suite before building release binaries. The local
+host parity, ZMK scenario, and vendored RMK behavior test tasks run with
+`RUSTFLAGS=-Dwarnings`, and the porting manifest checks that this warning-free
+gate remains attached to the migration denominator.
 
 `tools/migration_status.py` combines the source-backed migration gate and the
 real-hardware validation tracker into a single release dashboard. In normal CI

@@ -6807,6 +6807,14 @@ with tempfile.TemporaryDirectory() as tempdir:
 
 with tempfile.TemporaryDirectory() as tempdir:
     root = Path(tempdir)
+    (root / "Makefile.toml").write_text(
+        Path("Makefile.toml").read_text().replace('env = { RUSTFLAGS = "-Dwarnings" }\n', '', 3),
+        encoding="utf-8",
+    )
+    bad_warning_flags = pc.check_makefile_task_invariants(manifest, root)
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
     makefile = Path("Makefile.toml").read_text()
     before, marker, after = makefile.partition("[tasks.migration-status]")
     assert marker
@@ -6920,6 +6928,7 @@ print(json.dumps({
     "bad_rmk_config_schema_version": pack(bad_rmk_config_schema_version),
     "bad_porting_coverage_task": pack(bad_porting_coverage_task),
     "bad_host_parity_task": pack(bad_host_parity_task),
+    "bad_warning_flags": pack(bad_warning_flags),
     "bad_migration_status_task": pack(bad_migration_status_task),
     "bad_family": pack(bad_family),
     "bad_uf2_gate": pack(bad_uf2_gate),
@@ -6951,13 +6960,13 @@ print(json.dumps({
         ok.iter()
             .map(|result| result["passed"].as_i64().unwrap())
             .sum::<i64>(),
-        71
+        74
     );
     assert_eq!(
         ok.iter()
             .map(|result| result["total"].as_i64().unwrap())
             .sum::<i64>(),
-        71
+        74
     );
 
     let bad_rmk_config_schema_task = parsed["bad_rmk_config_schema_task"]
@@ -7021,6 +7030,27 @@ print(json.dumps({
             .unwrap()
             .contains("tasks.host-parity-tests.args missing required values ['--lib']")
     );
+
+    for id in [
+        "makefile_host_parity_tests_run_full_project_host_suite",
+        "makefile_rmk_behavior_tests_run_full_host_suite",
+        "makefile_rmk_zmk_scenario_tests_run_runtime_subset",
+    ] {
+        let result = parsed["bad_warning_flags"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|result| result["id"] == id)
+            .expect("changed warning-as-error task result is missing");
+        assert_eq!(result["kind"], "build_task");
+        assert_eq!(result["ok"], false);
+        assert!(
+            result["message"]
+                .as_str()
+                .unwrap()
+                .contains("env missing required values ['RUSTFLAGS=-Dwarnings']")
+        );
+    }
 
     let bad_migration_status_task = parsed["bad_migration_status_task"]
         .as_array()

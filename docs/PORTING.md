@@ -304,7 +304,9 @@ parses `vial.json`, RMK/Cargo/manifest TOML, and flash layout, runs this
 source-backed complete-porting gate, runs the host-side parity test suite and
 vendored RMK behavior regression suite as part of the same local porting gate,
 and keeps a standalone vendored RMK behavior regression step visible before
-building release binaries.
+building release binaries. These local host parity, ZMK scenario, and RMK
+behavior tasks run with `RUSTFLAGS=-Dwarnings`, and the build-task coverage
+manifest fails if that warning-as-error setting is removed.
 The gate
 must report `100.00%` coverage and `100.00%` implementation status against the
 committed upstream checkout used by CI. The
