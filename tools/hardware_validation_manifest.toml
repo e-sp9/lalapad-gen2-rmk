@@ -67,9 +67,9 @@ id = "trackpad_drag_cross_side"
 area = "trackpad"
 side = "both"
 requirement = "Holding one trackpad for left-button hold while moving the other trackpad performs drag/select and releases when the held finger lifts."
-evidence = "Run the cross-side drag step from the trackpad firmware baseline checklist."
-evidence_needles = ["cross-side", "left-button hold", "drag", "release"]
-source = "docs/TRACKPAD_HARDWARE_CHECK.md#firmware-baseline"
+evidence = "Run the cross-side drag check in both directions: right hold with left move and left hold with right move, confirming host drag/select and release."
+evidence_needles = ["cross-side drag", "right hold with left move", "left hold with right move", "left-button hold", "host drag/select", "release on held-finger lift", "no stuck button"]
+source = "docs/TRACKPAD_HARDWARE_CHECK.md#cross-side-trackpad-drag-check"
 status = "requires_hardware"
 
 [[checks]]

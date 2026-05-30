@@ -60,6 +60,24 @@ vertical scroll, horizontal scroll, no cursor during scroll, no right-click
 during scroll, inertia continues, and inertia stops on touch observations. Left
 trackpad evidence must also name the split path.
 
+## Cross-Side Trackpad Drag Check
+
+Use this check after both halves are paired and both trackpads have passed the
+cursor/tap/scroll check. This proves that deferred left-button hold state from
+one side is carried in host reports while the other side moves the pointer.
+
+1. Hold one finger on the right trackpad until left-button hold starts, move the
+   left trackpad, and confirm host drag/select.
+2. Lift the held right-trackpad finger and confirm the host selection releases.
+3. Hold one finger on the left trackpad until left-button hold starts, move the
+   right trackpad, and confirm host drag/select.
+4. Lift the held left-trackpad finger and confirm the host selection releases.
+5. Confirm no mouse button remains stuck after both directions.
+
+Hardware evidence for this check must name cross-side drag, right hold with
+left move, left hold with right move, left-button hold, host drag/select,
+release on held-finger lift, and no stuck button observations.
+
 ## RGB Status Widget Check
 
 Use this check on the right central half. The XIAO BLE RGB LED channels are

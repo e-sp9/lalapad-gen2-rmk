@@ -1215,6 +1215,9 @@ fn migration_status_combines_software_and_hardware_progress() {
         "| iqs9151_right_rdy_signal | trackpad | right | requires_hardware | right, P1_11 RDY, D6, active-low, no-touch high, touch-event low |"
     ));
     assert!(stdout.contains(
+        "| trackpad_drag_cross_side | trackpad | both | requires_hardware | cross-side drag, right hold with left move, left hold with right move, left-button hold, host drag/select, release on held-finger lift, no stuck button |"
+    ));
+    assert!(stdout.contains(
         "| ble_split_pairing_reconnect | ble_split | both | requires_hardware | right central, left peripheral, BLE re-pair, reconnect right first, left Q, left A, right Y, right H |"
     ));
     assert!(stdout.contains(
@@ -1984,6 +1987,9 @@ fn hardware_validation_markdown_report_lists_required_evidence() {
     ));
     assert!(stdout.contains("right, P1_11 RDY, D6, active-low, no-touch high, touch-event low"));
     assert!(stdout.contains(
+        "cross-side drag, right hold with left move, left hold with right move, left-button hold, host drag/select, release on held-finger lift, no stuck button"
+    ));
+    assert!(stdout.contains(
         "right central, left peripheral, BLE re-pair, reconnect right first, left Q, left A, right Y, right H"
     ));
     assert!(
@@ -2525,6 +2531,14 @@ firmware_ref = "35b3f1f"
 artifact_or_notes = "photo: /tmp/right-rdy.jpg; right RDY was high and low while touching."
 
 [[evidence]]
+id = "trackpad_drag_cross_side"
+status = "validated"
+validated_at = "2026-05-29"
+tester = "hardware bench"
+firmware_ref = "35b3f1f"
+artifact_or_notes = "video: /tmp/cross-drag.mp4; cross-side left-button hold drag and release worked."
+
+[[evidence]]
 id = "ble_split_pairing_reconnect"
 status = "validated"
 validated_at = "2026-05-29"
@@ -2622,6 +2636,19 @@ artifact_or_notes = "video: /tmp/storage-reset.mp4; flashed reset central UF2 an
                 && error.contains("'touch-event low'")
         }),
         "RDY evidence should require exact pin, polarity, and no-touch/touch states: {errors:?}"
+    );
+    assert!(
+        errors.iter().any(|error| {
+            error.contains(
+                "trackpad_drag_cross_side: artifact_or_notes must mention required observation(s)",
+            ) && error.contains("'cross-side drag'")
+                && error.contains("'right hold with left move'")
+                && error.contains("'left hold with right move'")
+                && error.contains("'host drag/select'")
+                && error.contains("'release on held-finger lift'")
+                && error.contains("'no stuck button'")
+        }),
+        "cross-side drag evidence should require both directions, host selection, release, and no stuck button: {errors:?}"
     );
     assert!(
         errors.iter().any(|error| {
