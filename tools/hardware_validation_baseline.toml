@@ -1,6 +1,6 @@
 [hardware_validation]
 total = 12
-check_inventory_sha256 = "99f1104323438fbb4928a225e21b8f903903c6cf1a6f3969f89edc1fdba00ac1"
+check_inventory_sha256 = "aa5983f2567685ae6fc7a316aad21e4a0e63cc67c4eee256f86d20a40c0af6ab"
 
 [hardware_validation.by_status]
 blocked = 0

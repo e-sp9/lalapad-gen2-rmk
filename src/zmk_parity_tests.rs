@@ -1209,6 +1209,12 @@ fn migration_status_combines_software_and_hardware_progress() {
     assert!(stdout.contains("### Hardware Remaining"));
     assert!(stdout.contains("| ID | Area | Side | Status | Required observations |"));
     assert!(stdout.contains(
+        "| iqs9151_right_i2c_identity | trackpad | right | requires_hardware | right, P0_04 SDA, P0_05 SCL, I2C activity, 0x56, product-number register, 0x1000, 0x09bc |"
+    ));
+    assert!(stdout.contains(
+        "| iqs9151_right_rdy_signal | trackpad | right | requires_hardware | right, P1_11 RDY, D6, active-low, no-touch high, touch-event low |"
+    ));
+    assert!(stdout.contains(
         "| ble_split_pairing_reconnect | ble_split | both | requires_hardware | right central, left peripheral, BLE re-pair, reconnect right first, left Q, left A, right Y, right H |"
     ));
     assert!(stdout.contains(
@@ -1823,7 +1829,7 @@ status = "validated"
 validated_at = "2026-05-29"
 tester = "hardware bench"
 firmware_ref = "{firmware_ref}"
-artifact_or_notes = "log: /tmp/right-i2c.log; I2C scan found 0x56 and product register 0x1000 read 0x09bc on the right half."
+artifact_or_notes = "log: /tmp/right-i2c.log; right P0_04 SDA and P0_05 SCL showed I2C activity from scan, address 0x56 ACKed, and product-number register 0x1000 read 0x09bc."
 "#
     );
     let path = write_temp_file("migration-status-partial-evidence", &evidence);
@@ -1913,7 +1919,7 @@ status = "validated"
 validated_at = "2026-05-29"
 tester = "hardware bench"
 firmware_ref = "actual-firmware-ref"
-artifact_or_notes = "log: /tmp/right-i2c.log; I2C scan found 0x56 and product register 0x1000 read 0x09bc on the right half."
+artifact_or_notes = "log: /tmp/right-i2c.log; right P0_04 SDA and P0_05 SCL showed I2C activity from scan, address 0x56 ACKed, and product-number register 0x1000 read 0x09bc."
 "#;
     let path = write_temp_file("migration-status-stale-partial-evidence", evidence);
 
@@ -1973,6 +1979,10 @@ fn hardware_validation_markdown_report_lists_required_evidence() {
     assert!(stdout.contains(
         "right, cursor, tap, vertical scroll, horizontal scroll, no cursor during scroll, no right-click during scroll, inertia continues, inertia stops on touch"
     ));
+    assert!(stdout.contains(
+        "right, P0_04 SDA, P0_05 SCL, I2C activity, 0x56, product-number register, 0x1000, 0x09bc"
+    ));
+    assert!(stdout.contains("right, P1_11 RDY, D6, active-low, no-touch high, touch-event low"));
     assert!(stdout.contains(
         "right central, left peripheral, BLE re-pair, reconnect right first, left Q, left A, right Y, right H"
     ));
@@ -2367,7 +2377,7 @@ status = "validated"
 validated_at = "2026-05-29"
 tester = "hardware bench"
 firmware_ref = "35b3f1f"
-artifact_or_notes = "I2C scan found 0x56 and product register 0x1000 read 0x09bc on the right half."
+artifact_or_notes = "right P0_04 SDA and P0_05 SCL showed I2C activity from scan, address 0x56 ACKed, and product-number register 0x1000 read 0x09bc."
 "#;
     let path = write_temp_file("hardware-validation-evidence", evidence);
     let output = run_hardware_validation(&["--evidence", path.to_str().unwrap(), "--json"]);
@@ -2504,7 +2514,15 @@ status = "validated"
 validated_at = "2026-05-29"
 tester = "hardware bench"
 firmware_ref = "35b3f1f"
-artifact_or_notes = "log: /tmp/right-i2c.log; I2C scan found 0x56 and product register 0x1000 read 0x09bc on the right half."
+artifact_or_notes = "log: /tmp/right-i2c.log; right P0_04 SDA and P0_05 SCL showed I2C activity from scan, address 0x56 ACKed, and product-number register 0x1000 read 0x09bc."
+
+[[evidence]]
+id = "iqs9151_right_rdy_signal"
+status = "validated"
+validated_at = "2026-05-29"
+tester = "hardware bench"
+firmware_ref = "35b3f1f"
+artifact_or_notes = "photo: /tmp/right-rdy.jpg; right RDY was high and low while touching."
 
 [[evidence]]
 id = "ble_split_pairing_reconnect"
@@ -2596,6 +2614,18 @@ artifact_or_notes = "video: /tmp/storage-reset.mp4; flashed reset central UF2 an
     assert!(
         errors.iter().any(|error| {
             error.contains(
+                "iqs9151_right_rdy_signal: artifact_or_notes must mention required observation(s)",
+            ) && error.contains("'P1_11 RDY'")
+                && error.contains("'D6'")
+                && error.contains("'active-low'")
+                && error.contains("'no-touch high'")
+                && error.contains("'touch-event low'")
+        }),
+        "RDY evidence should require exact pin, polarity, and no-touch/touch states: {errors:?}"
+    );
+    assert!(
+        errors.iter().any(|error| {
+            error.contains(
                 "ble_split_pairing_reconnect: artifact_or_notes must mention required observation(s)",
             ) && error.contains("'left peripheral'")
                 && error.contains("'BLE re-pair'")
@@ -2665,7 +2695,7 @@ status = "validated"
 validated_at = "2026-05-29"
 tester = "hardware bench"
 firmware_ref = "35b3f1f"
-artifact_or_notes = "I2C scan found 0x56 and product register 0x1000 read 0x09bc on the right half."
+artifact_or_notes = "right P0_04 SDA and P0_05 SCL showed I2C activity from scan, address 0x56 ACKed, and product-number register 0x1000 read 0x09bc."
 "#;
     let path = write_temp_file("hardware-validation-firmware-ref", evidence);
     let ok = run_hardware_validation(&[

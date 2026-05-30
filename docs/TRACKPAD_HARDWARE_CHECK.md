@@ -147,6 +147,35 @@ The current diagnostic firmware intentionally sends a tiny left/right cursor nud
 - No diagnostic nudge and no touch response: focus on whether the custom trackpad controller task is running and whether mouse HID reports are reaching the host.
 - Diagnostic nudge stops after touching starts working: initialization recovered and the nudge was only reporting the earlier failure state.
 
+## IQS9151 I2C Identity Check
+
+Run this check separately on the right and left halves. The IQS9151 I2C bus is
+wired to `P0_04` SDA and `P0_05` SCL on both XIAO BLE boards.
+
+1. Confirm `P0_04` SDA and `P0_05` SCL idle high and show I2C activity after
+   reset.
+2. Run an I2C scan or diagnostic firmware on the tested half.
+3. Confirm the IQS9151 acknowledges address `0x56`.
+4. Read product-number register `0x1000`.
+5. Confirm the product-number value is `0x09bc`.
+
+Hardware evidence for this check must name the tested side, `P0_04 SDA`,
+`P0_05 SCL`, I2C activity from a scan or diagnostic firmware, address `0x56`,
+product-number register, register `0x1000`, and product value `0x09bc`.
+
+## IQS9151 RDY Signal Check
+
+Run this check separately on the right and left halves. The IQS9151 RDY / IRQ
+line is XIAO D6 / nRF `P1_11` and is active-low.
+
+1. Measure `P1_11` RDY / D6 with power on and no touch.
+2. Confirm the no-touch state is high.
+3. Touch or otherwise trigger the sensor.
+4. Confirm the touch-event state pulses low or drives low.
+
+Hardware evidence for this check must name the tested side, `P1_11 RDY`, D6,
+active-low polarity, no-touch high, and touch-event low observations.
+
 ## Expected Wiring
 
 The upstream ZMK shield defines the IQS9151 interrupt as:
