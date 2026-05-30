@@ -4079,6 +4079,81 @@ def keyboard_action_to_runtime_rust(action: str) -> str:
     raise ValueError(f"unsupported runtime mirror action {action!r}")
 
 
+def check_runtime_keymap_mirror_fixture_shape(
+    manifest: dict[str, Any], config: dict[str, Any], project_root: Path
+) -> list[Result]:
+    expected_layers = int(config["layout"]["layers"])
+    expected_rows = int(config["layout"]["rows"])
+    expected_cols = int(config["layout"]["cols"])
+    expected_total = 1 + expected_layers + expected_layers * expected_rows
+    results: list[Result] = []
+    for check in manifest.get("runtime_keymap_mirrors", []):
+        target_file = str(check["file"])
+        function_name = str(check["function"])
+        try:
+            text = (project_root / target_file).read_text()
+        except OSError as e:
+            results.append(
+                Result(
+                    "runtime_keymap_mirror_fixture_shape_matches_keyboard_toml",
+                    "runtime_keymap_mirror",
+                    0,
+                    expected_total,
+                    str(e),
+                )
+            )
+            continue
+        function_scope = extract_rust_function_scope(text, function_name)
+        if function_scope is None:
+            results.append(
+                Result(
+                    "runtime_keymap_mirror_fixture_shape_matches_keyboard_toml",
+                    "runtime_keymap_mirror",
+                    0,
+                    expected_total,
+                    f"{target_file} missing function {function_name!r}",
+                )
+            )
+            continue
+        runtime_layers = parse_rust_keymap_layers(function_scope)
+        passed = 0
+        messages: list[str] = []
+        if len(runtime_layers) == expected_layers:
+            passed += 1
+        else:
+            messages.append(f"layers expected {expected_layers}, got {len(runtime_layers)}")
+        for layer in range(expected_layers):
+            if layer >= len(runtime_layers):
+                messages.append(f"layer {layer} missing")
+                continue
+            rows = runtime_layers[layer]
+            if len(rows) == expected_rows:
+                passed += 1
+            else:
+                messages.append(f"layer {layer} rows expected {expected_rows}, got {len(rows)}")
+            for row in range(expected_rows):
+                if row >= len(rows):
+                    messages.append(f"L{layer}R{row} missing")
+                    continue
+                cols = rows[row]
+                if len(cols) == expected_cols:
+                    passed += 1
+                else:
+                    messages.append(
+                        f"L{layer}R{row} cols expected {expected_cols}, got {len(cols)}"
+                    )
+        results.append(
+            Result(
+                "runtime_keymap_mirror_fixture_shape_matches_keyboard_toml",
+                "runtime_keymap_mirror",
+                passed,
+                expected_total,
+                "ok" if not messages else "; ".join(messages),
+            )
+        )
+    return results
+
+
 def check_runtime_keymap_mirrors(
     manifest: dict[str, Any], config: dict[str, Any], project_root: Path
 ) -> list[Result]:
@@ -5460,6 +5535,7 @@ def run(
     results.extend(check_code_topology(manifest, project_root))
     results.extend(check_file_contains_invariants(manifest, project_root))
     results.extend(check_rust_unit_tests(manifest, project_root))
+    results.extend(check_runtime_keymap_mirror_fixture_shape(manifest, keyboard, project_root))
     results.extend(check_runtime_keymap_mirrors(manifest, keyboard, project_root))
     results.extend(check_runtime_keymap_mirror_position_inventory(manifest, keyboard))
     results.extend(check_runtime_keymap_mirror_coverage(manifest, keyboard))

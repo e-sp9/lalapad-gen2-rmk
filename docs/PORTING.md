@@ -258,8 +258,9 @@ keyboard HID report from a lower layer. The runtime inventory gate scopes its
 needles to the declared Rust test function, preventing an expected action in one
 test from satisfying another scenario's coverage entry.
 It also parses the hand-written RMK runtime-test `lalapad_keymap()` fixture and
-compares every scenario-relevant cell by layer, row, and column against the
-shipped `keyboard.toml`, so a runtime test cannot keep passing against a stale
+checks its layer/row/column shape against the shipped `keyboard.toml`, and then
+compares every scenario-relevant cell by layer, row, and column against that
+same source of truth. A runtime test cannot keep passing against a stale
 fixture after the real firmware keymap changes. A companion gate derives the
 required mirror coordinates from the runtime scenario inventory and the
 scenario layer-resolution manifest, so adding a new runtime scenario without

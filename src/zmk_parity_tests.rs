@@ -3088,6 +3088,20 @@ fn porting_coverage_includes_exact_rmk_inventory_gates() {
     );
     assert_eq!(runtime_keymap_mirror_result["ok"], true);
 
+    let runtime_keymap_mirror_fixture_shape_result = results
+        .iter()
+        .find(|result| result["id"] == "runtime_keymap_mirror_fixture_shape_matches_keyboard_toml")
+        .expect("runtime keymap mirror fixture shape result is missing");
+    assert_eq!(
+        runtime_keymap_mirror_fixture_shape_result["kind"],
+        "runtime_keymap_mirror"
+    );
+    assert_eq!(runtime_keymap_mirror_fixture_shape_result["ok"], true);
+    assert_eq!(
+        runtime_keymap_mirror_fixture_shape_result["passed"],
+        runtime_keymap_mirror_fixture_shape_result["total"]
+    );
+
     let runtime_keymap_mirror_inventory_result = results
         .iter()
         .find(|result| result["id"] == "runtime_keymap_mirror_positions_are_unique_and_in_bounds")
@@ -4161,6 +4175,7 @@ spec.loader.exec_module(pc)
 
 manifest = pc.load_toml(Path("tools/porting_coverage_manifest.toml"))
 keyboard = pc.load_toml(Path("keyboard.toml"))
+shape_ok = pc.check_runtime_keymap_mirror_fixture_shape(manifest, keyboard, Path("."))[0]
 ok = pc.check_runtime_keymap_mirrors(manifest, keyboard, Path("."))[0]
 inventory_ok = pc.check_runtime_keymap_mirror_position_inventory(manifest, keyboard)[0]
 coverage_ok = pc.check_runtime_keymap_mirror_coverage(manifest, keyboard)[0]
@@ -4228,10 +4243,30 @@ with tempfile.TemporaryDirectory() as root_dir:
     )
     fixture_drift = pc.check_runtime_keymap_mirrors(manifest, keyboard, root)[0]
 
+with tempfile.TemporaryDirectory() as root_dir:
+    root = Path(root_dir)
+    scenario_dir = root / "vendor/rmk-0.8.2/tests"
+    scenario_dir.mkdir(parents=True)
+    scenario = Path("vendor/rmk-0.8.2/tests/keyboard_lalapad_zmk_scenarios_test.rs").read_text(
+        encoding="utf-8"
+    )
+    scenario = scenario.replace(
+        "lt(2, KeyCode::Enter), a!(No), k!(Language2), a!(No), a!(No)]",
+        "lt(2, KeyCode::Enter), a!(No), k!(Language2), a!(No)]",
+        1,
+    )
+    (scenario_dir / "keyboard_lalapad_zmk_scenarios_test.rs").write_text(
+        scenario, encoding="utf-8"
+    )
+    fixture_shape_drift = pc.check_runtime_keymap_mirror_fixture_shape(
+        manifest, keyboard, root
+    )[0]
+
 def pack(result):
     return result.__dict__ | {"ok": result.ok}
 
 print(json.dumps({
+    "shape_ok": pack(shape_ok),
     "ok": pack(ok),
     "inventory_ok": pack(inventory_ok),
     "coverage_ok": pack(coverage_ok),
@@ -4243,6 +4278,7 @@ print(json.dumps({
     "out_of_bounds_position": pack(out_of_bounds_position),
     "new_runtime_coordinate": pack(new_runtime_coordinate),
     "fixture_drift": pack(fixture_drift),
+    "fixture_shape_drift": pack(fixture_shape_drift),
 }))
 "#,
     );
@@ -4255,6 +4291,10 @@ print(json.dumps({
     );
 
     let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(parsed["shape_ok"]["kind"], "runtime_keymap_mirror");
+    assert_eq!(parsed["shape_ok"]["total"].as_i64(), Some(33));
+    assert_eq!(parsed["shape_ok"]["passed"].as_i64(), Some(33));
+    assert_eq!(parsed["shape_ok"]["ok"], true);
     assert_eq!(parsed["ok"]["kind"], "runtime_keymap_mirror");
     assert_eq!(parsed["ok"]["total"].as_i64(), Some(60));
     assert_eq!(parsed["ok"]["passed"].as_i64(), Some(60));
@@ -4360,6 +4400,18 @@ print(json.dumps({
             .as_str()
             .unwrap()
             .contains("k!(Kp8)")
+    );
+
+    assert_eq!(
+        parsed["fixture_shape_drift"]["kind"],
+        "runtime_keymap_mirror"
+    );
+    assert_eq!(parsed["fixture_shape_drift"]["ok"], false);
+    assert!(
+        parsed["fixture_shape_drift"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("L0R3 cols expected 12, got 11")
     );
 }
 
