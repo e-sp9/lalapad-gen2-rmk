@@ -280,6 +280,7 @@ def firmware_artifact_status(
     if len(artifacts_by_path) != len(artifacts):
         errors.append("firmware artifact manifest artifacts must be objects with unique paths")
 
+    known_specs_by_path = {spec.path: spec for spec in firmware_artifact_manifest.ARTIFACTS}
     for artifact in artifacts:
         if not isinstance(artifact, dict):
             continue
@@ -294,6 +295,17 @@ def firmware_artifact_status(
             errors.append(
                 f"firmware artifact manifest {path or '<missing path>'} sha256 must be a SHA256 hex string"
             )
+        expected_spec = known_specs_by_path.get(path)
+        if expected_spec is not None:
+            for field, expected_value in [
+                ("role", expected_spec.role),
+                ("side", expected_spec.side),
+                ("kind", expected_spec.kind),
+            ]:
+                if artifact.get(field) != expected_value:
+                    errors.append(
+                        f"firmware artifact manifest {path} {field} must be {expected_value}"
+                    )
         if path:
             artifact_path = Path(path)
             if artifact_path.is_absolute():
@@ -360,10 +372,6 @@ def firmware_artifact_status(
                 f"firmware artifact manifest missing required {spec.kind} {spec.path}"
             )
             continue
-        if artifact.get("kind") != spec.kind:
-            errors.append(
-                f"firmware artifact manifest {spec.path} kind must be {spec.kind}"
-            )
 
     return {
         "path": str(artifact_manifest_path),

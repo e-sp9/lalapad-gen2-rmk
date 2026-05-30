@@ -2320,6 +2320,45 @@ dst.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
             .contains("path must stay inside artifact root")
     );
 
+    let mut wrong_side_artifact_manifest: serde_json::Value =
+        serde_json::from_str(&artifact_manifest).unwrap();
+    let central_artifact = wrong_side_artifact_manifest["artifacts"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|artifact| artifact["path"] == "firmware/normal/lalapad-gen2-rmk-central.uf2")
+        .expect("central UF2 artifact is missing");
+    central_artifact["role"] = serde_json::Value::String("peripheral".into());
+    central_artifact["side"] = serde_json::Value::String("left".into());
+    let wrong_side_artifact_path =
+        artifact_path.with_file_name("wrong-side-firmware-artifacts.local.json");
+    std::fs::write(
+        &wrong_side_artifact_path,
+        serde_json::to_string_pretty(&wrong_side_artifact_manifest).unwrap(),
+    )
+    .unwrap();
+    let wrong_side = run_migration_status(&[
+        "--coverage-baseline",
+        "tools/porting_coverage_baseline.toml",
+        "--hardware-baseline",
+        "tools/hardware_validation_baseline.toml",
+        "--firmware-artifact-manifest",
+        wrong_side_artifact_path.to_str().unwrap(),
+        "--artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--require-hardware-classified",
+    ]);
+    let _ = std::fs::remove_file(&wrong_side_artifact_path);
+    assert!(
+        !wrong_side.status.success(),
+        "migration status accepted an artifact manifest with swapped central role/side metadata\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&wrong_side.stdout),
+        String::from_utf8_lossy(&wrong_side.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&wrong_side.stdout);
+    assert!(stdout.contains("firmware/normal/lalapad-gen2-rmk-central.uf2 role must be central"));
+    assert!(stdout.contains("firmware/normal/lalapad-gen2-rmk-central.uf2 side must be right"));
+
     let bad_shape_path = write_temp_file("migration-status-bad-artifact-shape", "[]");
     let bad_shape = run_migration_status(&[
         "--coverage-baseline",
