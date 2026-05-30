@@ -238,6 +238,12 @@ rather than regex-only checks.
 The thumb tap/hold layer-resolution scenarios are also cross-checked against
 the ZMK source keymap after documented RMK deltas are applied, so scenario
 expectations must stay source-backed instead of becoming RMK-only assertions.
+The same golden scenarios are registered as RMK host-runtime tests, including
+the system tri-layer `User7`, `User0`, and `Reboot` positions. Those non-HID
+actions are checked by asserting that the sequence does not fall through to a
+keyboard HID report from a lower layer. The runtime inventory gate scopes its
+needles to the declared Rust test function, preventing an expected action in one
+test from satisfying another scenario's coverage entry.
 The gate additionally resolves every position on layer 1, layer 2, and the
 system tri-layer against the ZMK source keymap to catch transparent-key
 fallthrough drift beyond the hand-written representative scenarios.

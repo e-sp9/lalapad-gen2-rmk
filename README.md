@@ -162,14 +162,18 @@ cargo make firmware-artifact-manifest-current
 python3 tools/hardware_validation.py --evidence hardware-validation-evidence.local.toml --markdown
 ```
 
-`cargo make porting-coverage` first runs the RMK host-runtime Space/Enter
-layer-tap scenarios, then `tools/porting_coverage.py` reads
+`cargo make porting-coverage` first runs the RMK host-runtime thumb layer-tap
+scenario suite, then `tools/porting_coverage.py` reads
 `tools/porting_coverage_manifest.toml` and,
 when the upstream ZMK checkout from the manifest is present, also parses
 `config/lalapadgen2.keymap`, shield overlays, ZMK Kconfig values, and selected
 RMK Rust constants to verify that the migration contract still matches the
-source firmware. It also tracks the RMK host-runtime Space/Enter layer-tap
-scenario test inventory in `vendor/rmk-0.8.2/tests/keyboard_lalapad_zmk_scenarios_test.rs`.
+source firmware. It also tracks the RMK host-runtime inventory for all golden
+Space, Enter, and system tri-layer scenarios in
+`vendor/rmk-0.8.2/tests/keyboard_lalapad_zmk_scenarios_test.rs`, including
+non-HID system-layer actions that must not fall through to lower-layer keyboard
+reports. Runtime scenario inventory checks are scoped to each test function so
+an expected action in one scenario cannot accidentally satisfy another scenario.
 It reports both migration-contract coverage and an explicit IQS9151 symbol
 implementation status summary. `--require-porting-complete`
 makes both metrics hard gates, so release builds fail if any source item is

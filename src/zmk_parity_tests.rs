@@ -1,5 +1,5 @@
 use crate::iqs9151::{TrackpadButton, TrackpadSide, VirtualKeyPosition, trackpad_button_position};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::process::Command;
 
 const KEYBOARD_TOML: &str = include_str!("../keyboard.toml");
@@ -2417,6 +2417,33 @@ fn porting_coverage_includes_exact_rmk_inventory_gates() {
         .unwrap()
         .len() as i64;
     let expected_scenario_count = manifest["scenarios"].as_array().unwrap().len();
+    let runtime_scenario_ids = manifest["runtime_scenario_tests"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|scenario| scenario["id"].as_str().unwrap())
+        .collect::<BTreeSet<_>>();
+    for runtime_scenario in manifest["runtime_scenario_tests"].as_array().unwrap() {
+        if runtime_scenario["file"].as_str().unwrap()
+            == "vendor/rmk-0.8.2/tests/keyboard_lalapad_zmk_scenarios_test.rs"
+        {
+            assert!(
+                runtime_scenario.get("function").is_some(),
+                "RMK runtime scenario {} must scope needles to a test function",
+                runtime_scenario["id"].as_str().unwrap()
+            );
+        }
+    }
+    for scenario in manifest["scenarios"].as_array().unwrap() {
+        let scenario_id = scenario["id"].as_str().unwrap();
+        let expected_prefix = format!("runtime_{scenario_id}");
+        assert!(
+            runtime_scenario_ids
+                .iter()
+                .any(|runtime_id| runtime_id.starts_with(&expected_prefix)),
+            "RMK runtime scenario coverage is missing for source-backed scenario {scenario_id}"
+        );
+    }
 
     let keymap_shape = results
         .iter()
@@ -3307,6 +3334,66 @@ print(json.dumps({
             .unwrap()
             .contains("source output expected 'Kp7', got 'Kp8'")
     );
+}
+
+#[test]
+fn porting_coverage_scopes_runtime_scenario_needles_to_declared_function() {
+    let output = run_python(
+        r#"
+import importlib.util
+import json
+import sys
+import tempfile
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("porting_coverage", "tools/porting_coverage.py")
+pc = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = pc
+spec.loader.exec_module(pc)
+
+root = Path(tempfile.mkdtemp(prefix="lalapad-runtime-scenario-scope-"))
+(root / "scenario.rs").write_text(
+    "fn target_runtime_scenario() {\\n"
+    "    key_sequence_no_keyboard_reports_test! {\\n"
+    "        expected_action: [3, 0, 7] => k!(User7),\\n"
+    "    };\\n"
+    "}\\n"
+    "fn unrelated_runtime_scenario() {\\n"
+    "    k!(Reboot);\\n"
+    "}\\n"
+)
+manifest = {
+    "runtime_scenario_tests": [
+        {
+            "id": "runtime_target",
+            "file": "scenario.rs",
+            "function": "target_runtime_scenario",
+            "needles": [
+                "fn target_runtime_scenario()",
+                "k!(User7)",
+                "k!(Reboot)",
+            ],
+        }
+    ]
+}
+
+result = pc.check_runtime_scenario_tests(manifest, root)[0]
+print(json.dumps(result.__dict__ | {"ok": result.ok}))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "runtime scenario scoping check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(parsed["kind"], "runtime_scenario");
+    assert_eq!(parsed["passed"].as_i64(), Some(2));
+    assert_eq!(parsed["total"].as_i64(), Some(3));
+    assert_eq!(parsed["ok"], false);
+    assert!(parsed["message"].as_str().unwrap().contains("k!(Reboot)"));
 }
 
 #[test]

@@ -1,6 +1,10 @@
 pub mod common;
 
+use embassy_time::{Duration, Timer};
+use rmk::channel::{KEY_EVENT_CHANNEL, KEYBOARD_REPORT_CHANNEL};
 use rmk::config::{BehaviorConfig, MorsesConfig, PositionalConfig};
+use rmk::event::KeyboardEvent;
+use rmk::hid::Report;
 use rmk::keyboard::Keyboard;
 use rmk::types::action::{Action, KeyAction};
 use rmk::types::keycode::KeyCode;
@@ -8,7 +12,7 @@ use rmk::{a, k, layer};
 use rmk_types::action::{MorseMode, MorseProfile};
 use rusty_fork::rusty_fork_test;
 
-use crate::common::wrap_keymap;
+use crate::common::{TestKeyPress, wrap_keymap};
 
 const SHIPPED_KEYBOARD_TOML: &str = include_str!("../../../keyboard.toml");
 
@@ -88,6 +92,71 @@ fn create_lalapad_keyboard() -> Keyboard<'static, 7, 12, 4> {
     ))
 }
 
+fn assert_no_pending_hid_reports() {
+    while let Ok(report) = KEYBOARD_REPORT_CHANNEL.try_receive() {
+        match report {
+            Report::KeyboardReport(report) => {
+                panic!("unexpected keyboard report: {:?}", report)
+            }
+            report => panic!("unexpected HID report: {:?}", report),
+        }
+    }
+}
+
+async fn run_key_sequence_expect_no_keyboard_reports<
+    'a,
+    const ROW: usize,
+    const COL: usize,
+    const NUM_LAYER: usize,
+>(
+    keyboard: &mut Keyboard<'a, ROW, COL, NUM_LAYER>,
+    key_sequence: &[TestKeyPress],
+) {
+    KEY_EVENT_CHANNEL.clear();
+    KEYBOARD_REPORT_CHANNEL.clear();
+    static REPORT_GRACE: Duration = Duration::from_millis(250);
+
+    for key in key_sequence {
+        Timer::after(Duration::from_millis(key.delay)).await;
+        keyboard
+            .process_inner(KeyboardEvent::key(key.row, key.col, key.pressed))
+            .await;
+        assert_no_pending_hid_reports();
+    }
+    Timer::after(REPORT_GRACE).await;
+    assert_no_pending_hid_reports();
+    if !keyboard.held_buffer.is_empty() {
+        panic!(
+            "leak after buffer cleanup, buffer contains {:?}",
+            keyboard.held_buffer
+        );
+    }
+}
+
+macro_rules! key_sequence_no_keyboard_reports_test {
+    (
+        expected_action: [$layer:expr, $row:expr, $col:expr] => $expected_action:expr,
+        sequence: [$([$seq_row:expr, $seq_col:expr, $pressed:expr, $delay:expr]),* $(,)?]
+    ) => {
+        ::embassy_futures::block_on(async {
+            let mut keyboard = create_lalapad_keyboard();
+            assert_eq!(lalapad_keymap()[$layer][$row][$col], $expected_action);
+            let sequence = vec![
+                $(
+                    TestKeyPress {
+                        row: $seq_row,
+                        col: $seq_col,
+                        pressed: $pressed,
+                        delay: $delay,
+                    },
+                )*
+            ];
+
+            run_key_sequence_expect_no_keyboard_reports(&mut keyboard, &sequence).await;
+        });
+    };
+}
+
 rusty_fork_test! {
     #[test]
     fn shipped_keyboard_toml_keeps_thumb_layer_tap_bindings() {
@@ -99,6 +168,14 @@ rusty_fork_test! {
             SHIPPED_KEYBOARD_TOML.contains("\"LT(2, Enter, FAST_LAYER)\""),
             "keyboard.toml must keep Enter as the layer-2 FAST_LAYER tap-hold"
         );
+    }
+
+    #[test]
+    fn runtime_keymap_keeps_system_tri_layer_actions() {
+        let keymap = lalapad_keymap();
+        assert_eq!(keymap[3][0][7], k!(User7));
+        assert_eq!(keymap[3][0][8], k!(User0));
+        assert_eq!(keymap[3][1][7], k!(Reboot));
     }
 
     #[test]
@@ -263,6 +340,51 @@ rusty_fork_test! {
             expected_reports: [
                 [0, [kc_to_u8!(N), 0, 0, 0, 0, 0]],
                 [0, [0, 0, 0, 0, 0, 0]],
+            ]
+        };
+    }
+
+    #[test]
+    fn space_enter_hold_y_selects_system_layer_user7_without_keyboard_report() {
+        key_sequence_no_keyboard_reports_test! {
+            expected_action: [3, 0, 7] => k!(User7),
+            sequence: [
+                [3, 4, true, 10],
+                [3, 7, true, 10],
+                [0, 7, true, 10],
+                [0, 7, false, 100],
+                [3, 7, false, 10],
+                [3, 4, false, 10],
+            ]
+        };
+    }
+
+    #[test]
+    fn space_enter_hold_u_selects_bt_profile_0_without_keyboard_report() {
+        key_sequence_no_keyboard_reports_test! {
+            expected_action: [3, 0, 8] => k!(User0),
+            sequence: [
+                [3, 4, true, 10],
+                [3, 7, true, 10],
+                [0, 8, true, 10],
+                [0, 8, false, 100],
+                [3, 7, false, 10],
+                [3, 4, false, 10],
+            ]
+        };
+    }
+
+    #[test]
+    fn space_enter_hold_h_selects_reboot_without_keyboard_report() {
+        key_sequence_no_keyboard_reports_test! {
+            expected_action: [3, 1, 7] => k!(Reboot),
+            sequence: [
+                [3, 4, true, 10],
+                [3, 7, true, 10],
+                [1, 7, true, 10],
+                [1, 7, false, 100],
+                [3, 7, false, 10],
+                [3, 4, false, 10],
             ]
         };
     }

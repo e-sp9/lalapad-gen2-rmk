@@ -3080,6 +3080,7 @@ expected_output = "Kp0"
 [[runtime_scenario_tests]]
 id = "runtime_shipped_keyboard_toml_keeps_thumb_layer_tap_bindings"
 file = "vendor/rmk-0.8.2/tests/keyboard_lalapad_zmk_scenarios_test.rs"
+function = "shipped_keyboard_toml_keeps_thumb_layer_tap_bindings"
 needles = [
   "fn shipped_keyboard_toml_keeps_thumb_layer_tap_bindings()",
   "LT(1, Space, FAST_LAYER)",
@@ -3089,6 +3090,7 @@ needles = [
 [[runtime_scenario_tests]]
 id = "runtime_space_tap_is_space"
 file = "vendor/rmk-0.8.2/tests/keyboard_lalapad_zmk_scenarios_test.rs"
+function = "space_tap_is_space"
 needles = [
   "fn space_tap_is_space()",
   "[3, 4, true",
@@ -3099,6 +3101,7 @@ needles = [
 [[runtime_scenario_tests]]
 id = "runtime_enter_tap_is_enter"
 file = "vendor/rmk-0.8.2/tests/keyboard_lalapad_zmk_scenarios_test.rs"
+function = "enter_tap_is_enter"
 needles = [
   "fn enter_tap_is_enter()",
   "[3, 7, true",
@@ -3109,6 +3112,7 @@ needles = [
 [[runtime_scenario_tests]]
 id = "runtime_space_hold_y_selects_secondary_layer"
 file = "vendor/rmk-0.8.2/tests/keyboard_lalapad_zmk_scenarios_test.rs"
+function = "space_hold_y_selects_secondary_layer"
 needles = [
   "fn space_hold_y_selects_secondary_layer()",
   "[3, 4, true",
@@ -3119,6 +3123,7 @@ needles = [
 [[runtime_scenario_tests]]
 id = "runtime_space_hold_u_selects_keypad_7"
 file = "vendor/rmk-0.8.2/tests/keyboard_lalapad_zmk_scenarios_test.rs"
+function = "space_hold_u_selects_keypad_7"
 needles = [
   "fn space_hold_u_selects_keypad_7()",
   "[3, 4, true",
@@ -3129,6 +3134,7 @@ needles = [
 [[runtime_scenario_tests]]
 id = "runtime_space_hold_j_selects_keypad_4"
 file = "vendor/rmk-0.8.2/tests/keyboard_lalapad_zmk_scenarios_test.rs"
+function = "space_hold_j_selects_keypad_4"
 needles = [
   "fn space_hold_j_selects_keypad_4()",
   "[3, 4, true",
@@ -3139,6 +3145,7 @@ needles = [
 [[runtime_scenario_tests]]
 id = "runtime_space_hold_h_falls_back_to_base"
 file = "vendor/rmk-0.8.2/tests/keyboard_lalapad_zmk_scenarios_test.rs"
+function = "space_hold_h_falls_back_to_base"
 needles = [
   "fn space_hold_h_falls_back_to_base()",
   "[3, 4, true",
@@ -3149,6 +3156,7 @@ needles = [
 [[runtime_scenario_tests]]
 id = "runtime_enter_hold_y_selects_tertiary_layer"
 file = "vendor/rmk-0.8.2/tests/keyboard_lalapad_zmk_scenarios_test.rs"
+function = "enter_hold_y_selects_tertiary_layer"
 needles = [
   "fn enter_hold_y_selects_tertiary_layer()",
   "[3, 7, true",
@@ -3159,6 +3167,7 @@ needles = [
 [[runtime_scenario_tests]]
 id = "runtime_enter_hold_u_selects_home"
 file = "vendor/rmk-0.8.2/tests/keyboard_lalapad_zmk_scenarios_test.rs"
+function = "enter_hold_u_selects_home"
 needles = [
   "fn enter_hold_u_selects_home()",
   "[3, 7, true",
@@ -3169,6 +3178,7 @@ needles = [
 [[runtime_scenario_tests]]
 id = "runtime_enter_hold_h_selects_page_down"
 file = "vendor/rmk-0.8.2/tests/keyboard_lalapad_zmk_scenarios_test.rs"
+function = "enter_hold_h_selects_page_down"
 needles = [
   "fn enter_hold_h_selects_page_down()",
   "[3, 7, true",
@@ -3179,6 +3189,7 @@ needles = [
 [[runtime_scenario_tests]]
 id = "runtime_enter_hold_n_falls_back_to_base"
 file = "vendor/rmk-0.8.2/tests/keyboard_lalapad_zmk_scenarios_test.rs"
+function = "enter_hold_n_falls_back_to_base"
 needles = [
   "fn enter_hold_n_falls_back_to_base()",
   "[3, 7, true",
@@ -3187,8 +3198,62 @@ needles = [
 ]
 
 [[runtime_scenario_tests]]
+id = "runtime_keymap_keeps_system_tri_layer_actions"
+file = "vendor/rmk-0.8.2/tests/keyboard_lalapad_zmk_scenarios_test.rs"
+function = "runtime_keymap_keeps_system_tri_layer_actions"
+needles = [
+  "fn runtime_keymap_keeps_system_tri_layer_actions()",
+  "keymap[3][0][7]",
+  "k!(User7)",
+  "keymap[3][0][8]",
+  "k!(User0)",
+  "keymap[3][1][7]",
+  "k!(Reboot)",
+]
+
+[[runtime_scenario_tests]]
+id = "runtime_space_enter_hold_y_selects_system_layer_user7_without_keyboard_report"
+file = "vendor/rmk-0.8.2/tests/keyboard_lalapad_zmk_scenarios_test.rs"
+function = "space_enter_hold_y_selects_system_layer_user7_without_keyboard_report"
+needles = [
+  "fn space_enter_hold_y_selects_system_layer_user7_without_keyboard_report()",
+  "[3, 4, true",
+  "[3, 7, true",
+  "[0, 7, true",
+  "k!(User7)",
+  "key_sequence_no_keyboard_reports_test",
+]
+
+[[runtime_scenario_tests]]
+id = "runtime_space_enter_hold_u_selects_bt_profile_0_without_keyboard_report"
+file = "vendor/rmk-0.8.2/tests/keyboard_lalapad_zmk_scenarios_test.rs"
+function = "space_enter_hold_u_selects_bt_profile_0_without_keyboard_report"
+needles = [
+  "fn space_enter_hold_u_selects_bt_profile_0_without_keyboard_report()",
+  "[3, 4, true",
+  "[3, 7, true",
+  "[0, 8, true",
+  "k!(User0)",
+  "key_sequence_no_keyboard_reports_test",
+]
+
+[[runtime_scenario_tests]]
+id = "runtime_space_enter_hold_h_selects_reboot_without_keyboard_report"
+file = "vendor/rmk-0.8.2/tests/keyboard_lalapad_zmk_scenarios_test.rs"
+function = "space_enter_hold_h_selects_reboot_without_keyboard_report"
+needles = [
+  "fn space_enter_hold_h_selects_reboot_without_keyboard_report()",
+  "[3, 4, true",
+  "[3, 7, true",
+  "[1, 7, true",
+  "k!(Reboot)",
+  "key_sequence_no_keyboard_reports_test",
+]
+
+[[runtime_scenario_tests]]
 id = "runtime_space_enter_hold_keypad_zero_falls_through_system_transparency"
 file = "vendor/rmk-0.8.2/tests/keyboard_lalapad_zmk_scenarios_test.rs"
+function = "space_enter_hold_keypad_zero_falls_through_system_transparency"
 needles = [
   "fn space_enter_hold_keypad_zero_falls_through_system_transparency()",
   "[3, 4, true",

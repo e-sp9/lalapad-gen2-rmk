@@ -3683,25 +3683,63 @@ def check_file_contains_invariants(manifest: dict[str, Any], project_root: Path)
     return results
 
 
+def extract_rust_function_scope(text: str, function_name: str) -> str | None:
+    match = re.search(rf"(?m)^\s*fn\s+{re.escape(function_name)}\s*\(", text)
+    if not match:
+        return None
+    open_brace = text.find("{", match.end())
+    if open_brace == -1:
+        return None
+
+    depth = 0
+    for index in range(open_brace, len(text)):
+        char = text[index]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return text[match.start() : index + 1]
+    return None
+
+
 def check_runtime_scenario_tests(manifest: dict[str, Any], project_root: Path) -> list[Result]:
     results: list[Result] = []
     for check in manifest.get("runtime_scenario_tests", []):
         target_file = str(check["file"])
         needles = list(check["needles"])
+        function_name = check.get("function")
         try:
             text = (project_root / target_file).read_text()
         except OSError as e:
             results.append(Result(check["id"], "runtime_scenario", 0, len(needles), str(e)))
             continue
-        passed = sum(1 for needle in needles if needle in text)
-        missing = [needle for needle in needles if needle not in text]
+        scope = text
+        scope_description = target_file
+        if function_name:
+            function_scope = extract_rust_function_scope(text, str(function_name))
+            if function_scope is None:
+                results.append(
+                    Result(
+                        check["id"],
+                        "runtime_scenario",
+                        0,
+                        len(needles),
+                        f"{target_file} missing function {function_name!r}",
+                    )
+                )
+                continue
+            scope = function_scope
+            scope_description = f"{target_file}::{function_name}"
+        passed = sum(1 for needle in needles if needle in scope)
+        missing = [needle for needle in needles if needle not in scope]
         results.append(
             Result(
                 check["id"],
                 "runtime_scenario",
                 passed,
                 len(needles),
-                "ok" if not missing else f"{target_file} missing {missing!r}",
+                "ok" if not missing else f"{scope_description} missing {missing!r}",
             )
         )
     return results
