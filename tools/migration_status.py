@@ -426,13 +426,16 @@ def print_text(status: MigrationStatus) -> None:
     )
     dirty = status.software.zmk_source.get("git_dirty")
     dirty_text = "unknown" if dirty is None else "yes" if dirty else "no"
+    dirty_paths = status.software.zmk_source.get("git_dirty_paths") or []
+    dirty_paths_text = ",".join(str(path) for path in dirty_paths) if dirty_paths else "none"
     print(
         "ZMK source: "
         f"path={status.software.zmk_source.get('keymap_path') or 'n/a'} "
         f"available={'yes' if status.software.zmk_source.get('available') else 'no'} "
         f"repo={status.software.zmk_source.get('repo_path') or 'n/a'} "
         f"git_commit={status.software.zmk_source.get('git_commit') or 'n/a'} "
-        f"dirty={dirty_text}"
+        f"dirty={dirty_text} "
+        f"dirty_paths={dirty_paths_text}"
     )
     print(
         "Software implementation: "
@@ -539,13 +542,16 @@ def print_markdown(status: MigrationStatus) -> None:
     print()
     dirty = status.software.zmk_source.get("git_dirty")
     dirty_text = "unknown" if dirty is None else "yes" if dirty else "no"
+    dirty_paths = status.software.zmk_source.get("git_dirty_paths") or []
+    dirty_paths_text = ",".join(str(path) for path in dirty_paths) if dirty_paths else "none"
     print(
         "ZMK source: "
         f"`{hardware_validation.markdown_escape(status.software.zmk_source.get('keymap_path') or 'n/a')}`; "
         f"available={'yes' if status.software.zmk_source.get('available') else 'no'}; "
         f"repo=`{hardware_validation.markdown_escape(status.software.zmk_source.get('repo_path') or 'n/a')}`; "
         f"git_commit=`{hardware_validation.markdown_escape(status.software.zmk_source.get('git_commit') or 'n/a')}`; "
-        f"dirty={dirty_text}"
+        f"dirty={dirty_text}; "
+        f"dirty_paths=`{hardware_validation.markdown_escape(dirty_paths_text)}`"
     )
     print()
     print(

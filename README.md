@@ -193,8 +193,8 @@ text and JSON reports also include coverage grouped by result kind, making it
 clear whether a regression is in RMK keymap/config checks, ZMK source
 inventory, DTS/Kconfig mirrors, Rust constants, or firmware code needles. The
 same reports include the ZMK keymap path, source availability, Git repository
-path, Git commit, and dirty state so a `100.00%` porting result is tied to the
-exact upstream checkout used as the source contract. The
+path, Git commit, dirty state, and dirty path list so a `100.00%` porting
+result is tied to the exact upstream checkout used as the source contract. The
 `--coverage-baseline tools/porting_coverage_baseline.toml` gate also freezes
 the current denominator, result-id inventory hash, and per-kind totals, so
 deleting or swapping coverage items cannot silently turn into a smaller

@@ -321,6 +321,10 @@ fn migration_dashboards_report_zmk_source_reference() {
         "ZMK source dirty state should be reported as a boolean or unknown"
     );
     assert!(
+        zmk_source["git_dirty_paths"].as_array().is_some(),
+        "ZMK source JSON should include the dirty path inventory"
+    );
+    assert!(
         zmk_source["repo_path"]
             .as_str()
             .is_some_and(|repo| !repo.is_empty()),
@@ -380,7 +384,8 @@ fn migration_dashboards_report_zmk_source_reference() {
     assert!(
         markdown_stdout.contains("ZMK source:")
             && markdown_stdout.contains("repo=`")
-            && markdown_stdout.contains("git_commit=`"),
+            && markdown_stdout.contains("git_commit=`")
+            && markdown_stdout.contains("dirty_paths=`"),
         "Markdown migration dashboard should show the ZMK source repo and commit"
     );
 }
@@ -445,14 +450,25 @@ finally:
     let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(parsed["clean"]["available"].as_bool(), Some(true));
     assert_eq!(parsed["clean"]["git_dirty"].as_bool(), Some(false));
+    assert_eq!(
+        parsed["clean"]["git_dirty_paths"].as_array().unwrap().len(),
+        0
+    );
     assert_eq!(parsed["clean_errors"].as_array().unwrap().len(), 0);
     assert_eq!(parsed["dirty"]["git_dirty"].as_bool(), Some(true));
+    assert_eq!(
+        parsed["dirty"]["git_dirty_paths"][0].as_str(),
+        Some("config/lalapadgen2.keymap")
+    );
     assert!(
         parsed["dirty_errors"]
             .as_array()
             .unwrap()
             .iter()
-            .any(|error| error.as_str().unwrap().contains("uncommitted changes")),
+            .any(|error| error
+                .as_str()
+                .unwrap()
+                .contains("config/lalapadgen2.keymap")),
         "dirty ZMK source should fail the clean-source gate"
     );
 }

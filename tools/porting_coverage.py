@@ -5623,6 +5623,13 @@ def git_output(cwd: Path, args: list[str]) -> str | None:
     return output.stdout.strip()
 
 
+def git_status_path(status_line: str) -> str:
+    if len(status_line) > 3 and status_line[2].isspace():
+        return status_line[3:]
+    parts = status_line.split(maxsplit=1)
+    return parts[1] if len(parts) == 2 else status_line
+
+
 def zmk_source_reference(zmk_keymap_path: Path) -> dict[str, Any]:
     keymap_path = zmk_keymap_path
     available = keymap_path.exists()
@@ -5632,6 +5639,7 @@ def zmk_source_reference(zmk_keymap_path: Path) -> dict[str, Any]:
         "repo_path": "",
         "git_commit": "",
         "git_dirty": None,
+        "git_dirty_paths": [],
     }
     if not available:
         return reference
@@ -5643,7 +5651,12 @@ def zmk_source_reference(zmk_keymap_path: Path) -> dict[str, Any]:
     reference["repo_path"] = repo_path
     reference["git_commit"] = git_output(git_cwd, ["rev-parse", "HEAD"]) or ""
     status = git_output(git_cwd, ["status", "--porcelain"])
-    reference["git_dirty"] = None if status is None else bool(status)
+    if status is None:
+        reference["git_dirty"] = None
+    else:
+        status_lines = status.splitlines()
+        reference["git_dirty"] = bool(status_lines)
+        reference["git_dirty_paths"] = [git_status_path(line) for line in status_lines]
     return reference
 
 
@@ -5661,8 +5674,15 @@ def zmk_source_clean_errors(zmk_source: dict[str, Any]) -> list[str]:
     if dirty is None:
         errors.append("ZMK source dirty state could not be resolved")
     elif dirty:
+        dirty_paths = zmk_source.get("git_dirty_paths") or []
+        dirty_suffix = (
+            f"; changed files: {', '.join(str(path) for path in dirty_paths)}"
+            if dirty_paths
+            else ""
+        )
         errors.append(
-            f"ZMK source repository has uncommitted changes: {zmk_source.get('repo_path') or 'n/a'}"
+            "ZMK source repository has uncommitted changes: "
+            f"{zmk_source.get('repo_path') or 'n/a'}{dirty_suffix}"
         )
     return errors
 
@@ -5723,13 +5743,16 @@ def print_text(
     print(f"Porting coverage: {passed}/{total} = {rate:.2f}%")
     dirty = zmk_source.get("git_dirty")
     dirty_text = "unknown" if dirty is None else "yes" if dirty else "no"
+    dirty_paths = zmk_source.get("git_dirty_paths") or []
+    dirty_paths_text = ",".join(str(path) for path in dirty_paths) if dirty_paths else "none"
     print(
         "ZMK source: "
         f"path={zmk_source.get('keymap_path') or 'n/a'} "
         f"available={'yes' if zmk_source.get('available') else 'no'} "
         f"repo={zmk_source.get('repo_path') or 'n/a'} "
         f"git_commit={zmk_source.get('git_commit') or 'n/a'} "
-        f"dirty={dirty_text}"
+        f"dirty={dirty_text} "
+        f"dirty_paths={dirty_paths_text}"
     )
     by_kind = coverage_by_kind(results)
     if by_kind:
