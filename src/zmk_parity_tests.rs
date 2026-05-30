@@ -143,10 +143,10 @@ fn complete_hardware_evidence_overlay(firmware_ref: &str) -> String {
         evidence.push_str(&format!("id = \"{check_id}\"\n"));
         evidence.push_str("status = \"validated\"\n");
         evidence.push_str("validated_at = \"2026-05-29\"\n");
-        evidence.push_str("tester = \"host parity test\"\n");
+        evidence.push_str("tester = \"hardware bench fixture\"\n");
         evidence.push_str(&format!("firmware_ref = \"{firmware_ref}\"\n"));
         evidence.push_str(&format!(
-            "artifact_or_notes = \"log: /tmp/lalapad-host-parity-{check_id}.txt; simulated host gate evidence for {check_id}; artifact {evidence_artifacts}; observed {evidence_needles}\"\n",
+            "artifact_or_notes = \"log: /tmp/lalapad-hardware-bench-{check_id}.txt; bench hardware evidence for {check_id}; artifact {evidence_artifacts}; observed {evidence_needles}\"\n",
         ));
     }
     evidence
@@ -3339,6 +3339,14 @@ validated_at = "2026-05-29"
 tester = "bench operator"
 firmware_ref = "35b3f1f"
 artifact_or_notes = "<photo/log/probe/Vial path or reading>; observed: right, P1_11 RDY, D6, active-low, no-touch high, touch-event low"
+
+[[evidence]]
+id = "ble_split_pairing_reconnect"
+status = "validated"
+validated_at = "2026-05-29"
+tester = "CI host unit test"
+firmware_ref = "35b3f1f"
+artifact_or_notes = "video: /tmp/ble-split.mp4; BLE trace: /tmp/ble-split.pcap; host test output from CI; right central left peripheral BLE re-pair reconnect right first left Q left A right Y right H"
 "#;
     let path = write_temp_file("hardware-validation-placeholder-evidence", evidence);
     let output = run_hardware_validation(&["--evidence", path.to_str().unwrap(), "--json"]);
@@ -3416,6 +3424,22 @@ artifact_or_notes = "<photo/log/probe/Vial path or reading>; observed: right, P1
         "unresolved copy-aid placeholder should not count even if it includes a concrete keyword and all required observations: {errors:?}"
     );
     assert!(
+        errors.iter().any(|error| {
+            error.contains(
+                "ble_split_pairing_reconnect: tester must identify a real hardware tester or bench",
+            )
+        }),
+        "host unit test runner should not count as a real hardware tester: {errors:?}"
+    );
+    assert!(
+        errors.iter().any(|error| {
+            error.contains(
+                "ble_split_pairing_reconnect: artifact_or_notes must describe real hardware evidence",
+            )
+        }),
+        "host test output should not count even when it names every observation and artifact: {errors:?}"
+    );
+    assert!(
         !require_output.status.success(),
         "placeholder hardware evidence unexpectedly passed --require-classified"
     );
@@ -3431,6 +3455,14 @@ validated_at = "2026-05-29"
 tester = "bench operator"
 firmware_ref = "35b3f1f"
 artifact_or_notes = "scope: /tmp/right-rdy.csv; right P1_11 RDY D6 active-low touch-event low <0.4V and no-touch high >2.8V."
+
+[[evidence]]
+id = "charge_indicator_pins"
+status = "validated"
+validated_at = "2026-05-29"
+tester = "bench operator"
+firmware_ref = "35b3f1f"
+artifact_or_notes = "photo: /tmp/charge.jpg; multimeter: /tmp/charge.csv; right P0_17 charge-state active-low USB charging low not charging high P0_10 charge LED LED on low LED off high measured while a dummy load was attached."
 "#;
     let path = write_temp_file("hardware-validation-voltage-evidence", evidence);
     let output = run_hardware_validation(&["--evidence", path.to_str().unwrap(), "--json"]);
@@ -3443,7 +3475,7 @@ artifact_or_notes = "scope: /tmp/right-rdy.csv; right P1_11 RDY D6 active-low to
         String::from_utf8_lossy(&output.stderr)
     );
     let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(parsed["validated"].as_i64(), Some(1));
+    assert_eq!(parsed["validated"].as_i64(), Some(2));
     assert_eq!(parsed["classified"].as_bool(), Some(true));
     assert_eq!(parsed["errors"].as_array().unwrap().len(), 0);
 }

@@ -84,6 +84,13 @@ PLACEHOLDER_NOTE_MARKER_RE = re.compile(
     r"\b(todo|tbd|placeholder|unknown)\b",
     re.IGNORECASE,
 )
+NON_HARDWARE_EVIDENCE_MARKER_RE = re.compile(
+    r"\b(simulated|simulation|synthetic|fake|mock)\b|"
+    r"\bdummy\s+(?:artifact|data|evidence|result|run|test)\b|"
+    r"\bhost[- ]?only\b|"
+    r"\b(?:ci\s+)?host\s+(?:(?:unit|integration|parity|regression)\s+)?test\b",
+    re.IGNORECASE,
+)
 COPY_AID_PLACEHOLDER_RE = re.compile(
     re.escape("<photo/log/probe/Vial path or reading>"),
     re.IGNORECASE,
@@ -229,6 +236,8 @@ def validate_validated_evidence(check_id: str, check: dict[str, Any]) -> list[st
 
     if tester and is_placeholder_value(tester):
         errors.append(f"{check_id}: tester must identify the person or bench that ran the check")
+    elif tester and NON_HARDWARE_EVIDENCE_MARKER_RE.search(tester):
+        errors.append(f"{check_id}: tester must identify a real hardware tester or bench")
 
     if firmware_ref and is_placeholder_value(firmware_ref):
         errors.append(f"{check_id}: firmware_ref must be the actual flashed tag or commit")
@@ -237,6 +246,8 @@ def validate_validated_evidence(check_id: str, check: dict[str, Any]) -> list[st
         errors.append(f"{check_id}: artifact_or_notes must describe the observed evidence")
     elif artifact_or_notes and PLACEHOLDER_NOTE_MARKER_RE.search(artifact_or_notes):
         errors.append(f"{check_id}: artifact_or_notes must not contain placeholder markers")
+    elif artifact_or_notes and NON_HARDWARE_EVIDENCE_MARKER_RE.search(artifact_or_notes):
+        errors.append(f"{check_id}: artifact_or_notes must describe real hardware evidence")
     elif artifact_or_notes and COPY_AID_PLACEHOLDER_RE.search(artifact_or_notes):
         errors.append(f"{check_id}: artifact_or_notes must not contain placeholder markers")
     elif artifact_or_notes and artifact_or_notes.strip().lower() in GENERIC_ARTIFACT_VALUES:

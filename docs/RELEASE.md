@@ -72,7 +72,8 @@ that are missing the generated `metadata.hardware_check_inventory_sha256`, or
 whose hash no longer matches the current hardware validation manifest. Each
 validated note must also mention the per-check evidence artifact types listed by
 `evidence_artifacts`, such as `video`, `scope`, `Vial screenshot`, or
-`key-event log`. `cargo make hardware-validation-session-current` pre-fills
+`key-event log`. Simulated, synthetic, mock, or host-only output is not valid
+hardware evidence. `cargo make hardware-validation-session-current` pre-fills
 that hash in the local evidence overlay generated for a clean current-ref bench
 session. Direct
 `tools/migration_status.py --require-hardware-validated` use also requires

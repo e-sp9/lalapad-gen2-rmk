@@ -307,9 +307,11 @@ Validated evidence must include `validated_at`, `tester`, `firmware_ref`, and
 not in the future. `firmware_ref` is compared as an exact string, usually a
 release tag or commit hash for the central/peripheral firmware pair flashed
 during the test; placeholders or moving refs such as `main`, `latest`, or
-`HEAD` are rejected. `artifact_or_notes` must contain a concrete photo, log,
-probe, Vial observation, or similar measured evidence note, and it must mention
-the check-specific observation terms declared by `evidence_needles`. Use
+`HEAD` are rejected. Simulated, synthetic, mock, or host-only output cannot be
+marked as validated hardware evidence. `artifact_or_notes` must contain a
+concrete photo, log, probe, Vial observation, or similar measured evidence note,
+and it must mention the check-specific observation terms declared by
+`evidence_needles`. Use
 `--require-firmware-ref <tag-or-commit>` to reject stale validated evidence;
 combine it with `--require-validated` when a release needs all hardware checks
 proven for that exact firmware. The `--evidence-template`

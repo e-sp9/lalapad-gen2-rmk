@@ -22,8 +22,9 @@
 # by `evidence_needles` for that check. Set firmware_ref to the release tag,
 # commit hash, or other immutable firmware identifier that was flashed during
 # the hardware test. Do not use placeholders or moving refs such as
-# main/latest/HEAD. validated_at must be a real YYYY-MM-DD date that is not in
-# the future.
+# main/latest/HEAD, and do not mark simulated, synthetic, mock, or host-only
+# output as validated hardware evidence. validated_at must be a real YYYY-MM-DD
+# date that is not in the future.
 
 # [metadata]
 # hardware_check_inventory_sha256 = "current tools/hardware_validation_manifest.toml inventory hash"
