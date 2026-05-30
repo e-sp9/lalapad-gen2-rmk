@@ -79,6 +79,19 @@ fn write_temp_file(name: &str, contents: &str) -> std::path::PathBuf {
     path
 }
 
+fn evidence_artifact_fixture_bytes(extension: &str) -> Vec<u8> {
+    match extension {
+        "jpg" | "jpeg" => b"\xff\xd8\xff\xe0hardware jpeg fixture\n".to_vec(),
+        "mp4" | "mov" => b"\x00\x00\x00\x18ftypisomhardware mp4 fixture\n".to_vec(),
+        "pcap" => b"\xd4\xc3\xb2\xa1hardware pcap fixture\n".to_vec(),
+        "pcapng" => b"\x0a\x0d\x0d\x0ahardware pcapng fixture\n".to_vec(),
+        "png" => b"\x89PNG\r\n\x1a\nhardware png fixture\n".to_vec(),
+        "webm" | "mkv" => b"\x1a\x45\xdf\xa3hardware webm fixture\n".to_vec(),
+        "webp" => b"RIFF\x10\x00\x00\x00WEBPhardware webp fixture\n".to_vec(),
+        _ => format!("hardware evidence fixture with .{extension} extension\n").into_bytes(),
+    }
+}
+
 fn makefile_task_block(task: &str) -> &str {
     let marker = format!("[tasks.{task}]");
     let start = MAKEFILE_TOML
@@ -174,7 +187,7 @@ fn complete_hardware_evidence_overlay_inner(
                         std::fs::create_dir_all(full_artifact_path.parent().unwrap()).unwrap();
                         std::fs::write(
                             &full_artifact_path,
-                            format!("hardware evidence fixture for {check_id} {artifact_name}\n"),
+                            evidence_artifact_fixture_bytes(extension),
                         )
                         .unwrap();
                         artifact_path
@@ -3699,8 +3712,51 @@ artifact_or_notes = "log: hardware-evidence/right-trackpad.log; video observatio
         "unrelated artifact path should be rejected unless artifact_or_notes names it"
     );
 
+    let spoofed_video_artifact = artifact_root.join("hardware-evidence/spoofed-trackpad.mp4");
+    std::fs::write(&spoofed_video_artifact, "text file with mp4 suffix\n").unwrap();
+    let spoofed_video_evidence = wrong_kind_evidence
+        .replace(
+            "hardware-evidence/right-trackpad.log",
+            "hardware-evidence/spoofed-trackpad.mp4",
+        )
+        .replace(
+            "log: hardware-evidence/spoofed-trackpad.mp4",
+            "video: hardware-evidence/spoofed-trackpad.mp4",
+        );
+    let spoofed_video_path = write_temp_file(
+        "hardware-validation-evidence-paths-spoofed-video",
+        &spoofed_video_evidence,
+    );
+    let spoofed_video_json = run_hardware_validation(&[
+        "--evidence",
+        spoofed_video_path.to_str().unwrap(),
+        "--evidence-artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--json",
+    ]);
+    assert!(
+        spoofed_video_json.status.success(),
+        "plain hardware validation report should not hard-fail for spoofed media evidence without require flags\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&spoofed_video_json.stdout),
+        String::from_utf8_lossy(&spoofed_video_json.stderr)
+    );
+    let spoofed_video_parsed: serde_json::Value =
+        serde_json::from_slice(&spoofed_video_json.stdout).unwrap();
+    assert_eq!(spoofed_video_parsed["validated"].as_i64(), Some(0));
+    assert!(
+        spoofed_video_parsed["errors"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|error| error
+                .as_str()
+                .unwrap()
+                .contains(".mp4 file has invalid MP4/MOV signature")),
+        "spoofed video evidence should be rejected by media signature"
+    );
+
     let video_artifact = artifact_root.join("hardware-evidence/right-trackpad.mp4");
-    std::fs::write(&video_artifact, "right trackpad video fixture\n").unwrap();
+    std::fs::write(&video_artifact, evidence_artifact_fixture_bytes("mp4")).unwrap();
     let video_evidence = wrong_kind_evidence.replace(
         "hardware-evidence/right-trackpad.log",
         "hardware-evidence/right-trackpad.mp4",
@@ -3723,7 +3779,7 @@ artifact_or_notes = "log: hardware-evidence/right-trackpad.log; video observatio
     assert_eq!(video_parsed["validated"].as_i64(), Some(1));
 
     let charge_artifact = artifact_root.join("hardware-evidence/charge.jpg");
-    std::fs::write(&charge_artifact, "charge photo fixture\n").unwrap();
+    std::fs::write(&charge_artifact, evidence_artifact_fixture_bytes("jpg")).unwrap();
     let charge_photo_only_evidence = r#"
 [[evidence]]
 id = "charge_indicator_pins"
@@ -3840,6 +3896,7 @@ artifact_or_notes = "photo and multimeter: hardware-evidence/charge.jpg; right P
     let _ = std::fs::remove_file(&empty_path);
     let _ = std::fs::remove_file(&wrong_kind_path);
     let _ = std::fs::remove_file(&unrelated_video_path);
+    let _ = std::fs::remove_file(&spoofed_video_path);
     let _ = std::fs::remove_file(&video_path);
     let _ = std::fs::remove_file(&charge_photo_only_path);
     let _ = std::fs::remove_file(&charge_duplicate_path);

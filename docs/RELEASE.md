@@ -83,6 +83,9 @@ check cannot pass final validation with only a text log attached. Every
 retained file must also be named by path or basename in `artifact_or_notes`,
 and separate required artifact types must have separate retained files; a
 duplicated resolved path is rejected instead of counted twice.
+Media and trace file suffixes are checked against lightweight signatures, so
+renaming text to `.mp4`, `.png`, `.jpg`, `.webp`, `.pcap`, or `.pcapng` is not
+accepted as retained evidence.
 Use the generated `hardware-evidence/<check-id>-<artifact-type>.<ext>` path
 suggestions in the evidence template/checklist unless the bench uses an
 equivalent retained path that is also named in `artifact_or_notes`; the

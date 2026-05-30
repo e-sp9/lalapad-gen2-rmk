@@ -445,6 +445,9 @@ satisfied by only attaching a `.log` file. Each retained file must be named by
 path or basename in `artifact_or_notes`, and separate required artifact types
 must have separate retained files; duplicating the same resolved file path is
 reported as invalid evidence rather than a second artifact.
+Media and trace suffixes are checked against lightweight file signatures, so a
+text file renamed to `.mp4`, `.png`, `.jpg`, `.webp`, `.pcap`, or `.pcapng`
+does not satisfy retained hardware evidence.
 The generated evidence template and checklist now include deterministic
 `hardware-evidence/<check-id>-<artifact-type>.<ext>` suggestions for the
 default `EVIDENCE_ARTIFACT_ROOT=.` and copy-aid notes that name those files.

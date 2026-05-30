@@ -138,6 +138,60 @@ ARTIFACT_PATH_TEMPLATE_EXTENSIONS = {
     "vial screenshot": "png",
     "video": "mp4",
 }
+
+
+def artifact_file_signature_error(
+    check_id: str,
+    index: int,
+    artifact_path: str,
+    resolved_path: Path,
+) -> str | None:
+    suffix = resolved_path.suffix.lower()
+    signature_checks = {
+        ".jpg": ("JPEG", lambda data: data.startswith(b"\xff\xd8\xff")),
+        ".jpeg": ("JPEG", lambda data: data.startswith(b"\xff\xd8\xff")),
+        ".mkv": ("Matroska/WebM", lambda data: data.startswith(b"\x1a\x45\xdf\xa3")),
+        ".mov": ("MP4/MOV", lambda data: len(data) >= 12 and data[4:8] == b"ftyp"),
+        ".mp4": ("MP4/MOV", lambda data: len(data) >= 12 and data[4:8] == b"ftyp"),
+        ".pcap": (
+            "pcap",
+            lambda data: data.startswith(
+                (
+                    b"\xd4\xc3\xb2\xa1",
+                    b"\xa1\xb2\xc3\xd4",
+                    b"\x4d\x3c\xb2\xa1",
+                    b"\xa1\xb2\x3c\x4d",
+                )
+            ),
+        ),
+        ".pcapng": ("pcapng", lambda data: data.startswith(b"\x0a\x0d\x0d\x0a")),
+        ".png": ("PNG", lambda data: data.startswith(b"\x89PNG\r\n\x1a\n")),
+        ".webm": ("Matroska/WebM", lambda data: data.startswith(b"\x1a\x45\xdf\xa3")),
+        ".webp": (
+            "WebP",
+            lambda data: len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP",
+        ),
+    }
+    check = signature_checks.get(suffix)
+    if check is None:
+        return None
+    label, predicate = check
+    try:
+        with resolved_path.open("rb") as f:
+            data = f.read(32)
+    except OSError as exc:
+        return (
+            f"{check_id}: artifact_paths[{index}] file is not readable: "
+            f"{artifact_path}: {exc}"
+        )
+    if not predicate(data):
+        return (
+            f"{check_id}: artifact_paths[{index}] {suffix} file has invalid "
+            f"{label} signature: {artifact_path}"
+        )
+    return None
+
+
 @dataclass
 class HardwareValidationSummary:
     total: int
@@ -469,6 +523,15 @@ def validate_evidence_artifact_paths(
                 f"{check_id}: artifact_paths[{index}] must be referenced by path or basename "
                 "in artifact_or_notes"
             )
+            continue
+        signature_error = artifact_file_signature_error(
+            check_id,
+            index,
+            artifact_path,
+            resolved_path,
+        )
+        if signature_error is not None:
+            errors.append(signature_error)
             continue
         seen_resolved_paths[resolved_path] = index
         resolved_paths.append((artifact_path, resolved_path))
