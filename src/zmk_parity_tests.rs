@@ -2068,23 +2068,6 @@ fn hardware_validation_manifest_requires_observation_needles_for_each_check() {
     let manifest = hardware_validation_manifest_toml();
     let checks = manifest["checks"].as_array().unwrap();
     assert_eq!(checks.len(), 12);
-    for (check_id, side) in [
-        ("iqs9151_right_i2c_identity", "right"),
-        ("iqs9151_left_i2c_identity", "left"),
-    ] {
-        let check = checks
-            .iter()
-            .find(|check| check["id"].as_str() == Some(check_id))
-            .unwrap_or_else(|| panic!("{check_id} is missing"));
-        assert!(
-            check["evidence_needles"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .any(|needle| needle.as_str() == Some(side)),
-            "{check_id} should require side-specific evidence"
-        );
-    }
     for check in checks {
         let check_id = check["id"].as_str().unwrap();
         let needles = check["evidence_needles"]
@@ -2100,6 +2083,15 @@ fn hardware_validation_manifest_requires_observation_needles_for_each_check() {
                 .all(|needle| needle.as_str().is_some_and(|text| !text.trim().is_empty())),
             "{check_id} evidence_needles should be non-empty strings"
         );
+        if let Some(side) = check["side"]
+            .as_str()
+            .filter(|side| ["right", "left"].contains(side))
+        {
+            assert!(
+                needles.iter().any(|needle| needle.as_str() == Some(side)),
+                "{check_id} should require side-specific evidence"
+            );
+        }
     }
 }
 
