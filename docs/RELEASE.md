@@ -81,6 +81,12 @@ The retained file types must match the required artifact types; a video-only
 check cannot pass final validation with only a text log attached. Every
 retained file must also be named by path or basename in `artifact_or_notes`,
 and separate required artifact types must have separate retained files.
+Use the generated `hardware-evidence/<check-id>-<artifact-type>.<ext>` path
+suggestions in the evidence template/checklist unless the bench uses an
+equivalent retained path that is also named in `artifact_or_notes`; the
+generated suggestions assume the default `EVIDENCE_ARTIFACT_ROOT=.`. The
+generated observation placeholder must be replaced with real bench output
+before an evidence entry can count as validated.
 Simulated, synthetic, mock, or host-only output is not valid hardware evidence.
 `cargo make hardware-validation-session-current` pre-fills
 that hash in the local evidence overlay generated for a clean current-ref bench

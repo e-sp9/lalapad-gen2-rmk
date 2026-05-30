@@ -440,6 +440,12 @@ check's `evidence_artifacts`; for example, a `video` requirement cannot be
 satisfied by only attaching a `.log` file. Each retained file must be named by
 path or basename in `artifact_or_notes`, and separate required artifact types
 must have separate retained files.
+The generated evidence template and checklist now include deterministic
+`hardware-evidence/<check-id>-<artifact-type>.<ext>` suggestions for the
+default `EVIDENCE_ARTIFACT_ROOT=.` and copy-aid notes that name those files.
+The observation placeholder in the copy aid is intentionally rejected until it
+is replaced with real bench output, so the final gate can bind each counted
+hardware observation to a retained artifact path.
 
 For evidence captured from the current clean commit, the current-ref variant
 derives the exact tag or short commit automatically and refuses tracked or

@@ -93,7 +93,8 @@ NON_HARDWARE_EVIDENCE_MARKER_RE = re.compile(
     re.IGNORECASE,
 )
 COPY_AID_PLACEHOLDER_RE = re.compile(
-    re.escape("<photo/log/probe/Vial path or reading>"),
+    re.escape("<photo/log/probe/Vial path or reading>")
+    + r"|<replace with actual bench observation[^>]*>",
     re.IGNORECASE,
 )
 SHA256_RE = re.compile(r"[0-9a-f]{64}", re.IGNORECASE)
@@ -116,6 +117,16 @@ ARTIFACT_PATH_SUFFIXES = {
     "scope": SCOPE_SUFFIXES,
     "vial screenshot": IMAGE_SUFFIXES,
     "video": VIDEO_SUFFIXES,
+}
+ARTIFACT_PATH_TEMPLATE_EXTENSIONS = {
+    "ble trace": "pcapng",
+    "key-event log": "log",
+    "log": "log",
+    "multimeter": "log",
+    "photo": "jpg",
+    "scope": "png",
+    "vial screenshot": "png",
+    "video": "mp4",
 }
 
 
@@ -810,17 +821,53 @@ def evidence_needles_text(check: dict[str, Any]) -> str:
     return ", ".join(str(needle) for needle in check.get("evidence_needles", []))
 
 
+def slugify_artifact_path_part(value: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", value.strip().lower()).strip("-")
+    return slug or "artifact"
+
+
+def suggested_artifact_paths(check: dict[str, Any]) -> list[str]:
+    check_id = slugify_artifact_path_part(str(check.get("id", "")))
+    evidence_artifacts = check.get("evidence_artifacts", [])
+    if not isinstance(evidence_artifacts, list):
+        return []
+    paths: list[str] = []
+    used_stems: set[str] = set()
+    for artifact in evidence_artifacts:
+        artifact_name = str(artifact).strip()
+        extension = ARTIFACT_PATH_TEMPLATE_EXTENSIONS.get(artifact_name.lower())
+        if extension is None:
+            continue
+        artifact_slug = slugify_artifact_path_part(artifact_name)
+        stem = f"{check_id}-{artifact_slug}"
+        while stem in used_stems:
+            stem = f"{stem}-artifact"
+        used_stems.add(stem)
+        paths.append(f"hardware-evidence/{stem}.{extension}")
+    return paths
+
+
+def toml_string_array(values: list[str]) -> str:
+    return "[" + ", ".join(toml_string(value) for value in values) + "]"
+
+
 def artifact_or_notes_copy_hint(check: dict[str, Any], artifact_prefix: str = "") -> str:
     required_observations = evidence_needles_text(check)
     required_artifacts = evidence_artifacts_text(check)
+    artifact_paths = suggested_artifact_paths(check)
     parts = []
     if artifact_prefix:
         parts.append(artifact_prefix.strip().rstrip(";").strip())
-    parts.append("<photo/log/probe/Vial path or reading>")
+    if artifact_paths:
+        parts.append(f"files: {', '.join(artifact_paths)}")
+    else:
+        parts.append("<photo/log/probe/Vial path or reading>")
     if required_artifacts:
         parts.append(f"artifact: {required_artifacts}")
     if required_observations:
-        parts.append(f"observed: {required_observations}")
+        parts.append(
+            f"observed: <replace with actual bench observation covering: {required_observations}>"
+        )
     return "; ".join(parts)
 
 
@@ -941,6 +988,13 @@ def as_evidence_template(
             lines.append('tester = ""')
             lines.append(f"firmware_ref = {toml_string(firmware_ref)}")
             lines.append("artifact_paths = []")
+            artifact_paths = suggested_artifact_paths(check)
+            if artifact_paths:
+                lines.append(
+                    "# Suggested artifact_paths after retaining evidence files "
+                    "(relative to EVIDENCE_ARTIFACT_ROOT=.):"
+                )
+                lines.extend(toml_comment(f"suggested: {toml_string_array(artifact_paths)}"))
             artifact_prefix = (
                 f"firmware artifact pair_sha256 {artifact_pair_sha256}; "
                 if artifact_pair_sha256
@@ -1111,9 +1165,18 @@ def as_checklist(
                 lines.append(f"    - firmware_ref: {firmware_ref}")
             else:
                 lines.append("    - firmware_ref: flashed immutable tag or commit")
-            lines.append(
-                "    - artifact_paths: captured files named in artifact_or_notes and matching required artifact types"
+            artifact_paths = suggested_artifact_paths(check)
+            artifact_paths_hint = (
+                toml_string_array(artifact_paths)
+                if artifact_paths
+                else "captured files named in artifact_or_notes and matching required artifact types"
             )
+            lines.append(f"    - artifact_paths: {artifact_paths_hint}")
+            if artifact_paths:
+                lines.append(
+                    "    - artifact_paths root: suggested paths are relative to "
+                    "EVIDENCE_ARTIFACT_ROOT=. (default)"
+                )
             lines.append(
                 "    - artifact_or_notes: concrete photo/log/probe/Vial observation "
                 f"that mentions artifacts [{evidence_artifacts_text(check)}] and "

@@ -3068,6 +3068,51 @@ artifact_or_notes = "log: /tmp/right-i2c.log; right P0_04 SDA and P0_05 SCL show
     assert!(stdout.contains("Artifact paths"));
     assert!(stdout.contains("hardware-evidence/right-i2c.log"));
 
+    let copy_aid_artifact =
+        artifact_root.join("hardware-evidence/iqs9151-right-i2c-identity-log.log");
+    std::fs::write(&copy_aid_artifact, "dummy right i2c hardware log\n").unwrap();
+    let verbatim_copy_aid_evidence = r#"
+[[evidence]]
+id = "iqs9151_right_i2c_identity"
+status = "validated"
+validated_at = "2026-05-29"
+tester = "hardware bench"
+firmware_ref = "35b3f1f"
+artifact_paths = ["hardware-evidence/iqs9151-right-i2c-identity-log.log"]
+artifact_or_notes = "files: hardware-evidence/iqs9151-right-i2c-identity-log.log; artifact: log; observed: <replace with actual bench observation covering: right, P0_04 SDA, P0_05 SCL, I2C activity, 0x56, product-number register, 0x1000, 0x09bc>"
+"#;
+    let verbatim_copy_aid_path = write_temp_file(
+        "hardware-validation-evidence-paths-verbatim-copy-aid",
+        verbatim_copy_aid_evidence,
+    );
+    let verbatim_copy_aid_json = run_hardware_validation(&[
+        "--evidence",
+        verbatim_copy_aid_path.to_str().unwrap(),
+        "--evidence-artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--json",
+    ]);
+    assert!(
+        verbatim_copy_aid_json.status.success(),
+        "plain hardware validation report should not hard-fail for an unreplaced copy aid without require flags\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&verbatim_copy_aid_json.stdout),
+        String::from_utf8_lossy(&verbatim_copy_aid_json.stderr)
+    );
+    let verbatim_copy_aid_parsed: serde_json::Value =
+        serde_json::from_slice(&verbatim_copy_aid_json.stdout).unwrap();
+    assert_eq!(verbatim_copy_aid_parsed["validated"].as_i64(), Some(0));
+    assert!(
+        verbatim_copy_aid_parsed["errors"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|error| error
+                .as_str()
+                .unwrap()
+                .contains("artifact_or_notes must not contain placeholder markers")),
+        "verbatim generated copy aid should be rejected until the bench observation is replaced"
+    );
+
     let missing_evidence = evidence.replace(
         "hardware-evidence/right-i2c.log",
         "hardware-evidence/missing.log",
@@ -3372,6 +3417,7 @@ artifact_or_notes = "photo and multimeter: hardware-evidence/charge.jpg; right P
     assert_eq!(charge_complete_parsed["validated"].as_i64(), Some(1));
 
     let _ = std::fs::remove_file(&path);
+    let _ = std::fs::remove_file(&verbatim_copy_aid_path);
     let _ = std::fs::remove_file(&missing_path);
     let _ = std::fs::remove_file(&wrong_kind_path);
     let _ = std::fs::remove_file(&unrelated_video_path);
@@ -3913,6 +3959,7 @@ fn hardware_validation_can_generate_complete_evidence_template() {
     assert_eq!(template_entries.len(), checks.len());
     for check in checks {
         let check_id = check["id"].as_str().unwrap();
+        let suggested_check_id = check_id.replace('_', "-");
         let entry = template_entries
             .iter()
             .find(|entry| entry["id"].as_str() == Some(check_id))
@@ -3930,6 +3977,18 @@ fn hardware_validation_can_generate_complete_evidence_template() {
         assert!(
             stdout.contains("artifact_paths = []"),
             "evidence template should include artifact_paths placeholders"
+        );
+        assert!(
+            stdout.contains("# Suggested artifact_paths after retaining evidence files"),
+            "evidence template should include per-check artifact path copy aids"
+        );
+        assert!(
+            stdout.contains(&format!("hardware-evidence/{suggested_check_id}-")),
+            "evidence template should include suggested retained artifact paths for {check_id}"
+        );
+        assert!(
+            !stdout.contains("# artifact_paths = [\"hardware-evidence/"),
+            "evidence template should not invite duplicate artifact_paths TOML keys"
         );
         assert!(
             stdout.contains(check["requirement"].as_str().unwrap()),
@@ -3952,10 +4011,8 @@ fn hardware_validation_can_generate_complete_evidence_template() {
             "evidence template should include required evidence artifacts for {check_id}"
         );
         assert!(
-            stdout.contains(
-                "# artifact_or_notes = \"<photo/log/probe/Vial path or reading>; artifact:"
-            ),
-            "evidence template copy aid should preserve the empty artifact_or_notes field while showing required artifact text"
+            stdout.contains("# artifact_or_notes = \"files: hardware-evidence/"),
+            "evidence template copy aid should name retained artifact paths while showing required artifact text"
         );
         assert!(
             stdout.contains("; observed:"),
@@ -4038,6 +4095,7 @@ fn hardware_validation_can_generate_bench_checklist() {
     assert!(stdout.contains("## vial"));
     for check in checks {
         let check_id = check["id"].as_str().unwrap();
+        let suggested_check_id = check_id.replace('_', "-");
         assert!(
             stdout.contains(&format!("- [ ] `{check_id}`")),
             "checklist should include checkbox for {check_id}"
@@ -4063,10 +4121,10 @@ fn hardware_validation_can_generate_bench_checklist() {
             "checklist should include firmware_ref capture guidance"
         );
         assert!(
-            stdout.contains(
-                "artifact_paths: captured files named in artifact_or_notes and matching required artifact types"
-            ),
-            "checklist should include artifact_paths capture guidance"
+            stdout.contains(&format!(
+                "artifact_paths: [\"hardware-evidence/{suggested_check_id}-"
+            )),
+            "checklist should include suggested retained artifact paths for {check_id}"
         );
         assert!(
             stdout.contains(
@@ -4075,8 +4133,7 @@ fn hardware_validation_can_generate_bench_checklist() {
             "checklist should include artifact_or_notes capture guidance"
         );
         assert!(
-            stdout
-                .contains("copy aid after pass: <photo/log/probe/Vial path or reading>; artifact:"),
+            stdout.contains("copy aid after pass: files: hardware-evidence/"),
             "checklist should include a copy aid with required observation terms"
         );
         for artifact in check["evidence_artifacts"].as_array().unwrap() {
@@ -4185,9 +4242,9 @@ fn hardware_validation_evidence_template_can_prefill_firmware_ref() {
     );
     assert!(
         stdout.contains(&format!(
-            "# artifact_or_notes = \"firmware artifact pair_sha256 {pair_sha256}; <photo/log/probe/Vial path or reading>; artifact:"
+            "# artifact_or_notes = \"firmware artifact pair_sha256 {pair_sha256}; files: hardware-evidence/"
         )),
-        "artifact-bound template should include pair SHA in the copy aid"
+        "artifact-bound template should include pair SHA and suggested evidence paths in the copy aid"
     );
 
     let artifact_bound_output = run_hardware_validation(&[

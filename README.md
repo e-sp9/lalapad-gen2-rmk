@@ -393,6 +393,12 @@ the check's required artifacts, so a `video` check needs a video file, a
 `Vial screenshot` check needs an image file, and a `BLE trace` check needs a
 trace or log file. Each retained file must be named by path or basename in
 `artifact_or_notes`, and separate required artifact types need separate files.
+The generated evidence template and bench checklist include deterministic
+`hardware-evidence/<check-id>-<artifact-type>.<ext>` path suggestions for each
+required artifact, assuming the default `EVIDENCE_ARTIFACT_ROOT=.`. The copy
+aid includes those paths so the final gate can confirm the retained files are
+actually referenced by the bench note, but its observation placeholder must be
+replaced with real bench output before the check can count as validated.
 For the combined final gate, run the cargo-make task so the RMK runtime
 scenario suite runs before the migration dashboard is evaluated:
 
