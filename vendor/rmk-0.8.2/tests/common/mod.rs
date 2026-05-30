@@ -55,6 +55,8 @@ pub async fn run_key_sequence_test<'a, const ROW: usize, const COL: usize, const
 
     KEY_EVENT_CHANNEL.clear();
     KEYBOARD_REPORT_CHANNEL.clear();
+    *REPORTS_DONE.lock().await = false;
+    *SEQ_SEND_DONE.lock().await = false;
     static MAX_TEST_TIMEOUT: Duration = Duration::from_secs(5);
 
     join!(

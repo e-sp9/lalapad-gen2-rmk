@@ -7297,10 +7297,10 @@ with tempfile.TemporaryDirectory() as tempdir:
 
 with tempfile.TemporaryDirectory() as tempdir:
     root = Path(tempdir)
-    (root / "Makefile.toml").write_text(
-        Path("Makefile.toml").read_text().replace('env = { RUSTFLAGS = "-Dwarnings" }\n', '', 3),
-        encoding="utf-8",
-    )
+    makefile = Path("Makefile.toml").read_text()
+    makefile = makefile.replace('env = { RUSTFLAGS = "-Dwarnings" }\n', '', 1)
+    makefile = makefile.replace('env = { RUSTFLAGS = "-Dwarnings", RUST_TEST_THREADS = "1" }\n', '', 2)
+    (root / "Makefile.toml").write_text(makefile, encoding="utf-8")
     bad_warning_flags = pc.check_makefile_task_invariants(manifest, root)
 
 with tempfile.TemporaryDirectory() as tempdir:
@@ -7341,10 +7341,26 @@ with tempfile.TemporaryDirectory() as tempdir:
 with tempfile.TemporaryDirectory() as tempdir:
     root = Path(tempdir)
     (root / "Makefile.toml").write_text(
+        Path("Makefile.toml").read_text().replace("  -- --test-threads=1", "  -- --nocapture", 1),
+        encoding="utf-8",
+    )
+    bad_rmk_behavior_serial_task = pc.check_makefile_task_invariants(manifest, root)
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    (root / "Makefile.toml").write_text(
         Path("Makefile.toml").read_text().replace("--test keyboard_lalapad_zmk_scenarios_test", "--test keyboard_morse_test", 1),
         encoding="utf-8",
     )
     bad_rmk_zmk_scenario_task = pc.check_makefile_task_invariants(manifest, root)
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    (root / "Makefile.toml").write_text(
+        Path("Makefile.toml").read_text().replace("  -- --test-threads=1", "  -- --nocapture", 2),
+        encoding="utf-8",
+    )
+    bad_rmk_zmk_scenario_serial_task = pc.check_makefile_task_invariants(manifest, root)
 
 with tempfile.TemporaryDirectory() as tempdir:
     root = Path(tempdir)
@@ -7423,7 +7439,9 @@ print(json.dumps({
     "bad_family": pack(bad_family),
     "bad_uf2_gate": pack(bad_uf2_gate),
     "bad_rmk_behavior_task": pack(bad_rmk_behavior_task),
+    "bad_rmk_behavior_serial_task": pack(bad_rmk_behavior_serial_task),
     "bad_rmk_zmk_scenario_task": pack(bad_rmk_zmk_scenario_task),
+    "bad_rmk_zmk_scenario_serial_task": pack(bad_rmk_zmk_scenario_serial_task),
     "bad_artifact_manifest_task": pack(bad_artifact_manifest_task),
     "bad_current_artifact_manifest_task": pack(bad_current_artifact_manifest_task),
     "bad_clean_current_task": pack(bad_clean_current_task),
@@ -7538,8 +7556,16 @@ print(json.dumps({
             result["message"]
                 .as_str()
                 .unwrap()
-                .contains("env missing required values ['RUSTFLAGS=-Dwarnings']")
+                .contains("RUSTFLAGS=-Dwarnings")
         );
+        if id != "makefile_host_parity_tests_run_full_project_host_suite" {
+            assert!(
+                result["message"]
+                    .as_str()
+                    .unwrap()
+                    .contains("RUST_TEST_THREADS=1")
+            );
+        }
     }
 
     let bad_migration_status_task = parsed["bad_migration_status_task"]
@@ -7604,6 +7630,23 @@ print(json.dumps({
             .contains("tasks.rmk-behavior-tests.script missing required values ['--tests']")
     );
 
+    let bad_rmk_behavior_serial_task = parsed["bad_rmk_behavior_serial_task"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "makefile_rmk_behavior_tests_run_full_host_suite")
+        .expect("changed RMK behavior serial test task result is missing");
+    assert_eq!(bad_rmk_behavior_serial_task["kind"], "build_task");
+    assert_eq!(bad_rmk_behavior_serial_task["ok"], false);
+    assert!(
+        bad_rmk_behavior_serial_task["message"]
+            .as_str()
+            .unwrap()
+            .contains(
+                "tasks.rmk-behavior-tests.script missing required values ['-- --test-threads=1']"
+            )
+    );
+
     let bad_rmk_zmk_scenario_task = parsed["bad_rmk_zmk_scenario_task"]
         .as_array()
         .unwrap()
@@ -7617,6 +7660,21 @@ print(json.dumps({
             .as_str()
             .unwrap()
             .contains("tasks.rmk-zmk-scenario-tests.script missing required values ['--test keyboard_lalapad_zmk_scenarios_test']")
+    );
+
+    let bad_rmk_zmk_scenario_serial_task = parsed["bad_rmk_zmk_scenario_serial_task"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "makefile_rmk_zmk_scenario_tests_run_runtime_subset")
+        .expect("changed RMK ZMK scenario serial test task result is missing");
+    assert_eq!(bad_rmk_zmk_scenario_serial_task["kind"], "build_task");
+    assert_eq!(bad_rmk_zmk_scenario_serial_task["ok"], false);
+    assert!(
+        bad_rmk_zmk_scenario_serial_task["message"]
+            .as_str()
+            .unwrap()
+            .contains("tasks.rmk-zmk-scenario-tests.script missing required values ['-- --test-threads=1']")
     );
 
     let bad_artifact_manifest_task = parsed["bad_artifact_manifest_task"]

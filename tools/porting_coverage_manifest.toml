@@ -2923,7 +2923,7 @@ script_contains = [
 [[makefile_task_invariants]]
 id = "makefile_rmk_behavior_tests_run_full_host_suite"
 task = "rmk-behavior-tests"
-env_contains = { RUSTFLAGS = "-Dwarnings" }
+env_contains = { RUSTFLAGS = "-Dwarnings", RUST_TEST_THREADS = "1" }
 script_contains = [
   "KEYBOARD_TOML_PATH=\"$rmk_host_keyboard\"",
   "vendor/rmk-0.8.2/Cargo.toml",
@@ -2931,13 +2931,14 @@ script_contains = [
   "--tests",
   "--no-default-features",
   "--features \"std host log\"",
+  "-- --test-threads=1",
 ]
 
 [[makefile_task_invariants]]
 id = "makefile_rmk_zmk_scenario_tests_run_runtime_subset"
 task = "rmk-zmk-scenario-tests"
 dependencies_include = ["rmk-config-schema"]
-env_contains = { RUSTFLAGS = "-Dwarnings" }
+env_contains = { RUSTFLAGS = "-Dwarnings", RUST_TEST_THREADS = "1" }
 script_contains = [
   "KEYBOARD_TOML_PATH=\"$rmk_host_keyboard\"",
   "vendor/rmk-0.8.2/Cargo.toml",
@@ -2945,6 +2946,7 @@ script_contains = [
   "--test keyboard_lalapad_zmk_scenarios_test",
   "--no-default-features",
   "--features \"std host log\"",
+  "-- --test-threads=1",
 ]
 
 [[makefile_task_invariants]]

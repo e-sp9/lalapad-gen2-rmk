@@ -42,7 +42,7 @@ args = ["test", "--lib", "--target", "x86_64-unknown-linux-gnu"]
 env = { RUSTFLAGS = "-Dwarnings" }
 
 [tasks.rmk-behavior-tests]
-env = { RUSTFLAGS = "-Dwarnings" }
+env = { RUSTFLAGS = "-Dwarnings", RUST_TEST_THREADS = "1" }
 script = '''
 rmk_host_keyboard="$(mktemp "${TMPDIR:-/tmp}/lalapad-rmk-host-test.XXXXXX.toml")"
 trap 'rm -f "$rmk_host_keyboard"' EXIT
@@ -54,12 +54,13 @@ cargo test \
   --target x86_64-unknown-linux-gnu \
   --tests \
   --no-default-features \
-  --features "std host log"
+  --features "std host log" \
+  -- --test-threads=1
 '''
 
 [tasks.rmk-zmk-scenario-tests]
 dependencies = ["rmk-config-schema"]
-env = { RUSTFLAGS = "-Dwarnings" }
+env = { RUSTFLAGS = "-Dwarnings", RUST_TEST_THREADS = "1" }
 script = '''
 rmk_host_keyboard="$(mktemp "${TMPDIR:-/tmp}/lalapad-rmk-host-test.XXXXXX.toml")"
 trap 'rm -f "$rmk_host_keyboard"' EXIT
@@ -71,7 +72,8 @@ cargo test \
   --target x86_64-unknown-linux-gnu \
   --test keyboard_lalapad_zmk_scenarios_test \
   --no-default-features \
-  --features "std host log"
+  --features "std host log" \
+  -- --test-threads=1
 '''
 
 [tasks.hardware-validation]
