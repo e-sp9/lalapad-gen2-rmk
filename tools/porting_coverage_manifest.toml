@@ -2839,6 +2839,7 @@ script_contains = [
   "tools/hardware_validation.py",
   "--evidence-template",
   "--firmware-ref-template \"$firmware_ref\"",
+  "--artifact-pair-sha256-template \"$artifact_pair_sha256\"",
   "hardware-validation-evidence.local.toml",
   "--checklist",
   "hardware-validation-checklist.local.md",

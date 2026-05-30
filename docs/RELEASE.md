@@ -71,7 +71,12 @@ python3 tools/migration_status.py --evidence path/to/evidence.toml \
 
 The command must report `Full validation: pass`. If it fails, the release may
 still be source-complete, but it is not yet fully validated against real
-hardware for that firmware reference.
+hardware for that firmware reference. When `--firmware-artifact-manifest` is
+present, the final gate also requires each validated hardware evidence note to
+mention the artifact manifest `pair_sha256`, so the observation is bound to the
+exact central/peripheral UF2 pair that was flashed. `cargo make
+hardware-validation-session-current` pre-fills that hash in the local evidence
+overlay generated for a clean current-ref bench session.
 
 ## Flashing With UF2
 

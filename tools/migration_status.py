@@ -133,6 +133,7 @@ def hardware_status(
     hardware_baseline_path: Path | None,
     evidence_paths: list[Path],
     required_firmware_ref: str | None,
+    required_artifact_pair_sha256: str | None,
     extra_errors: list[str] | None = None,
 ) -> dict[str, Any]:
     manifest_doc = hardware_validation.load_toml(manifest_path)
@@ -151,9 +152,17 @@ def hardware_status(
         manifest_doc,
         [hardware_validation.load_toml(path) for path in evidence_paths],
     )
+    artifact_pair_errors = (
+        hardware_validation.validate_artifact_pair_evidence(
+            manifest,
+            required_artifact_pair_sha256,
+        )
+        if required_artifact_pair_sha256 is not None
+        else []
+    )
     summary = hardware_validation.summarize(
         manifest,
-        evidence_errors + baseline_failures + (extra_errors or []),
+        evidence_errors + artifact_pair_errors + baseline_failures + (extra_errors or []),
         Path("."),
         required_firmware_ref,
     )
@@ -310,11 +319,19 @@ def build_status(args: argparse.Namespace) -> MigrationStatus:
         and not hardware_validation.is_placeholder_value(firmware_artifacts["firmware_ref"])
     ):
         required_firmware_ref = firmware_artifacts["firmware_ref"]
+    required_artifact_pair_sha256 = (
+        firmware_artifacts["pair_sha256"]
+        if args.require_hardware_validated
+        and firmware_artifacts is not None
+        and not artifact_errors
+        else None
+    )
     hardware = hardware_status(
         args.hardware_manifest,
         args.hardware_baseline,
         args.evidence,
         required_firmware_ref,
+        required_artifact_pair_sha256,
         artifact_errors,
     )
     hardware_classified = bool(hardware["classified"])

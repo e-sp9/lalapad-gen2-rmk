@@ -1089,7 +1089,25 @@ fn migration_status_accepts_complete_hardware_evidence_for_final_gate() {
 #[test]
 fn migration_status_ties_hardware_evidence_to_firmware_artifact_manifest() {
     let firmware_ref = "artifact-backed-firmware-ref";
-    let evidence = complete_hardware_evidence_overlay(firmware_ref);
+    let pair_sha256 = "177853881150ba3f48109a796c7ac539c2d5d4c73a1491bd198c76fc8ee3c786";
+    let evidence_without_pair_sha = complete_hardware_evidence_overlay(firmware_ref);
+    let evidence = evidence_without_pair_sha.replace(
+        "observed",
+        &format!("firmware artifact pair_sha256 {pair_sha256}; observed"),
+    );
+    let evidence_one_missing_pair_sha = evidence.replacen(
+        &format!("firmware artifact pair_sha256 {pair_sha256}; "),
+        "",
+        1,
+    );
+    let evidence_without_pair_sha_path = write_temp_file(
+        "migration-status-artifact-missing-pair-sha-evidence",
+        &evidence_without_pair_sha,
+    );
+    let evidence_one_missing_pair_sha_path = write_temp_file(
+        "migration-status-artifact-one-missing-pair-sha-evidence",
+        &evidence_one_missing_pair_sha,
+    );
     let evidence_path = write_temp_file("migration-status-artifact-backed-evidence", &evidence);
     let artifact_manifest = r#"
 {
@@ -1145,9 +1163,51 @@ fn migration_status_ties_hardware_evidence_to_firmware_artifact_manifest() {
     );
     assert_eq!(
         parsed["firmware_artifacts"]["pair_sha256"].as_str(),
-        Some("177853881150ba3f48109a796c7ac539c2d5d4c73a1491bd198c76fc8ee3c786")
+        Some(pair_sha256)
     );
     assert_eq!(parsed["fully_validated"].as_bool(), Some(true));
+
+    let missing_pair_sha = run_migration_status(&[
+        "--coverage-baseline",
+        "tools/porting_coverage_baseline.toml",
+        "--hardware-baseline",
+        "tools/hardware_validation_baseline.toml",
+        "--evidence",
+        evidence_without_pair_sha_path.to_str().unwrap(),
+        "--firmware-artifact-manifest",
+        artifact_path.to_str().unwrap(),
+        "--require-hardware-validated",
+    ]);
+    assert!(
+        !missing_pair_sha.status.success(),
+        "migration status accepted hardware evidence that did not mention the artifact pair hash\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&missing_pair_sha.stdout),
+        String::from_utf8_lossy(&missing_pair_sha.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&missing_pair_sha.stdout);
+    assert!(stdout.contains("pair_sha256"));
+    assert!(stdout.contains(pair_sha256));
+
+    let one_missing_pair_sha = run_migration_status(&[
+        "--coverage-baseline",
+        "tools/porting_coverage_baseline.toml",
+        "--hardware-baseline",
+        "tools/hardware_validation_baseline.toml",
+        "--evidence",
+        evidence_one_missing_pair_sha_path.to_str().unwrap(),
+        "--firmware-artifact-manifest",
+        artifact_path.to_str().unwrap(),
+        "--require-hardware-validated",
+    ]);
+    assert!(
+        !one_missing_pair_sha.status.success(),
+        "migration status accepted one validated hardware item without the artifact pair hash\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&one_missing_pair_sha.stdout),
+        String::from_utf8_lossy(&one_missing_pair_sha.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&one_missing_pair_sha.stdout);
+    assert!(stdout.contains("iqs9151_right_i2c_identity"));
+    assert!(stdout.contains(pair_sha256));
 
     let stale_artifact_manifest = artifact_manifest.replace(firmware_ref, "stale-artifact-ref");
     let stale_artifact_path = write_temp_file(
@@ -1165,6 +1225,8 @@ fn migration_status_ties_hardware_evidence_to_firmware_artifact_manifest() {
         stale_artifact_path.to_str().unwrap(),
         "--require-hardware-validated",
     ]);
+    let _ = std::fs::remove_file(&evidence_without_pair_sha_path);
+    let _ = std::fs::remove_file(&evidence_one_missing_pair_sha_path);
     let _ = std::fs::remove_file(&evidence_path);
     let _ = std::fs::remove_file(&artifact_path);
     let _ = std::fs::remove_file(&stale_artifact_path);
@@ -1180,7 +1242,7 @@ fn migration_status_ties_hardware_evidence_to_firmware_artifact_manifest() {
     assert!(stdout.contains("does not match required"));
 
     let tampered_artifact_manifest = artifact_manifest.replace(
-        "177853881150ba3f48109a796c7ac539c2d5d4c73a1491bd198c76fc8ee3c786",
+        pair_sha256,
         "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
     );
     let tampered_artifact_path = write_temp_file(
@@ -2115,8 +2177,14 @@ fn hardware_validation_can_generate_bench_checklist() {
 
 #[test]
 fn hardware_validation_evidence_template_can_prefill_firmware_ref() {
-    let output =
-        run_hardware_validation(&["--evidence-template", "--firmware-ref-template", "v0.2.66"]);
+    let pair_sha256 = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
+    let output = run_hardware_validation(&[
+        "--evidence-template",
+        "--firmware-ref-template",
+        "v0.2.66",
+        "--artifact-pair-sha256-template",
+        pair_sha256,
+    ]);
 
     assert!(
         output.status.success(),
@@ -2137,6 +2205,15 @@ fn hardware_validation_evidence_template_can_prefill_firmware_ref() {
             .iter()
             .all(|entry| entry["firmware_ref"].as_str() == Some("v0.2.66")),
         "all template entries should prefill the requested firmware_ref"
+    );
+    assert!(
+        template_entries
+            .iter()
+            .all(|entry| entry["artifact_or_notes"]
+                .as_str()
+                .unwrap()
+                .contains(pair_sha256)),
+        "all template entries should prefill the requested artifact pair SHA256"
     );
 }
 
@@ -2161,6 +2238,26 @@ fn hardware_validation_rejects_template_firmware_ref_without_template_output() {
     assert!(
         !String::from_utf8_lossy(&output.stderr).contains("No such file"),
         "invalid firmware_ref template usage should fail before reading manifest files"
+    );
+
+    let artifact_pair_output = run_hardware_validation(&[
+        "--manifest",
+        "/tmp/lalapad-missing-hardware-validation.toml",
+        "--artifact-pair-sha256-template",
+        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    ]);
+    assert!(
+        !artifact_pair_output.status.success(),
+        "--artifact-pair-sha256-template without --evidence-template unexpectedly passed"
+    );
+    assert!(
+        String::from_utf8_lossy(&artifact_pair_output.stderr)
+            .contains("--artifact-pair-sha256-template can only be used with --evidence-template"),
+        "invalid artifact pair template usage should explain the required output mode"
+    );
+    assert!(
+        !String::from_utf8_lossy(&artifact_pair_output.stderr).contains("No such file"),
+        "invalid artifact pair template usage should fail before reading manifest files"
     );
 }
 
@@ -2534,6 +2631,9 @@ fn local_validation_entrypoints_match_ci_gates() {
             && hardware_validation_session_current_task.contains("--evidence-template")
             && hardware_validation_session_current_task
                 .contains("--firmware-ref-template \"$firmware_ref\"")
+            && hardware_validation_session_current_task.contains("artifact_pair_sha256")
+            && hardware_validation_session_current_task
+                .contains("--artifact-pair-sha256-template \"$artifact_pair_sha256\"")
             && hardware_validation_session_current_task
                 .contains("hardware-validation-evidence.local.toml")
             && hardware_validation_session_current_task.contains("--checklist")
@@ -2574,6 +2674,7 @@ fn local_validation_entrypoints_match_ci_gates() {
         "cargo make hardware-validation-evidence-template-current",
         "cargo make hardware-validation-session-current",
         "tools/hardware_validation.py --evidence-template --firmware-ref-template <tag-or-commit>",
+        "tools/hardware_validation.py --evidence-template --artifact-pair-sha256-template <sha256>",
         "tools/hardware_validation.py --evidence path/to/evidence.toml --markdown",
         "tools/hardware_validation.py --evidence path/to/evidence.toml --require-validated --require-firmware-ref <tag-or-commit>",
         "python3 tools/firmware_artifact_manifest.py --require-uf2 > firmware-artifacts.local.json",
@@ -2635,6 +2736,7 @@ fn local_validation_entrypoints_match_ci_gates() {
             && README_MD.contains("cargo make firmware-artifact-manifest-current")
             && README_MD.contains("cargo make hardware-validation-evidence-template-current")
             && README_MD.contains("cargo make hardware-validation-session-current")
+            && README_MD.contains("--artifact-pair-sha256-template <sha256>")
             && README_MD.contains("HARDWARE_EVIDENCE=hardware-validation-evidence.local.toml cargo make migration-status-final-current")
             && README_MD.contains("--firmware-artifact-manifest firmware-artifacts.local.json")
             && README_MD.contains("HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-report")
@@ -2645,6 +2747,7 @@ fn local_validation_entrypoints_match_ci_gates() {
             && PORTING_MD.contains("cargo make firmware-artifact-manifest-current")
             && PORTING_MD.contains("cargo make hardware-validation-evidence-template-current")
             && PORTING_MD.contains("cargo make hardware-validation-session-current")
+            && PORTING_MD.contains("--artifact-pair-sha256-template <sha256>")
             && PORTING_MD.contains("--firmware-artifact-manifest firmware-artifacts.local.json")
             && PORTING_MD.contains("HARDWARE_EVIDENCE=hardware-validation-evidence.local.toml cargo make migration-status-final-current"),
         "README and porting notes should document the local Markdown migration dashboard, RMK behavior regression suite, artifact manifest, current-ref evidence template, and current-ref final gate"

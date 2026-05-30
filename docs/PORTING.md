@@ -477,7 +477,13 @@ sizes and SHA256 hashes alongside the hardware evidence overlay. Prefer
 `cargo make firmware-artifact-manifest-current` for a clean local build; it
 creates `firmware-artifacts.local.json` with the current exact tag or short
 commit as `firmware_ref` and refuses tracked or untracked non-ignored changes.
+When a final all-validated gate is run with `--firmware-artifact-manifest`,
+each validated hardware evidence note must also mention that manifest's
+`pair_sha256`, tying the bench observation to the exact UF2 pair rather than
+only to a moving file name or host-side state. `--evidence-template` accepts
+`--artifact-pair-sha256-template <sha256>` to seed every evidence note with that
+hash before bench observations are added.
 Use `cargo make hardware-validation-session-current` to prepare a complete
 current-ref bench packet in one step: rebuilt UF2 artifact hashes, a
-firmware-ref-prefilled evidence overlay, a hardware checklist, and a local
-Markdown migration status report.
+firmware-ref and pair-SHA-prefilled evidence overlay, a hardware checklist, and
+a local Markdown migration status report.

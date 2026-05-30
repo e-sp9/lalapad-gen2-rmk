@@ -102,6 +102,12 @@ if [ -n "$(git status --porcelain --untracked-files=normal)" ]; then
 fi
 
 firmware_ref="$(git describe --tags --exact-match 2>/dev/null || git rev-parse --short=12 HEAD)"
+artifact_pair_sha256="$(python3 - <<'PY'
+import json
+from pathlib import Path
+print(json.loads(Path("firmware-artifacts.local.json").read_text())["pair_sha256"])
+PY
+)"
 zmk_keymap="${ZMK_KEYMAP:-}"
 if [ -z "$zmk_keymap" ]; then
   if [ -f ../zmk-config-LalaPadGen2/config/lalapadgen2.keymap ]; then
@@ -114,6 +120,7 @@ fi
 python3 tools/hardware_validation.py \
   --evidence-template \
   --firmware-ref-template "$firmware_ref" \
+  --artifact-pair-sha256-template "$artifact_pair_sha256" \
   > hardware-validation-evidence.local.toml
 
 python3 tools/hardware_validation.py \

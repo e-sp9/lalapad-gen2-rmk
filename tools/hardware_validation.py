@@ -231,6 +231,28 @@ def validate_validated_evidence(check_id: str, check: dict[str, Any]) -> list[st
     return errors
 
 
+def validate_artifact_pair_evidence(
+    manifest: dict[str, Any], required_pair_sha256: str
+) -> list[str]:
+    errors: list[str] = []
+    checks = manifest.get("checks", [])
+    if not isinstance(checks, list):
+        return errors
+    for index, check in enumerate(checks):
+        if not isinstance(check, dict):
+            continue
+        if str(check.get("status", "")) not in VALIDATED_STATUSES:
+            continue
+        check_id = str(check.get("id", f"#{index + 1}"))
+        artifact_or_notes = str(check.get("artifact_or_notes", ""))
+        if required_pair_sha256 not in artifact_or_notes:
+            errors.append(
+                f"{check_id}: artifact_or_notes must mention firmware artifact "
+                f"pair_sha256 {required_pair_sha256}"
+            )
+    return errors
+
+
 def manifest_inventory_items(manifest: dict[str, Any]) -> list[dict[str, str]]:
     checks = manifest.get("checks", [])
     if not isinstance(checks, list):
@@ -560,7 +582,9 @@ def toml_comment(value: Any) -> list[str]:
     return [f"# {line}" if line else "#" for line in lines]
 
 
-def as_evidence_template(manifest: dict[str, Any], firmware_ref: str = "") -> str:
+def as_evidence_template(
+    manifest: dict[str, Any], firmware_ref: str = "", artifact_pair_sha256: str = ""
+) -> str:
     lines = [
         "# Hardware validation evidence overlay.",
         "# Fill this file after testing real hardware, then run:",
@@ -571,6 +595,7 @@ def as_evidence_template(manifest: dict[str, Any], firmware_ref: str = "") -> st
         "#",
         "# Entries are keyed by id from tools/hardware_validation_manifest.toml.",
         "# Change status to \"validated\" only when validated_at, tester, firmware_ref, and artifact_or_notes are filled.",
+        "# If artifact_or_notes is prefilled with firmware artifact pair_sha256, keep it and append the observed evidence after it.",
         "",
     ]
     checks = manifest.get("checks", [])
@@ -584,7 +609,12 @@ def as_evidence_template(manifest: dict[str, Any], firmware_ref: str = "") -> st
             lines.append('validated_at = ""')
             lines.append('tester = ""')
             lines.append(f"firmware_ref = {toml_string(firmware_ref)}")
-            lines.append('artifact_or_notes = ""')
+            artifact_prefix = (
+                f"firmware artifact pair_sha256 {artifact_pair_sha256}; "
+                if artifact_pair_sha256
+                else ""
+            )
+            lines.append(f"artifact_or_notes = {toml_string(artifact_prefix)}")
             lines.append("# Requirement:")
             lines.extend(toml_comment(check.get("requirement", "")))
             lines.append("# Required evidence:")
@@ -788,6 +818,12 @@ def main() -> None:
         help="pre-fill firmware_ref in --evidence-template output",
     )
     parser.add_argument(
+        "--artifact-pair-sha256-template",
+        default="",
+        metavar="SHA256",
+        help="pre-fill the firmware artifact pair_sha256 prefix in --evidence-template artifact_or_notes",
+    )
+    parser.add_argument(
         "--require-classified",
         action="store_true",
         help="fail if any hardware validation check is malformed or unclassified",
@@ -814,6 +850,14 @@ def main() -> None:
         )
     if args.firmware_ref_template and not args.evidence_template:
         parser.error("--firmware-ref-template can only be used with --evidence-template")
+    if args.artifact_pair_sha256_template and not args.evidence_template:
+        parser.error(
+            "--artifact-pair-sha256-template can only be used with --evidence-template"
+        )
+    if args.artifact_pair_sha256_template and not re.fullmatch(
+        r"[0-9a-f]{64}", args.artifact_pair_sha256_template
+    ):
+        parser.error("--artifact-pair-sha256-template must be a SHA256 hex string")
 
     manifest_doc = load_toml(args.manifest)
     baseline_failures: list[str] = []
@@ -839,7 +883,14 @@ def main() -> None:
     elif args.markdown:
         print(as_markdown(manifest, summary), end="")
     elif args.evidence_template:
-        print(as_evidence_template(manifest, args.firmware_ref_template), end="")
+        print(
+            as_evidence_template(
+                manifest,
+                args.firmware_ref_template,
+                args.artifact_pair_sha256_template,
+            ),
+            end="",
+        )
     elif args.checklist:
         print(as_checklist(manifest), end="")
     else:
