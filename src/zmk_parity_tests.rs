@@ -301,6 +301,156 @@ fn porting_coverage_requires_evidence_for_non_direct_porting_statuses() {
 }
 
 #[test]
+fn porting_coverage_requires_active_rust_unit_test_evidence() {
+    let output = run_python(
+        r##"
+import importlib.util
+import json
+import shutil
+import sys
+import tempfile
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("porting_coverage", "tools/porting_coverage.py")
+pc = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = pc
+spec.loader.exec_module(pc)
+
+manifest = pc.load_toml(Path("tools/porting_coverage_manifest.toml"))
+ok = pc.check_rust_unit_tests(manifest, Path("."))
+
+with tempfile.TemporaryDirectory() as root_dir:
+    root = Path(root_dir)
+    (root / "src").mkdir()
+    iqs = Path("src/iqs9151.rs").read_text(encoding="utf-8")
+    iqs = iqs.replace(
+        "    #[test]\n    fn emits_pinch_button_and_wheel_for_two_finger_distance_motion()",
+        "    #[test]\n    #[ignore]\n    fn emits_pinch_button_and_wheel_for_two_finger_distance_motion()",
+        1,
+    )
+    (root / "src" / "iqs9151.rs").write_text(iqs, encoding="utf-8")
+    ignored = pc.check_rust_unit_tests(manifest, root)
+
+with tempfile.TemporaryDirectory() as root_dir:
+    root = Path(root_dir)
+    (root / "src").mkdir()
+    iqs = Path("src/iqs9151.rs").read_text(encoding="utf-8")
+    iqs = iqs.replace(
+        "    #[test]\n    fn emits_pinch_button_and_wheel_for_two_finger_distance_motion()",
+        "    #[test]\n    #[cfg_attr(all(), ignore)]\n    fn emits_pinch_button_and_wheel_for_two_finger_distance_motion()",
+        1,
+    )
+    (root / "src" / "iqs9151.rs").write_text(iqs, encoding="utf-8")
+    cfg_ignored = pc.check_rust_unit_tests(manifest, root)
+
+with tempfile.TemporaryDirectory() as root_dir:
+    root = Path(root_dir)
+    (root / "src").mkdir()
+    iqs = Path("src/iqs9151.rs").read_text(encoding="utf-8")
+    iqs = iqs.replace(
+        "    #[test]\n    fn emits_scroll_for_two_finger_centroid_motion()",
+        "    fn emits_scroll_for_two_finger_centroid_motion()",
+        1,
+    )
+    (root / "src" / "iqs9151.rs").write_text(iqs, encoding="utf-8")
+    missing_test_attr = pc.check_rust_unit_tests(manifest, root)
+
+with tempfile.TemporaryDirectory() as root_dir:
+    root = Path(root_dir)
+    (root / "src").mkdir()
+    iqs = Path("src/iqs9151.rs").read_text(encoding="utf-8")
+    iqs = iqs.replace(
+        "    #[test]\n    fn emits_scroll_for_two_finger_centroid_motion()",
+        "    #[test]\n    // The evidence checker should tolerate comments between attributes and fn.\n    pub fn emits_scroll_for_two_finger_centroid_motion()",
+        1,
+    )
+    (root / "src" / "iqs9151.rs").write_text(iqs, encoding="utf-8")
+    public_with_comment = pc.check_rust_unit_tests(manifest, root)
+
+def pack(results):
+    return [result.__dict__ | {"ok": result.ok} for result in results]
+
+print(json.dumps({
+    "ok": pack(ok),
+    "ignored": pack(ignored),
+    "cfg_ignored": pack(cfg_ignored),
+    "missing_test_attr": pack(missing_test_attr),
+    "public_with_comment": pack(public_with_comment),
+}))
+"##,
+    );
+
+    assert!(
+        output.status.success(),
+        "rust unit test evidence active-test check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(
+        parsed["ok"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|result| result["ok"] == true)
+    );
+
+    let ignored = parsed["ignored"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "iqs9151_pinch_behavior_test")
+        .expect("pinch behavior unit-test evidence result is missing");
+    assert_eq!(ignored["kind"], "rust_unit_test");
+    assert_eq!(ignored["ok"], false);
+    assert!(
+        ignored["message"]
+            .as_str()
+            .unwrap()
+            .contains("must not be ignored")
+    );
+
+    let cfg_ignored = parsed["cfg_ignored"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "iqs9151_pinch_behavior_test")
+        .expect("cfg-ignored pinch behavior unit-test evidence result is missing");
+    assert_eq!(cfg_ignored["kind"], "rust_unit_test");
+    assert_eq!(cfg_ignored["ok"], false);
+    assert!(
+        cfg_ignored["message"]
+            .as_str()
+            .unwrap()
+            .contains("must not be ignored")
+    );
+
+    let missing_test_attr = parsed["missing_test_attr"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "iqs9151_scroll_behavior_test")
+        .expect("scroll behavior unit-test evidence result is missing");
+    assert_eq!(missing_test_attr["kind"], "rust_unit_test");
+    assert_eq!(missing_test_attr["ok"], false);
+    assert!(
+        missing_test_attr["message"]
+            .as_str()
+            .unwrap()
+            .contains("must be marked #[test]")
+    );
+
+    let public_with_comment = parsed["public_with_comment"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "iqs9151_scroll_behavior_test")
+        .expect("public scroll behavior unit-test evidence result is missing");
+    assert_eq!(public_with_comment["kind"], "rust_unit_test");
+    assert_eq!(public_with_comment["ok"], true);
+}
+
+#[test]
 fn porting_coverage_baseline_matches_current_denominator() {
     let output = run_porting_coverage(&[
         "--coverage-baseline",

@@ -213,7 +213,9 @@ to contribute to a 100% software migration rate, and each evidence reference is
 part of the coverage result inventory so changing it requires an intentional
 baseline update. Behavior-based classifications should reference recognizer or
 report-path unit-test coverage, while config-image classifications should
-reference both byte-array parity and the sensor write path.
+reference both byte-array parity and the sensor write path. Unit-test evidence
+entries must point at active, non-ignored `#[test]` functions so an ignored
+test cannot keep a migration classification green.
 Source-backed checks also verify the ZMK global Kconfig flags,
 left/right IQS9151 Kconfig parity, trackpad listener split routing, and
 tap/gesture timing constants that are mirrored into RMK. The gate also verifies

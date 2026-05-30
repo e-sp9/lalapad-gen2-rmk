@@ -3744,7 +3744,10 @@ def check_file_contains_invariants(manifest: dict[str, Any], project_root: Path)
 
 
 def extract_rust_function_scope(text: str, function_name: str) -> str | None:
-    match = re.search(rf"(?m)^\s*fn\s+{re.escape(function_name)}\s*\(", text)
+    match = re.search(
+        rf"(?m)^\s*(?:pub(?:\s*\([^)]*\))?\s+)?(?:async\s+)?fn\s+{re.escape(function_name)}\s*\(",
+        text,
+    )
     if not match:
         return None
     open_brace = text.find("{", match.end())
@@ -3763,38 +3766,85 @@ def extract_rust_function_scope(text: str, function_name: str) -> str | None:
     return None
 
 
+def extract_rust_function_attributes(text: str, function_name: str) -> str | None:
+    match = re.search(
+        rf"(?m)^\s*(?:pub(?:\s*\([^)]*\))?\s+)?(?:async\s+)?fn\s+{re.escape(function_name)}\s*\(",
+        text,
+    )
+    if not match:
+        return None
+    line_start = text.rfind("\n", 0, match.start()) + 1
+    attr_start = line_start
+    while attr_start > 0:
+        previous_end = attr_start - 1
+        previous_start = text.rfind("\n", 0, previous_end) + 1
+        previous_line = text[previous_start:previous_end].strip()
+        if (
+            previous_line.startswith("#[")
+            or previous_line.startswith("//")
+            or not previous_line
+        ):
+            attr_start = previous_start
+            continue
+        break
+    return text[attr_start:line_start]
+
+
+def rust_attributes_contain_test(attributes: str | None) -> bool:
+    return attributes is not None and re.search(r"#\s*\[\s*test\b", attributes) is not None
+
+
+def rust_attributes_contain_ignore(attributes: str | None) -> bool:
+    return attributes is not None and re.search(r"#\s*\[[^\]]*\bignore\b", attributes) is not None
+
+
 def check_rust_unit_tests(manifest: dict[str, Any], project_root: Path) -> list[Result]:
     results: list[Result] = []
     for check in manifest.get("rust_unit_tests", []):
         target_file = str(check["file"])
         function_name = str(check["function"])
         needles = list(check["needles"])
+        total = len(needles) + 2
         try:
             text = (project_root / target_file).read_text()
         except OSError as e:
-            results.append(Result(check["id"], "rust_unit_test", 0, len(needles), str(e)))
+            results.append(Result(check["id"], "rust_unit_test", 0, total, str(e)))
             continue
         function_scope = extract_rust_function_scope(text, function_name)
+        attributes = extract_rust_function_attributes(text, function_name)
         if function_scope is None:
             results.append(
                 Result(
                     check["id"],
                     "rust_unit_test",
                     0,
-                    len(needles),
+                    total,
                     f"{target_file} missing function {function_name!r}",
                 )
             )
             continue
-        passed = sum(1 for needle in needles if needle in function_scope)
+        passed = 0
+        messages: list[str] = []
+        if rust_attributes_contain_test(attributes):
+            passed += 1
+        else:
+            messages.append(f"{target_file}::{function_name} must be marked #[test]")
+        if not rust_attributes_contain_ignore(attributes):
+            passed += 1
+        else:
+            messages.append(f"{target_file}::{function_name} must not be ignored")
         missing = [needle for needle in needles if needle not in function_scope]
+        passed += sum(1 for needle in needles if needle in function_scope)
+        messages.extend(
+            f"{target_file}::{function_name} missing {needle!r}" for needle in missing
+        )
         results.append(
             Result(
                 check["id"],
                 "rust_unit_test",
                 passed,
-                len(needles),
-                "ok" if not missing else f"{target_file}::{function_name} missing {missing!r}",
+                total,
+                "ok" if not messages else "; ".join(messages),
             )
         )
     return results
