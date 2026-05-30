@@ -3041,6 +3041,7 @@ fn porting_coverage_includes_exact_rmk_inventory_gates() {
         "keyboard_vendor_id",
         "keyboard_product_id",
         "keyboard_serial_number",
+        "host_vial_enabled",
         "host_vial_unlock_keys",
         "rmk_combo_capacity_matches_shipped_combo_inventory",
         "rmk_combo_max_length_matches_shipped_combo_shape",
@@ -5903,6 +5904,99 @@ print(json.dumps({
             .as_str()
             .unwrap()
             .contains("Vial layout missing (3, 7)")
+    );
+}
+
+#[test]
+fn porting_coverage_rejects_host_vial_disabled() {
+    let output = run_python(
+        r#"
+import copy
+import importlib.util
+import json
+import sys
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location("porting_coverage", "tools/porting_coverage.py")
+pc = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = pc
+spec.loader.exec_module(pc)
+
+manifest = pc.load_toml(Path("tools/porting_coverage_manifest.toml"))
+keyboard = pc.load_toml(Path("keyboard.toml"))
+ok = pc.check_config_values(manifest, keyboard)
+
+disabled = copy.deepcopy(keyboard)
+disabled["host"]["vial_enabled"] = False
+disabled_result = pc.check_config_values(manifest, disabled)
+
+missing = copy.deepcopy(keyboard)
+missing["host"].pop("vial_enabled")
+missing_result = pc.check_config_values(manifest, missing)
+
+def pack(results):
+    return [result.__dict__ | {"ok": result.ok} for result in results]
+
+print(json.dumps({
+    "ok": pack(ok),
+    "disabled": pack(disabled_result),
+    "missing": pack(missing_result),
+}))
+"#,
+    );
+
+    assert!(
+        output.status.success(),
+        "host Vial config check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let ok = parsed["ok"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "host_vial_enabled")
+        .expect("host_vial_enabled config result is missing");
+    assert_eq!(ok["kind"], "config");
+    assert_eq!(ok["passed"].as_i64(), Some(1));
+    assert_eq!(ok["total"].as_i64(), Some(1));
+    assert_eq!(ok["ok"], true);
+
+    for group in ["disabled", "missing"] {
+        let result = parsed[group]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|result| result["id"] == "host_vial_enabled")
+            .unwrap_or_else(|| panic!("{group} host_vial_enabled result is missing"));
+        assert_eq!(result["kind"], "config");
+        assert_eq!(result["passed"].as_i64(), Some(0));
+        assert_eq!(result["total"].as_i64(), Some(1));
+        assert_eq!(result["ok"], false);
+    }
+    assert!(
+        parsed["disabled"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|result| result["id"] == "host_vial_enabled")
+            .unwrap()["message"]
+            .as_str()
+            .unwrap()
+            .contains("expected True, got False")
+    );
+    assert!(
+        parsed["missing"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|result| result["id"] == "host_vial_enabled")
+            .unwrap()["message"]
+            .as_str()
+            .unwrap()
+            .contains("expected True, got None")
     );
 }
 

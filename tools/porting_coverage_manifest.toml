@@ -745,6 +745,11 @@ path = "host.unlock_keys"
 expected = [[0, 0], [0, 1]]
 
 [[config_values]]
+id = "host_vial_enabled"
+path = "host.vial_enabled"
+expected = true
+
+[[config_values]]
 id = "ble_enabled"
 path = "ble.enabled"
 expected = true

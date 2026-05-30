@@ -311,7 +311,8 @@ configuration coverage metric, not a claim that hardware-only IQS9151, BLE,
 storage, or Vial runtime paths have been exhaustively exercised on real devices.
 The Cargo dependency checks also keep RMK default features enabled so the
 default storage/Vial support from the selected RMK release is not accidentally
-disabled, and they pin the split firmware entrypoints to the expected
+disabled, while the RMK config gate pins `[host].vial_enabled = true` and the
+Vial unlock chord. They also pin the split firmware entrypoints to the expected
 `central` and `peripheral` binaries. The same dependency gate walks the
 vendored RMK feature graph and verifies that the default feature closure still
 reaches `vial` and `host`, and that the enabled BLE features still resolve to

@@ -92,6 +92,7 @@ combos = [
 ]
 
 [host]
+vial_enabled = true
 unlock_keys = [[0, 0], [0, 1]]
 
 [split]

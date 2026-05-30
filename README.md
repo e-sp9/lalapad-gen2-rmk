@@ -223,7 +223,7 @@ polarity mirrors, the ZMK DTS/overlay status-node inventory, exact RMK keymap
 array shape, exact RMK central/peripheral Cargo binary entries and default
 feature preservation, cargo-make UF2/flash-layout task wiring, Release/Page
 workflow DFU artifact names, web-flasher bundled firmware paths, Vial-exposed
-thumb layer-tap semantics, and the exact RMK combo
+host enablement, unlock chord, thumb layer-tap semantics, and the exact RMK combo
 inventory. It also freezes both the Cargo dependency resolution that keeps the
 local RMK patch active and the patch invariants for the HID descriptor, BLE
 mouse feature report, high-resolution wheel, horizontal pan handling, and
