@@ -315,6 +315,7 @@ python3 tools/migration_status.py --coverage-baseline tools/porting_coverage_bas
   --hardware-baseline tools/hardware_validation_baseline.toml \
   --zmk-keymap zmk-config-LalaPadGen2/config/lalapadgen2.keymap \
   --evidence path/to/evidence.toml \
+  --firmware-artifact-manifest firmware-artifacts.local.json \
   --require-zmk-source \
   --require-software-complete \
   --require-hardware-classified \
@@ -324,10 +325,11 @@ python3 tools/migration_status.py --coverage-baseline tools/porting_coverage_bas
 
 It must report `Full validation: pass` before claiming source-backed and
 real-device validation are both complete for that firmware. The equivalent
-cargo-make task is:
+cargo-make task uses `firmware-artifacts.local.json` by default, or
+`FIRMWARE_ARTIFACT_MANIFEST` when set:
 
 ```shell
-HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-final
+HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit FIRMWARE_ARTIFACT_MANIFEST=firmware-artifacts.local.json cargo make migration-status-final
 ```
 
 For hardware evidence collected from the current clean commit, this variant
@@ -345,7 +347,8 @@ cargo make migration-status-report
 ```
 
 When reviewing partial hardware evidence, include the overlay and flashed
-firmware reference:
+firmware reference. Add `FIRMWARE_ARTIFACT_MANIFEST` to show and validate the
+exact UF2 hash manifest in the dashboard:
 
 ```shell
 HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-report

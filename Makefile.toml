@@ -125,6 +125,7 @@ set -- \
   --coverage-baseline tools/porting_coverage_baseline.toml \
   --hardware-baseline tools/hardware_validation_baseline.toml \
   --evidence hardware-validation-evidence.local.toml \
+  --firmware-artifact-manifest firmware-artifacts.local.json \
   --require-zmk-source \
   --require-software-complete \
   --require-hardware-classified \
@@ -187,6 +188,10 @@ if [ -n "${FIRMWARE_REF:-}" ]; then
   set -- "$@" --require-firmware-ref "$FIRMWARE_REF"
 fi
 
+if [ -n "${FIRMWARE_ARTIFACT_MANIFEST:-}" ]; then
+  set -- "$@" --firmware-artifact-manifest "$FIRMWARE_ARTIFACT_MANIFEST"
+fi
+
 python3 "$@"
 '''
 
@@ -208,6 +213,7 @@ set -- \
   --coverage-baseline tools/porting_coverage_baseline.toml \
   --hardware-baseline tools/hardware_validation_baseline.toml \
   --evidence "$HARDWARE_EVIDENCE" \
+  --firmware-artifact-manifest "${FIRMWARE_ARTIFACT_MANIFEST:-firmware-artifacts.local.json}" \
   --require-zmk-source \
   --require-software-complete \
   --require-hardware-classified \
@@ -245,6 +251,7 @@ set -- \
   --coverage-baseline tools/porting_coverage_baseline.toml \
   --hardware-baseline tools/hardware_validation_baseline.toml \
   --evidence "$HARDWARE_EVIDENCE" \
+  --firmware-artifact-manifest "${FIRMWARE_ARTIFACT_MANIFEST:-firmware-artifacts.local.json}" \
   --require-zmk-source \
   --require-software-complete \
   --require-hardware-classified \

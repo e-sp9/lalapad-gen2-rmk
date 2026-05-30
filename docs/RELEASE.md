@@ -50,7 +50,7 @@ release, collect real-device evidence with the exact firmware pair that will be
 announced, then run:
 
 ```sh
-HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-final
+HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit FIRMWARE_ARTIFACT_MANIFEST=firmware-artifacts.local.json cargo make migration-status-final
 ```
 
 This wraps the same final migration status gate, resolving `ZMK_KEYMAP` first
@@ -61,6 +61,7 @@ python3 tools/migration_status.py --evidence path/to/evidence.toml \
   --coverage-baseline tools/porting_coverage_baseline.toml \
   --hardware-baseline tools/hardware_validation_baseline.toml \
   --zmk-keymap zmk-config-LalaPadGen2/config/lalapadgen2.keymap \
+  --firmware-artifact-manifest firmware-artifacts.local.json \
   --require-zmk-source \
   --require-software-complete \
   --require-hardware-classified \

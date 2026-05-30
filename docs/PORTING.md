@@ -349,6 +349,7 @@ python3 tools/migration_status.py --coverage-baseline tools/porting_coverage_bas
   --hardware-baseline tools/hardware_validation_baseline.toml \
   --zmk-keymap zmk-config-LalaPadGen2/config/lalapadgen2.keymap \
   --evidence path/to/evidence.toml \
+  --firmware-artifact-manifest firmware-artifacts.local.json \
   --require-zmk-source \
   --require-software-complete \
   --require-hardware-classified \
@@ -359,7 +360,7 @@ python3 tools/migration_status.py --coverage-baseline tools/porting_coverage_bas
 The same final gate is available as:
 
 ```sh
-HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-final
+HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit FIRMWARE_ARTIFACT_MANIFEST=firmware-artifacts.local.json cargo make migration-status-final
 ```
 
 For evidence captured from the current clean commit, the current-ref variant

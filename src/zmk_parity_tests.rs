@@ -856,6 +856,145 @@ fn migration_status_accepts_complete_hardware_evidence_for_final_gate() {
 }
 
 #[test]
+fn migration_status_ties_hardware_evidence_to_firmware_artifact_manifest() {
+    let firmware_ref = "artifact-backed-firmware-ref";
+    let evidence = complete_hardware_evidence_overlay(firmware_ref);
+    let evidence_path = write_temp_file("migration-status-artifact-backed-evidence", &evidence);
+    let artifact_manifest = r#"
+{
+  "artifact_count": 2,
+  "artifacts": [
+    {
+      "kind": "uf2",
+      "path": "firmware/normal/lalapad-gen2-rmk-central.uf2",
+      "role": "central",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "side": "right",
+      "size": 123
+    },
+    {
+      "kind": "uf2",
+      "path": "firmware/normal/lalapad-gen2-rmk-peripheral.uf2",
+      "role": "peripheral",
+      "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "side": "left",
+      "size": 456
+    }
+  ],
+  "firmware_ref": "artifact-backed-firmware-ref",
+  "pair_sha256": "177853881150ba3f48109a796c7ac539c2d5d4c73a1491bd198c76fc8ee3c786"
+}
+"#;
+    let artifact_path = write_temp_file("migration-status-firmware-artifacts", artifact_manifest);
+
+    let output = run_migration_status(&[
+        "--json",
+        "--coverage-baseline",
+        "tools/porting_coverage_baseline.toml",
+        "--hardware-baseline",
+        "tools/hardware_validation_baseline.toml",
+        "--evidence",
+        evidence_path.to_str().unwrap(),
+        "--firmware-artifact-manifest",
+        artifact_path.to_str().unwrap(),
+        "--require-software-complete",
+        "--require-hardware-classified",
+        "--require-hardware-validated",
+    ]);
+    assert!(
+        output.status.success(),
+        "artifact-backed migration status failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(
+        parsed["firmware_artifacts"]["firmware_ref"].as_str(),
+        Some(firmware_ref)
+    );
+    assert_eq!(
+        parsed["firmware_artifacts"]["pair_sha256"].as_str(),
+        Some("177853881150ba3f48109a796c7ac539c2d5d4c73a1491bd198c76fc8ee3c786")
+    );
+    assert_eq!(parsed["fully_validated"].as_bool(), Some(true));
+
+    let stale_artifact_manifest = artifact_manifest.replace(firmware_ref, "stale-artifact-ref");
+    let stale_artifact_path = write_temp_file(
+        "migration-status-stale-firmware-artifacts",
+        &stale_artifact_manifest,
+    );
+    let stale = run_migration_status(&[
+        "--coverage-baseline",
+        "tools/porting_coverage_baseline.toml",
+        "--hardware-baseline",
+        "tools/hardware_validation_baseline.toml",
+        "--evidence",
+        evidence_path.to_str().unwrap(),
+        "--firmware-artifact-manifest",
+        stale_artifact_path.to_str().unwrap(),
+        "--require-hardware-validated",
+    ]);
+    let _ = std::fs::remove_file(&evidence_path);
+    let _ = std::fs::remove_file(&artifact_path);
+    let _ = std::fs::remove_file(&stale_artifact_path);
+
+    assert!(
+        !stale.status.success(),
+        "migration status accepted stale artifact manifest\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&stale.stdout),
+        String::from_utf8_lossy(&stale.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&stale.stdout);
+    assert!(stdout.contains("Hardware validation failures:"));
+    assert!(stdout.contains("does not match required"));
+
+    let tampered_artifact_manifest = artifact_manifest.replace(
+        "177853881150ba3f48109a796c7ac539c2d5d4c73a1491bd198c76fc8ee3c786",
+        "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    );
+    let tampered_artifact_path = write_temp_file(
+        "migration-status-tampered-firmware-artifacts",
+        &tampered_artifact_manifest,
+    );
+    let tampered = run_migration_status(&[
+        "--coverage-baseline",
+        "tools/porting_coverage_baseline.toml",
+        "--hardware-baseline",
+        "tools/hardware_validation_baseline.toml",
+        "--firmware-artifact-manifest",
+        tampered_artifact_path.to_str().unwrap(),
+        "--require-hardware-classified",
+    ]);
+    let _ = std::fs::remove_file(&tampered_artifact_path);
+    assert!(
+        !tampered.status.success(),
+        "migration status accepted tampered artifact manifest pair hash\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&tampered.stdout),
+        String::from_utf8_lossy(&tampered.stderr)
+    );
+    assert!(String::from_utf8_lossy(&tampered.stdout).contains("does not match artifact entries"));
+
+    let bad_shape_path = write_temp_file("migration-status-bad-artifact-shape", "[]");
+    let bad_shape = run_migration_status(&[
+        "--coverage-baseline",
+        "tools/porting_coverage_baseline.toml",
+        "--hardware-baseline",
+        "tools/hardware_validation_baseline.toml",
+        "--firmware-artifact-manifest",
+        bad_shape_path.to_str().unwrap(),
+        "--require-hardware-classified",
+    ]);
+    let _ = std::fs::remove_file(&bad_shape_path);
+    assert!(
+        !bad_shape.status.success(),
+        "migration status accepted malformed artifact manifest shape\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&bad_shape.stdout),
+        String::from_utf8_lossy(&bad_shape.stderr)
+    );
+    assert!(String::from_utf8_lossy(&bad_shape.stdout).contains("firmware artifact manifest"));
+}
+
+#[test]
 fn migration_status_reports_partial_hardware_evidence_progress() {
     let firmware_ref = "partial-hardware-evidence-ref";
     let evidence = format!(
@@ -2041,6 +2180,9 @@ fn local_validation_entrypoints_match_ci_gates() {
             && migration_status_report_task.contains("--evidence \"$HARDWARE_EVIDENCE\"")
             && migration_status_report_task.contains("FIRMWARE_REF")
             && migration_status_report_task.contains("--require-firmware-ref \"$FIRMWARE_REF\"")
+            && migration_status_report_task.contains("FIRMWARE_ARTIFACT_MANIFEST")
+            && migration_status_report_task
+                .contains("--firmware-artifact-manifest \"$FIRMWARE_ARTIFACT_MANIFEST\"")
             && migration_status_report_task
                 .contains("zmk-config-LalaPadGen2/config/lalapadgen2.keymap")
             && migration_status_report_task
@@ -2059,8 +2201,11 @@ fn local_validation_entrypoints_match_ci_gates() {
             && migration_status_final_task
                 .contains("../zmk-config-LalaPadGen2/config/lalapadgen2.keymap")
             && migration_status_final_task.contains("--require-hardware-validated")
-            && migration_status_final_task.contains("--require-firmware-ref \"$FIRMWARE_REF\""),
-        "cargo make migration-status-final should require ZMK source, evidence, and firmware_ref for complete validation claims"
+            && migration_status_final_task.contains("--require-firmware-ref \"$FIRMWARE_REF\"")
+            && migration_status_final_task.contains("FIRMWARE_ARTIFACT_MANIFEST")
+            && migration_status_final_task
+                .contains("--firmware-artifact-manifest \"${FIRMWARE_ARTIFACT_MANIFEST:-firmware-artifacts.local.json}\""),
+        "cargo make migration-status-final should require ZMK source, evidence, firmware_ref, and artifact hashes for complete validation claims"
     );
     assert!(
         clean_current_git_ref_task.contains("git status --porcelain --untracked-files=normal")
@@ -2084,8 +2229,10 @@ fn local_validation_entrypoints_match_ci_gates() {
             && migration_status_final_current_task.contains("--require-hardware-classified")
             && migration_status_final_current_task.contains("--require-hardware-validated")
             && migration_status_final_current_task
-                .contains("--require-firmware-ref \"$firmware_ref\""),
-        "cargo make migration-status-final-current should derive the final hardware gate firmware_ref from a clean current git ref"
+                .contains("--require-firmware-ref \"$firmware_ref\"")
+            && migration_status_final_current_task
+                .contains("--firmware-artifact-manifest \"${FIRMWARE_ARTIFACT_MANIFEST:-firmware-artifacts.local.json}\""),
+        "cargo make migration-status-final-current should derive the final hardware gate firmware_ref from a clean current git ref and check artifact hashes"
     );
     assert!(
         firmware_artifact_manifest_task.contains("tools/firmware_artifact_manifest.py")
@@ -2165,6 +2312,8 @@ fn local_validation_entrypoints_match_ci_gates() {
             && hardware_validation_session_current_task
                 .contains("--evidence hardware-validation-evidence.local.toml")
             && hardware_validation_session_current_task
+                .contains("--firmware-artifact-manifest firmware-artifacts.local.json")
+            && hardware_validation_session_current_task
                 .contains("--require-firmware-ref \"$firmware_ref\"")
             && hardware_validation_session_current_task.contains("migration-status.local.md"),
         "Makefile.toml should expose a clean-current hardware validation session bundle"
@@ -2184,8 +2333,8 @@ fn local_validation_entrypoints_match_ci_gates() {
         "tools/migration_status.py --coverage-baseline tools/porting_coverage_baseline.toml --hardware-baseline tools/hardware_validation_baseline.toml --require-zmk-source --require-software-complete --require-hardware-classified",
         "cargo make migration-status-report",
         "HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-report",
-        "tools/migration_status.py --coverage-baseline tools/porting_coverage_baseline.toml --hardware-baseline tools/hardware_validation_baseline.toml --zmk-keymap zmk-config-LalaPadGen2/config/lalapadgen2.keymap --evidence path/to/evidence.toml --require-zmk-source --require-software-complete --require-hardware-classified --require-hardware-validated --require-firmware-ref <tag-or-commit>",
-        "HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-final",
+        "tools/migration_status.py --coverage-baseline tools/porting_coverage_baseline.toml --hardware-baseline tools/hardware_validation_baseline.toml --zmk-keymap zmk-config-LalaPadGen2/config/lalapadgen2.keymap --evidence path/to/evidence.toml --firmware-artifact-manifest firmware-artifacts.local.json --require-zmk-source --require-software-complete --require-hardware-classified --require-hardware-validated --require-firmware-ref <tag-or-commit>",
+        "HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit FIRMWARE_ARTIFACT_MANIFEST=firmware-artifacts.local.json cargo make migration-status-final",
         "HARDWARE_EVIDENCE=hardware-validation-evidence.local.toml cargo make migration-status-final-current",
         "tools/hardware_validation.py --hardware-baseline tools/hardware_validation_baseline.toml --require-classified",
         "tools/hardware_validation.py --markdown",
@@ -2256,6 +2405,7 @@ fn local_validation_entrypoints_match_ci_gates() {
             && README_MD.contains("cargo make hardware-validation-evidence-template-current")
             && README_MD.contains("cargo make hardware-validation-session-current")
             && README_MD.contains("HARDWARE_EVIDENCE=hardware-validation-evidence.local.toml cargo make migration-status-final-current")
+            && README_MD.contains("--firmware-artifact-manifest firmware-artifacts.local.json")
             && README_MD.contains("HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-report")
             && PORTING_MD.contains("cargo make migration-status-report")
             && PORTING_MD.contains("cargo make rmk-zmk-scenario-tests")
@@ -2264,6 +2414,7 @@ fn local_validation_entrypoints_match_ci_gates() {
             && PORTING_MD.contains("cargo make firmware-artifact-manifest-current")
             && PORTING_MD.contains("cargo make hardware-validation-evidence-template-current")
             && PORTING_MD.contains("cargo make hardware-validation-session-current")
+            && PORTING_MD.contains("--firmware-artifact-manifest firmware-artifacts.local.json")
             && PORTING_MD.contains("HARDWARE_EVIDENCE=hardware-validation-evidence.local.toml cargo make migration-status-final-current"),
         "README and porting notes should document the local Markdown migration dashboard, RMK behavior regression suite, artifact manifest, current-ref evidence template, and current-ref final gate"
     );
@@ -2298,9 +2449,10 @@ fn local_validation_entrypoints_match_ci_gates() {
         "hardware evidence example should document firmware_ref-prefilled template generation"
     );
     assert!(
-        RELEASE_MD.contains("HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-final")
+        RELEASE_MD.contains("HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit FIRMWARE_ARTIFACT_MANIFEST=firmware-artifacts.local.json cargo make migration-status-final")
             && RELEASE_MD.contains("--hardware-baseline tools/hardware_validation_baseline.toml")
             && RELEASE_MD.contains("--zmk-keymap zmk-config-LalaPadGen2/config/lalapadgen2.keymap")
+            && RELEASE_MD.contains("--firmware-artifact-manifest firmware-artifacts.local.json")
             && RELEASE_MD.contains("--require-zmk-source")
             && RELEASE_MD.contains("Full validation: pass")
             && RELEASE_MD.contains("if the announcement claims complete hardware validation"),
@@ -5158,19 +5310,19 @@ print(json.dumps({
 
     let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     let ok = parsed["ok"].as_array().unwrap();
-    assert_eq!(ok.len(), 17);
+    assert_eq!(ok.len(), 18);
     assert!(ok.iter().all(|result| result["kind"] == "build_task"));
     assert_eq!(
         ok.iter()
             .map(|result| result["passed"].as_i64().unwrap())
             .sum::<i64>(),
-        55
+        57
     );
     assert_eq!(
         ok.iter()
             .map(|result| result["total"].as_i64().unwrap())
             .sum::<i64>(),
-        55
+        57
     );
 
     let bad_porting_coverage_task = parsed["bad_porting_coverage_task"]

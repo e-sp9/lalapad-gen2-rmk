@@ -2786,8 +2786,22 @@ script_contains = [
   "hardware-validation-checklist.local.md",
   "tools/migration_status.py",
   "--evidence hardware-validation-evidence.local.toml",
+  "--firmware-artifact-manifest firmware-artifacts.local.json",
   "--require-firmware-ref \"$firmware_ref\"",
   "migration-status.local.md",
+]
+
+[[makefile_task_invariants]]
+id = "makefile_migration_final_checks_firmware_artifacts"
+task = "migration-status-final"
+script_contains = [
+  "HARDWARE_EVIDENCE",
+  "FIRMWARE_REF",
+  "FIRMWARE_ARTIFACT_MANIFEST",
+  "--evidence \"$HARDWARE_EVIDENCE\"",
+  "--firmware-artifact-manifest \"${FIRMWARE_ARTIFACT_MANIFEST:-firmware-artifacts.local.json}\"",
+  "--require-hardware-validated",
+  "--require-firmware-ref \"$FIRMWARE_REF\"",
 ]
 
 [[makefile_task_invariants]]
@@ -2805,6 +2819,7 @@ script_contains = [
   "--require-software-complete",
   "--require-hardware-classified",
   "--require-hardware-validated",
+  "--firmware-artifact-manifest \"${FIRMWARE_ARTIFACT_MANIFEST:-firmware-artifacts.local.json}\"",
   "--require-firmware-ref \"$firmware_ref\"",
 ]
 

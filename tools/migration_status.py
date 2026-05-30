@@ -4,13 +4,18 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import firmware_artifact_manifest
 import hardware_validation
 import porting_coverage
+
+SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
 @dataclass
@@ -28,6 +33,7 @@ class SoftwareStatus:
 class MigrationStatus:
     software: SoftwareStatus
     hardware: dict[str, Any]
+    firmware_artifacts: dict[str, Any] | None
     ready_for_release_without_hardware: bool
     fully_validated: bool
 
@@ -127,6 +133,7 @@ def hardware_status(
     hardware_baseline_path: Path | None,
     evidence_paths: list[Path],
     required_firmware_ref: str | None,
+    extra_errors: list[str] | None = None,
 ) -> dict[str, Any]:
     manifest_doc = hardware_validation.load_toml(manifest_path)
     baseline_failures: list[str] = []
@@ -146,11 +153,140 @@ def hardware_status(
     )
     summary = hardware_validation.summarize(
         manifest,
-        evidence_errors + baseline_failures,
+        evidence_errors + baseline_failures + (extra_errors or []),
         Path("."),
         required_firmware_ref,
     )
     return hardware_validation.as_json(summary)
+
+
+def firmware_artifact_status(
+    artifact_manifest_path: Path | None,
+    required_firmware_ref: str | None,
+) -> dict[str, Any] | None:
+    if artifact_manifest_path is None:
+        return None
+
+    errors: list[str] = []
+    try:
+        artifact_manifest = json.loads(artifact_manifest_path.read_text(encoding="utf-8"))
+    except OSError as e:
+        return {
+            "path": str(artifact_manifest_path),
+            "firmware_ref": "",
+            "artifact_count": 0,
+            "pair_sha256": "",
+            "errors": [f"failed to read firmware artifact manifest {artifact_manifest_path}: {e}"],
+        }
+    except json.JSONDecodeError as e:
+        return {
+            "path": str(artifact_manifest_path),
+            "firmware_ref": "",
+            "artifact_count": 0,
+            "pair_sha256": "",
+            "errors": [f"firmware artifact manifest {artifact_manifest_path} is invalid JSON: {e}"],
+        }
+    if not isinstance(artifact_manifest, dict):
+        return {
+            "path": str(artifact_manifest_path),
+            "firmware_ref": "",
+            "artifact_count": 0,
+            "pair_sha256": "",
+            "errors": [f"firmware artifact manifest {artifact_manifest_path} must be a JSON object"],
+        }
+
+    firmware_ref = str(artifact_manifest.get("firmware_ref", "")).strip()
+    if not firmware_ref:
+        errors.append("firmware artifact manifest missing firmware_ref")
+    elif hardware_validation.is_placeholder_value(firmware_ref):
+        errors.append("firmware artifact manifest firmware_ref must be immutable")
+    if required_firmware_ref is not None and firmware_ref != required_firmware_ref:
+        errors.append(
+            "firmware artifact manifest firmware_ref "
+            f"{firmware_ref!r} does not match required {required_firmware_ref!r}"
+        )
+
+    pair_sha256 = str(artifact_manifest.get("pair_sha256", "")).strip()
+    if not SHA256_RE.fullmatch(pair_sha256):
+        errors.append("firmware artifact manifest pair_sha256 must be a SHA256 hex string")
+
+    artifacts = artifact_manifest.get("artifacts", [])
+    if not isinstance(artifacts, list):
+        artifacts = []
+        errors.append("firmware artifact manifest artifacts must be a list")
+    artifact_count = artifact_manifest.get("artifact_count")
+    if not isinstance(artifact_count, int):
+        errors.append("firmware artifact manifest artifact_count must be an integer")
+        artifact_count = len(artifacts)
+    elif artifact_count != len(artifacts):
+        errors.append(
+            "firmware artifact manifest artifact_count "
+            f"{artifact_count} does not match artifacts length {len(artifacts)}"
+        )
+    artifacts_by_path = {
+        str(artifact.get("path", "")): artifact
+        for artifact in artifacts
+        if isinstance(artifact, dict)
+    }
+    if len(artifacts_by_path) != len(artifacts):
+        errors.append("firmware artifact manifest artifacts must be objects with unique paths")
+
+    for artifact in artifacts:
+        if not isinstance(artifact, dict):
+            continue
+        path = str(artifact.get("path", "")).strip()
+        size = artifact.get("size")
+        sha256 = str(artifact.get("sha256", "")).strip()
+        if not path:
+            errors.append("firmware artifact manifest artifact path must be present")
+        if not isinstance(size, int) or size <= 0:
+            errors.append(f"firmware artifact manifest {path or '<missing path>'} size must be positive")
+        if not SHA256_RE.fullmatch(sha256):
+            errors.append(
+                f"firmware artifact manifest {path or '<missing path>'} sha256 must be a SHA256 hex string"
+            )
+
+    pair_digest_payload = json.dumps(
+        [
+            {
+                "path": artifact.get("path"),
+                "size": artifact.get("size"),
+                "sha256": artifact.get("sha256"),
+            }
+            for artifact in artifacts
+            if isinstance(artifact, dict)
+        ],
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+    expected_pair_sha256 = hashlib.sha256(pair_digest_payload).hexdigest()
+    if pair_sha256 and pair_sha256 != expected_pair_sha256:
+        errors.append(
+            "firmware artifact manifest pair_sha256 "
+            f"{pair_sha256!r} does not match artifact entries {expected_pair_sha256!r}"
+        )
+
+    required_uf2_paths = [
+        spec.path
+        for spec in firmware_artifact_manifest.ARTIFACTS
+        if spec.required_group == "uf2"
+    ]
+    for required_path in required_uf2_paths:
+        artifact = artifacts_by_path.get(required_path)
+        if artifact is None:
+            errors.append(f"firmware artifact manifest missing required UF2 {required_path}")
+            continue
+        if artifact.get("kind") != "uf2":
+            errors.append(f"firmware artifact manifest {required_path} kind must be uf2")
+
+    return {
+        "path": str(artifact_manifest_path),
+        "firmware_ref": firmware_ref,
+        "artifact_count": artifact_count,
+        "pair_sha256": pair_sha256,
+        "required_uf2_paths": required_uf2_paths,
+        "errors": errors,
+    }
 
 
 def build_status(args: argparse.Namespace) -> MigrationStatus:
@@ -161,11 +297,25 @@ def build_status(args: argparse.Namespace) -> MigrationStatus:
         args.require_zmk_source,
         args.coverage_baseline,
     )
+    firmware_artifacts = firmware_artifact_status(
+        args.firmware_artifact_manifest,
+        args.require_firmware_ref,
+    )
+    artifact_errors = firmware_artifacts["errors"] if firmware_artifacts else []
+    required_firmware_ref = args.require_firmware_ref
+    if (
+        required_firmware_ref is None
+        and firmware_artifacts is not None
+        and firmware_artifacts["firmware_ref"]
+        and not hardware_validation.is_placeholder_value(firmware_artifacts["firmware_ref"])
+    ):
+        required_firmware_ref = firmware_artifacts["firmware_ref"]
     hardware = hardware_status(
         args.hardware_manifest,
         args.hardware_baseline,
         args.evidence,
-        args.require_firmware_ref,
+        required_firmware_ref,
+        artifact_errors,
     )
     hardware_classified = bool(hardware["classified"])
     hardware_validated = hardware_classified and hardware["validated"] == hardware["total"]
@@ -173,6 +323,7 @@ def build_status(args: argparse.Namespace) -> MigrationStatus:
     return MigrationStatus(
         software=software,
         hardware=hardware,
+        firmware_artifacts=firmware_artifacts,
         ready_for_release_without_hardware=ready_without_hardware,
         fully_validated=ready_without_hardware and hardware_validated,
     )
@@ -190,6 +341,7 @@ def as_json(status: MigrationStatus) -> dict[str, Any]:
             "failed": status.software.failed,
         },
         "hardware": status.hardware,
+        "firmware_artifacts": status.firmware_artifacts,
         "ready_for_release_without_hardware": status.ready_for_release_without_hardware,
         "fully_validated": status.fully_validated,
     }
@@ -213,6 +365,14 @@ def print_text(status: MigrationStatus) -> None:
         "Hardware validation: "
         f"{hardware['validated']}/{hardware['total']} = {hardware_rate}"
     )
+    if status.firmware_artifacts is not None:
+        artifacts = status.firmware_artifacts
+        artifact_status = "pass" if not artifacts["errors"] else "fail"
+        print(
+            "Firmware artifacts: "
+            f"{artifact_status} ref={artifacts['firmware_ref'] or 'n/a'} "
+            f"count={artifacts['artifact_count']} pair_sha256={artifacts['pair_sha256'] or 'n/a'}"
+        )
     print(
         "Release gate without hardware: "
         f"{'pass' if status.ready_for_release_without_hardware else 'fail'}"
@@ -305,6 +465,22 @@ def print_markdown(status: MigrationStatus) -> None:
     )
     print()
     print(f"Full validation: {'pass' if status.fully_validated else 'fail'}")
+    if status.firmware_artifacts is not None:
+        artifacts = status.firmware_artifacts
+        print()
+        print(
+            markdown_table(
+                [
+                    ["Firmware artifact manifest", "Firmware ref", "Artifact count", "Pair SHA256"],
+                    [
+                        artifacts["path"],
+                        artifacts["firmware_ref"] or "n/a",
+                        str(artifacts["artifact_count"]),
+                        artifacts["pair_sha256"] or "n/a",
+                    ],
+                ]
+            )
+        )
     if status.software.failed:
         print()
         print("### Software Failures")
@@ -369,6 +545,12 @@ def main() -> None:
     )
     parser.add_argument("--hardware-baseline", type=Path, default=None)
     parser.add_argument("--evidence", type=Path, action="append", default=[])
+    parser.add_argument(
+        "--firmware-artifact-manifest",
+        type=Path,
+        default=None,
+        help="validate hardware evidence against a generated firmware artifact hash manifest",
+    )
     parser.add_argument("--require-firmware-ref", metavar="REF")
     parser.add_argument("--require-software-complete", action="store_true")
     parser.add_argument("--require-hardware-classified", action="store_true")
