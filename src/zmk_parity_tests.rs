@@ -3923,6 +3923,45 @@ fn hardware_validation_rejects_template_firmware_ref_without_template_output() {
 }
 
 #[test]
+fn hardware_validation_rejects_placeholder_template_bindings() {
+    for firmware_ref in ["main", "origin/main", "refs/heads/main", "develop"] {
+        let placeholder_ref = run_hardware_validation(&[
+            "--evidence-template",
+            "--firmware-ref-template",
+            firmware_ref,
+        ]);
+        assert!(
+            !placeholder_ref.status.success(),
+            "hardware validation accepted mutable firmware_ref template {firmware_ref:?}\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&placeholder_ref.stdout),
+            String::from_utf8_lossy(&placeholder_ref.stderr)
+        );
+        assert!(
+            String::from_utf8_lossy(&placeholder_ref.stderr)
+                .contains("--firmware-ref-template must be an immutable flashed tag or commit"),
+            "placeholder firmware_ref template rejection should describe the immutable ref requirement"
+        );
+    }
+
+    let malformed_pair = run_hardware_validation(&[
+        "--checklist",
+        "--artifact-pair-sha256-template",
+        "not-a-sha256",
+    ]);
+    assert!(
+        !malformed_pair.status.success(),
+        "hardware validation accepted a malformed artifact pair SHA256 template\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&malformed_pair.stdout),
+        String::from_utf8_lossy(&malformed_pair.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&malformed_pair.stderr)
+            .contains("--artifact-pair-sha256-template must be a SHA256 hex string"),
+        "malformed artifact pair template rejection should describe the SHA256 requirement"
+    );
+}
+
+#[test]
 fn hardware_validation_does_not_count_incomplete_validated_evidence() {
     let evidence = r#"
 [[evidence]]

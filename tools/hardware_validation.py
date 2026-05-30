@@ -96,6 +96,12 @@ COPY_AID_PLACEHOLDER_RE = re.compile(
     re.escape("<photo/log/probe/Vial path or reading>"),
     re.IGNORECASE,
 )
+SHA256_RE = re.compile(r"[0-9a-f]{64}", re.IGNORECASE)
+BRANCH_REF_RE = re.compile(
+    r"^(?:refs/heads/|refs/remotes/|origin/|remotes/)?[A-Za-z0-9._/-]*"
+    r"(?:main|master|develop|development|dev|trunk)[A-Za-z0-9._/-]*$",
+    re.IGNORECASE,
+)
 
 
 @dataclass
@@ -183,6 +189,11 @@ def is_placeholder_value(value: Any) -> bool:
         text.lower() in PLACEHOLDER_VALUES
         or (text.startswith("<") and text.endswith(">") and len(text) > 2)
     )
+
+
+def is_mutable_firmware_ref(value: Any) -> bool:
+    text = str(value).strip()
+    return is_placeholder_value(text) or BRANCH_REF_RE.fullmatch(text) is not None
 
 
 def validate_evidence_needles_schema(check_id: str, check: dict[str, Any]) -> list[str]:
@@ -1128,8 +1139,10 @@ def main() -> None:
         parser.error(
             "--artifact-pair-sha256-template can only be used with --evidence-template or --checklist"
         )
-    if args.artifact_pair_sha256_template and not re.fullmatch(
-        r"[0-9a-f]{64}", args.artifact_pair_sha256_template
+    if args.firmware_ref_template and is_mutable_firmware_ref(args.firmware_ref_template):
+        parser.error("--firmware-ref-template must be an immutable flashed tag or commit")
+    if args.artifact_pair_sha256_template and not SHA256_RE.fullmatch(
+        args.artifact_pair_sha256_template
     ):
         parser.error("--artifact-pair-sha256-template must be a SHA256 hex string")
 
