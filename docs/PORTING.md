@@ -482,6 +482,9 @@ progress plus each check's required observation terms so trackpad, split, Vial,
 status LED, battery, and storage gaps can be tracked independently. The
 `--checklist` output turns the same manifest into a compact bench checklist for
 collecting `artifact_or_notes` observations before filling an evidence overlay.
+Each checklist item includes the overlay id, validation fields, required
+observations, and artifact-note guidance so bench notes can be copied into the
+TOML overlay without changing the hardware validation denominator.
 CI uses
 `--require-classified` only, which means every
 hardware-only item must have a valid status, evidence description, and `source`

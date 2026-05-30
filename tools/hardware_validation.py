@@ -231,11 +231,10 @@ def validate_validated_evidence(check_id: str, check: dict[str, Any]) -> list[st
     if isinstance(evidence_needles, list) and all(
         isinstance(needle, str) and needle.strip() for needle in evidence_needles
     ):
-        lower_notes = artifact_or_notes.lower()
         missing_needles = [
             needle
             for needle in evidence_needles
-            if not artifact_note_mentions_needle(lower_notes, needle)
+            if not artifact_note_mentions_needle(artifact_or_notes, needle)
         ]
         if missing_needles:
             errors.append(
@@ -717,6 +716,10 @@ def as_checklist(manifest: dict[str, Any]) -> str:
         "`--evidence-template` and include the required observations in "
         "`artifact_or_notes`.",
         "",
+        "When using `firmware-artifacts.local.json`, keep the generated "
+        "`pair_sha256` in each `artifact_or_notes` entry and append the bench "
+        "observation after it.",
+        "",
     ]
     checks = manifest.get("checks", [])
     current_area: str | None = None
@@ -735,6 +738,16 @@ def as_checklist(manifest: dict[str, Any]) -> str:
             lines.append(f"  - How to verify: {check.get('evidence', '')}")
             lines.append(f"  - Required observations: {evidence_needles_text(check)}")
             lines.append(f"  - Evidence source: {check.get('source', '')}")
+            lines.append("  - Evidence overlay:")
+            lines.append(f"    - id: {check_id}")
+            lines.append("    - status: validated only after this item passes on hardware")
+            lines.append("    - validated_at: YYYY-MM-DD test date")
+            lines.append("    - tester: person or bench that ran the check")
+            lines.append("    - firmware_ref: flashed immutable tag or commit")
+            lines.append(
+                "    - artifact_or_notes: concrete photo/log/probe/Vial observation "
+                f"that mentions {evidence_needles_text(check)}"
+            )
             lines.append("")
     return "\n".join(lines)
 

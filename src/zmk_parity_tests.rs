@@ -2291,6 +2291,8 @@ fn hardware_validation_can_generate_bench_checklist() {
     let checks = manifest["checks"].as_array().unwrap();
     assert!(stdout.contains("# LaLaPad Gen2 RMK Hardware Validation Checklist"));
     assert!(stdout.contains("Record the flashed firmware tag or commit before testing."));
+    assert!(stdout.contains("firmware-artifacts.local.json"));
+    assert!(stdout.contains("pair_sha256"));
     assert!(stdout.contains("## trackpad"));
     assert!(stdout.contains("## vial"));
     for check in checks {
@@ -2306,6 +2308,24 @@ fn hardware_validation_can_generate_bench_checklist() {
         assert!(
             stdout.contains(check["evidence"].as_str().unwrap()),
             "checklist should include evidence instructions for {check_id}"
+        );
+        assert!(
+            stdout.contains(&format!("    - id: {check_id}")),
+            "checklist should include evidence overlay id for {check_id}"
+        );
+        assert!(
+            stdout.contains("status: validated only after this item passes on hardware"),
+            "checklist should warn that validated is only for passing hardware evidence"
+        );
+        assert!(
+            stdout.contains("firmware_ref: flashed immutable tag or commit"),
+            "checklist should include firmware_ref capture guidance"
+        );
+        assert!(
+            stdout.contains(
+                "artifact_or_notes: concrete photo/log/probe/Vial observation that mentions"
+            ),
+            "checklist should include artifact_or_notes capture guidance"
         );
         for needle in check["evidence_needles"].as_array().unwrap() {
             assert!(
