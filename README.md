@@ -413,7 +413,9 @@ requires the resolved ZMK source checkout to be a readable, clean Git
 repository at the manifest-pinned `metadata.source_commit`, so a release claim
 cannot be tied to uncommitted upstream-source edits or to a different upstream
 revision. The task uses `firmware-artifacts.local.json` by default, or
-`FIRMWARE_ARTIFACT_MANIFEST` when set.
+`FIRMWARE_ARTIFACT_MANIFEST` when set. It also rejects hardware evidence
+overlays missing the generated `metadata.hardware_check_inventory_sha256`, or
+whose hash no longer matches the current hardware validation manifest.
 
 For hardware evidence collected from the current clean commit, this variant
 derives the exact tag or short commit automatically and refuses tracked or

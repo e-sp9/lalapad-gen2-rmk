@@ -431,6 +431,10 @@ The final gate adds `--require-zmk-clean-source` and
 available inside a readable Git repository with no uncommitted changes, and
 that repository must be at the manifest-pinned `metadata.source_commit`, before
 a complete validation claim can pass.
+It also rejects hardware evidence overlays missing the generated
+`metadata.hardware_check_inventory_sha256`, or whose hash no longer matches the
+current hardware validation manifest, so stale overlays cannot silently claim a
+smaller or different hardware-check inventory.
 It also requires each validated hardware evidence entry to include at least one
 existing non-empty `artifact_paths` file. Relative paths are resolved from
 `EVIDENCE_ARTIFACT_ROOT` when set, otherwise from the current directory, so the

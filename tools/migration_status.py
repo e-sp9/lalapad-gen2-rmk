@@ -740,7 +740,14 @@ def main() -> None:
     parser.add_argument("--require-hardware-classified", action="store_true")
     parser.add_argument("--require-release-ready", action="store_true")
     parser.add_argument("--require-evidence-artifact-paths", action="store_true")
-    parser.add_argument("--require-evidence-inventory", action="store_true")
+    parser.add_argument(
+        "--require-evidence-inventory",
+        action="store_true",
+        help=(
+            "fail unless every evidence overlay declares the current "
+            "hardware_check_inventory_sha256 metadata"
+        ),
+    )
     parser.add_argument("--require-hardware-validated", action="store_true")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--markdown", action="store_true")
