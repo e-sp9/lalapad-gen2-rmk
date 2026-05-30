@@ -132,6 +132,7 @@ rmkit get-chip --keyboard-toml-path keyboard.toml
 rmkit get-project-name --keyboard-toml-path keyboard.toml
 cargo make porting-coverage
 cargo make migration-status
+cargo make migration-status-release-ready
 cargo make migration-status-report
 cargo make host-parity-tests
 cargo make rmk-zmk-scenario-tests
@@ -197,6 +198,8 @@ path, Git commit, dirty state, and dirty path list so a `100.00%` porting
 result is tied to the exact upstream checkout used as the source contract. The
 combined release-readiness line stays failed when that checkout is dirty or
 outside Git, even if the source-backed software coverage percentage is 100%.
+Use `cargo make migration-status-release-ready` when that release-readiness line
+must be a hard local or CI gate before a hardware-complete claim.
 The
 `--coverage-baseline tools/porting_coverage_baseline.toml` gate also freezes
 the current denominator, result-id inventory hash, and per-kind totals, so

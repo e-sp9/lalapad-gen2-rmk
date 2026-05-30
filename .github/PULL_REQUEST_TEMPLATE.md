@@ -19,6 +19,7 @@
 - [ ] `rmkit get-project-name --keyboard-toml-path keyboard.toml`
 - [ ] `cargo make porting-coverage` with the manifest-pinned ZMK source commit
 - [ ] `cargo make migration-status` with the manifest-pinned ZMK source commit
+- [ ] `cargo make migration-status-release-ready` with the manifest-pinned clean ZMK source commit
 - [ ] `cargo make migration-status-report` with the manifest-pinned ZMK source commit
 - [ ] `HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-report`, if reviewing partial hardware evidence
 - [ ] `HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit FIRMWARE_ARTIFACT_MANIFEST=firmware-artifacts.local.json cargo make migration-status-final`, if claiming complete migration validation for a release with the manifest-pinned clean ZMK source commit

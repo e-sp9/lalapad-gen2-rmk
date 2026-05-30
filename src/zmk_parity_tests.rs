@@ -1602,6 +1602,35 @@ fn migration_status_accepts_complete_hardware_evidence_for_final_gate() {
         Some(false)
     );
     assert_eq!(dirty_source["fully_validated"].as_bool(), Some(false));
+    let dirty_release_ready_output = run_migration_status(&[
+        "--coverage-baseline",
+        "tools/porting_coverage_baseline.toml",
+        "--hardware-baseline",
+        "tools/hardware_validation_baseline.toml",
+        "--zmk-keymap",
+        dirty_zmk_keymap,
+        "--evidence",
+        path.to_str().unwrap(),
+        "--firmware-artifact-manifest",
+        artifact_path.to_str().unwrap(),
+        "--artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--require-zmk-source",
+        "--require-firmware-ref",
+        firmware_ref,
+        "--require-software-complete",
+        "--require-hardware-classified",
+        "--require-release-ready",
+    ]);
+    assert!(
+        !dirty_release_ready_output.status.success(),
+        "dirty-source release-readiness hard gate unexpectedly passed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&dirty_release_ready_output.stdout),
+        String::from_utf8_lossy(&dirty_release_ready_output.stderr)
+    );
+    let dirty_release_ready_stdout = String::from_utf8_lossy(&dirty_release_ready_output.stdout);
+    assert!(dirty_release_ready_stdout.contains("ZMK source clean: fail"));
+    assert!(dirty_release_ready_stdout.contains("Release gate without hardware: fail"));
     let _ = std::fs::remove_dir_all(&dirty_zmk_root);
 
     let baseline = hardware_validation_baseline_toml();
@@ -3758,6 +3787,7 @@ fn local_validation_entrypoints_match_ci_gates() {
     let rmk_behavior_tests_task = makefile_task_block("rmk-behavior-tests");
     let rmk_zmk_scenario_tests_task = makefile_task_block("rmk-zmk-scenario-tests");
     let migration_status_task = makefile_task_block("migration-status");
+    let migration_status_release_ready_task = makefile_task_block("migration-status-release-ready");
     let migration_status_report_task = makefile_task_block("migration-status-report");
     let migration_status_final_task = makefile_task_block("migration-status-final");
     let migration_status_final_current_task = makefile_task_block("migration-status-final-current");
@@ -3837,6 +3867,20 @@ fn local_validation_entrypoints_match_ci_gates() {
             && migration_status_task
                 .contains("dependencies = [\"rmk-zmk-scenario-tests\", \"host-parity-tests\", \"rmk-behavior-tests\"]"),
         "cargo make migration-status should expose the combined release dashboard gate and run runtime scenarios, host parity, and RMK behavior first"
+    );
+    assert!(
+        migration_status_release_ready_task.contains("tools/migration_status.py")
+            && migration_status_release_ready_task.contains("--coverage-baseline")
+            && migration_status_release_ready_task.contains("--hardware-baseline")
+            && migration_status_release_ready_task.contains("tools/hardware_validation_baseline.toml")
+            && migration_status_release_ready_task.contains("--require-zmk-source")
+            && migration_status_release_ready_task.contains("--require-zmk-source-commit")
+            && migration_status_release_ready_task.contains("--require-software-complete")
+            && migration_status_release_ready_task.contains("--require-hardware-classified")
+            && migration_status_release_ready_task.contains("--require-release-ready")
+            && migration_status_release_ready_task
+                .contains("dependencies = [\"rmk-zmk-scenario-tests\", \"host-parity-tests\", \"rmk-behavior-tests\"]"),
+        "cargo make migration-status-release-ready should hard-fail the release-readiness dashboard gate after runtime scenarios, host parity, and RMK behavior"
     );
     assert!(
         migration_status_report_task.contains("tools/migration_status.py")
@@ -4016,6 +4060,7 @@ fn local_validation_entrypoints_match_ci_gates() {
     for required in [
         "cargo make porting-coverage",
         "cargo make migration-status",
+        "cargo make migration-status-release-ready",
         "cargo make migration-status-report",
         "HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-report",
         "HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit FIRMWARE_ARTIFACT_MANIFEST=firmware-artifacts.local.json cargo make migration-status-final",
@@ -4063,6 +4108,7 @@ fn local_validation_entrypoints_match_ci_gates() {
     );
     assert!(
         FIRMWARE_WORKFLOW_YAML.contains("tools/migration_status.py")
+            && FIRMWARE_WORKFLOW_YAML.contains("cargo make migration-status-release-ready")
             && FIRMWARE_WORKFLOW_YAML.contains("--hardware-baseline")
             && FIRMWARE_WORKFLOW_YAML.contains("--require-zmk-source-commit")
             && FIRMWARE_WORKFLOW_YAML.contains("--require-software-complete")
@@ -4085,6 +4131,7 @@ fn local_validation_entrypoints_match_ci_gates() {
     assert!(
         README_MD.contains("cargo make migration-status-report")
             && README_MD.contains("cargo make migration-status")
+            && README_MD.contains("cargo make migration-status-release-ready")
             && README_MD.contains("cargo make rmk-zmk-scenario-tests")
             && README_MD.contains("cargo make rmk-behavior-tests")
             && README_MD.contains("python3 tools/firmware_artifact_manifest.py --require-uf2 > firmware-artifacts.local.json")
@@ -4099,6 +4146,7 @@ fn local_validation_entrypoints_match_ci_gates() {
             && README_MD.contains("HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-report")
             && PORTING_MD.contains("cargo make migration-status-report")
             && PORTING_MD.contains("cargo make migration-status")
+            && PORTING_MD.contains("cargo make migration-status-release-ready")
             && PORTING_MD.contains("cargo make rmk-zmk-scenario-tests")
             && PORTING_MD.contains("cargo make rmk-behavior-tests")
             && PORTING_MD.contains("python3 tools/firmware_artifact_manifest.py --require-uf2 > firmware-artifacts.local.json")
@@ -8014,6 +8062,17 @@ with tempfile.TemporaryDirectory() as tempdir:
 
 with tempfile.TemporaryDirectory() as tempdir:
     root = Path(tempdir)
+    makefile = Path("Makefile.toml").read_text()
+    before, marker, after = makefile.partition("[tasks.migration-status-release-ready]")
+    assert marker
+    (root / "Makefile.toml").write_text(
+        before + marker + after.replace("--require-release-ready", "--require-hardware-validated", 1),
+        encoding="utf-8",
+    )
+    bad_migration_status_release_ready_task = pc.check_makefile_task_invariants(manifest, root)
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
     (root / "Makefile.toml").write_text(
         Path("Makefile.toml").read_text().replace('"nrf52840"', '"rp2040"', 1),
         encoding="utf-8",
@@ -8134,6 +8193,7 @@ print(json.dumps({
     "bad_host_parity_task": pack(bad_host_parity_task),
     "bad_warning_flags": pack(bad_warning_flags),
     "bad_migration_status_task": pack(bad_migration_status_task),
+    "bad_migration_status_release_ready_task": pack(bad_migration_status_release_ready_task),
     "bad_family": pack(bad_family),
     "bad_uf2_gate": pack(bad_uf2_gate),
     "bad_rmk_behavior_task": pack(bad_rmk_behavior_task),
@@ -8160,19 +8220,19 @@ print(json.dumps({
 
     let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     let ok = parsed["ok"].as_array().unwrap();
-    assert_eq!(ok.len(), 22);
+    assert_eq!(ok.len(), 23);
     assert!(ok.iter().all(|result| result["kind"] == "build_task"));
     assert_eq!(
         ok.iter()
             .map(|result| result["passed"].as_i64().unwrap())
             .sum::<i64>(),
-        74
+        78
     );
     assert_eq!(
         ok.iter()
             .map(|result| result["total"].as_i64().unwrap())
             .sum::<i64>(),
-        74
+        78
     );
 
     let bad_rmk_config_schema_task = parsed["bad_rmk_config_schema_task"]
@@ -8281,6 +8341,24 @@ print(json.dumps({
             .as_str()
             .unwrap()
             .contains("tasks.migration-status.dependencies missing required values ['rmk-zmk-scenario-tests', 'host-parity-tests', 'rmk-behavior-tests']")
+    );
+
+    let bad_migration_status_release_ready_task = parsed["bad_migration_status_release_ready_task"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "makefile_migration_status_release_ready_is_hard_gate")
+        .expect("changed release-ready migration status task result is missing");
+    assert_eq!(
+        bad_migration_status_release_ready_task["kind"],
+        "build_task"
+    );
+    assert_eq!(bad_migration_status_release_ready_task["ok"], false);
+    assert!(
+        bad_migration_status_release_ready_task["message"]
+            .as_str()
+            .unwrap()
+            .contains("tasks.migration-status-release-ready.args missing required values ['--require-release-ready']")
     );
 
     let bad_family = parsed["bad_family"]
@@ -8592,13 +8670,13 @@ print(json.dumps({
         ok.iter()
             .map(|result| result["passed"].as_i64().unwrap())
             .sum::<i64>(),
-        51
+        52
     );
     assert_eq!(
         ok.iter()
             .map(|result| result["total"].as_i64().unwrap())
             .sum::<i64>(),
-        51
+        52
     );
 
     let bad_migration_gate = parsed["bad_migration_gate"]

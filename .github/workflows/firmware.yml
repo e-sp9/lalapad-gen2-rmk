@@ -117,6 +117,7 @@ jobs:
       - name: Verify ZMK-to-RMK porting coverage
         run: |
           cargo make porting-coverage
+          cargo make migration-status-release-ready
           python3 tools/migration_status.py \
             --coverage-baseline tools/porting_coverage_baseline.toml \
             --hardware-baseline tools/hardware_validation_baseline.toml \

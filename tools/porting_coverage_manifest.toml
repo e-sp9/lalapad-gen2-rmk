@@ -2805,6 +2805,24 @@ args_contains = [
 dependencies_include = ["rmk-zmk-scenario-tests", "host-parity-tests", "rmk-behavior-tests"]
 
 [[makefile_task_invariants]]
+id = "makefile_migration_status_release_ready_is_hard_gate"
+task = "migration-status-release-ready"
+command = "python3"
+args_contains = [
+  "tools/migration_status.py",
+  "--coverage-baseline",
+  "tools/porting_coverage_baseline.toml",
+  "--hardware-baseline",
+  "tools/hardware_validation_baseline.toml",
+  "--require-zmk-source",
+  "--require-zmk-source-commit",
+  "--require-software-complete",
+  "--require-hardware-classified",
+  "--require-release-ready",
+]
+dependencies_include = ["rmk-zmk-scenario-tests", "host-parity-tests", "rmk-behavior-tests"]
+
+[[makefile_task_invariants]]
 id = "makefile_migration_status_report_runs_runtime_host_and_rmk_behavior_first"
 task = "migration-status-report"
 dependencies_include = ["rmk-zmk-scenario-tests", "host-parity-tests", "rmk-behavior-tests"]
@@ -3046,6 +3064,7 @@ needles = [
   "cargo install --locked --force rmkit --version 0.0.21",
   "cargo make rmk-config-schema",
   "cargo make porting-coverage",
+  "cargo make migration-status-release-ready",
   "python3 tools/migration_status.py",
   "--coverage-baseline tools/porting_coverage_baseline.toml",
   "--hardware-baseline tools/hardware_validation_baseline.toml",

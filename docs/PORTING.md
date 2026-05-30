@@ -298,6 +298,7 @@ Run:
 ```sh
 cargo make porting-coverage
 cargo make migration-status
+cargo make migration-status-release-ready
 cargo make host-parity-tests
 cargo make rmk-behavior-tests
 ```
@@ -448,6 +449,9 @@ percentage. This keeps the monitor tied to the vendored RMK runtime scenarios
 for Space, Enter, and the system tri-layer plus the broader RMK tap/hold,
 layer, combo, macro, and one-shot regression suite instead of relying only on
 static keymap/config coverage.
+Use `cargo make migration-status-release-ready` when the software-complete,
+hardware-classified, clean ZMK source, and release-readiness dashboard line
+must fail the command instead of only appearing in the report.
 `cargo make rmk-behavior-tests` uses `--tests`, so it intentionally re-runs the
 LaLaPad scenario test binary while exercising the full vendored RMK host suite.
 

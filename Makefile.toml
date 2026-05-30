@@ -189,6 +189,22 @@ args = [
 ]
 dependencies = ["rmk-zmk-scenario-tests", "host-parity-tests", "rmk-behavior-tests"]
 
+[tasks.migration-status-release-ready]
+command = "python3"
+args = [
+    "tools/migration_status.py",
+    "--coverage-baseline",
+    "tools/porting_coverage_baseline.toml",
+    "--hardware-baseline",
+    "tools/hardware_validation_baseline.toml",
+    "--require-zmk-source",
+    "--require-zmk-source-commit",
+    "--require-software-complete",
+    "--require-hardware-classified",
+    "--require-release-ready",
+]
+dependencies = ["rmk-zmk-scenario-tests", "host-parity-tests", "rmk-behavior-tests"]
+
 [tasks.migration-status-report]
 dependencies = ["rmk-zmk-scenario-tests", "host-parity-tests", "rmk-behavior-tests"]
 script = '''

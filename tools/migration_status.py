@@ -707,6 +707,7 @@ def main() -> None:
     parser.add_argument("--require-firmware-ref", metavar="REF")
     parser.add_argument("--require-software-complete", action="store_true")
     parser.add_argument("--require-hardware-classified", action="store_true")
+    parser.add_argument("--require-release-ready", action="store_true")
     parser.add_argument("--require-hardware-validated", action="store_true")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--markdown", action="store_true")
@@ -740,6 +741,8 @@ def main() -> None:
     if args.require_hardware_classified and not status.hardware["classified"]:
         raise SystemExit(1)
     if args.require_firmware_ref is not None and not status.hardware["classified"]:
+        raise SystemExit(1)
+    if args.require_release_ready and not status.ready_for_release_without_hardware:
         raise SystemExit(1)
     if args.require_hardware_validated and not status.fully_validated:
         raise SystemExit(1)
