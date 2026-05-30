@@ -909,6 +909,9 @@ fn firmware_ci_runs_complete_porting_gate_before_builds() {
     let software_required_flag = "--require-software-complete";
     let host_tests = "cargo make host-parity-tests";
     let release_build = "cargo make build";
+    let manifest = porting_coverage_manifest_toml();
+    let source_commit = manifest["metadata"]["source_commit"].as_str().unwrap();
+    let source_commit_ref = format!("ref: {source_commit}");
 
     for required in [
         gate_command,
@@ -917,6 +920,7 @@ fn firmware_ci_runs_complete_porting_gate_before_builds() {
         "tools/porting_coverage_baseline.toml",
         zmk_required_flag,
         zmk_commit_required_flag,
+        source_commit_ref.as_str(),
         software_required_flag,
     ] {
         assert!(
@@ -7832,13 +7836,13 @@ print(json.dumps({
         ok.iter()
             .map(|result| result["passed"].as_i64().unwrap())
             .sum::<i64>(),
-        49
+        51
     );
     assert_eq!(
         ok.iter()
             .map(|result| result["total"].as_i64().unwrap())
             .sum::<i64>(),
-        49
+        51
     );
 
     let bad_migration_gate = parsed["bad_migration_gate"]

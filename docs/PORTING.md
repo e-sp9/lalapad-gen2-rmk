@@ -302,10 +302,11 @@ cargo make host-parity-tests
 cargo make rmk-behavior-tests
 ```
 
-The firmware GitHub Actions workflow checks out `e-sp9/zmk-config-LalaPadGen2`,
-parses `vial.json`, RMK/Cargo/manifest TOML, and flash layout, runs this
-source-backed complete-porting gate, runs the host-side parity test suite and
-vendored RMK behavior regression suite as part of the same local porting gate,
+The firmware GitHub Actions workflow checks out `e-sp9/zmk-config-LalaPadGen2`
+at the manifest-pinned `metadata.source_commit`, parses `vial.json`,
+RMK/Cargo/manifest TOML, and flash layout, runs this source-backed
+complete-porting gate, runs the host-side parity test suite and vendored RMK
+behavior regression suite as part of the same local porting gate,
 and keeps a standalone vendored RMK behavior regression step visible before
 building release binaries. These local host parity, ZMK scenario, and RMK
 behavior tasks run with `RUSTFLAGS=-Dwarnings`, and the build-task coverage

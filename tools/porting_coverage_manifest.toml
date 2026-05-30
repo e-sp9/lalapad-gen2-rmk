@@ -3038,6 +3038,7 @@ file = ".github/workflows/firmware.yml"
 needles = [
   "Checkout upstream ZMK config",
   "repository: e-sp9/zmk-config-LalaPadGen2",
+  "ref: 53f50084e4196482938f11b1ac1d1ddea3b63ccd",
   "command -v rmkit",
   'if ! command -v rmkit >/dev/null || [ "$(rmkit --version)" != "rmkit 0.0.21" ]; then',
   "cargo install --locked --force rmkit --version 0.0.21",
@@ -3048,6 +3049,7 @@ needles = [
   "--hardware-baseline tools/hardware_validation_baseline.toml",
   "--zmk-keymap zmk-config-LalaPadGen2/config/lalapadgen2.keymap",
   "--require-zmk-source",
+  "--require-zmk-source-commit",
   "--require-software-complete",
   "--require-hardware-classified",
   "cargo make host-parity-tests",

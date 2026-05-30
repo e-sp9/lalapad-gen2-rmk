@@ -261,9 +261,10 @@ mandatory in another checkout layout. Source-backed monitoring gates also use
 `--require-zmk-source-commit`, so the resolved ZMK checkout must be at the
 manifest-pinned `metadata.source_commit`, not just any source tree. The
 firmware CI checks out
-`e-sp9/zmk-config-LalaPadGen2`, parses `vial.json`, RMK/Cargo/manifest TOML,
-and flash layout, runs this source-backed complete-porting gate, and then runs
-the host-side parity test suite before building release binaries. The local
+`e-sp9/zmk-config-LalaPadGen2` at that manifest-pinned commit, parses
+`vial.json`, RMK/Cargo/manifest TOML, and flash layout, runs this
+source-backed complete-porting gate, and then runs the host-side parity test
+suite before building release binaries. The local
 host parity, ZMK scenario, and vendored RMK behavior test tasks run with
 `RUSTFLAGS=-Dwarnings`, and the porting manifest checks that this warning-free
 gate remains attached to the migration denominator.
