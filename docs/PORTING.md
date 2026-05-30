@@ -400,6 +400,12 @@ run:
 cargo make migration-status-report
 ```
 
+The `cargo make migration-status*` entrypoints run
+`cargo make rmk-zmk-scenario-tests` before calculating the reported migration
+percentage. This keeps the monitor tied to the vendored RMK runtime scenarios
+for Space, Enter, and the system tri-layer instead of relying only on static
+keymap/config coverage.
+
 To re-run the vendored RMK host regression suite locally, including tap/hold,
 layer, combo, macro, and one-shot behavior, run:
 

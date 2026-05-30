@@ -162,8 +162,10 @@ args = [
     "--require-software-complete",
     "--require-hardware-classified",
 ]
+dependencies = ["rmk-zmk-scenario-tests"]
 
 [tasks.migration-status-report]
+dependencies = ["rmk-zmk-scenario-tests"]
 script = '''
 zmk_keymap="${ZMK_KEYMAP:-}"
 if [ -z "$zmk_keymap" ]; then
@@ -203,6 +205,7 @@ python3 "$@"
 '''
 
 [tasks.migration-status-final]
+dependencies = ["rmk-zmk-scenario-tests"]
 script = '''
 : "${HARDWARE_EVIDENCE:?set HARDWARE_EVIDENCE=path/to/evidence.toml}"
 : "${FIRMWARE_REF:?set FIRMWARE_REF=<tag-or-commit>}"
@@ -235,7 +238,7 @@ python3 "$@"
 '''
 
 [tasks.migration-status-final-current]
-dependencies = ["clean-current-git-ref"]
+dependencies = ["clean-current-git-ref", "rmk-zmk-scenario-tests"]
 script = '''
 : "${HARDWARE_EVIDENCE:?set HARDWARE_EVIDENCE=path/to/evidence.toml}"
 if [ -n "$(git status --porcelain --untracked-files=normal)" ]; then

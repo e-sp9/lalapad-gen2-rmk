@@ -2714,6 +2714,36 @@ args_contains = [
 dependencies_include = ["rmk-zmk-scenario-tests"]
 
 [[makefile_task_invariants]]
+id = "makefile_migration_status_runs_runtime_scenarios_first"
+task = "migration-status"
+command = "python3"
+args_contains = [
+  "tools/migration_status.py",
+  "--coverage-baseline",
+  "tools/porting_coverage_baseline.toml",
+  "--hardware-baseline",
+  "tools/hardware_validation_baseline.toml",
+  "--require-zmk-source",
+  "--require-software-complete",
+  "--require-hardware-classified",
+]
+dependencies_include = ["rmk-zmk-scenario-tests"]
+
+[[makefile_task_invariants]]
+id = "makefile_migration_status_report_runs_runtime_scenarios_first"
+task = "migration-status-report"
+dependencies_include = ["rmk-zmk-scenario-tests"]
+script_contains = [
+  "tools/migration_status.py",
+  "--coverage-baseline tools/porting_coverage_baseline.toml",
+  "--hardware-baseline tools/hardware_validation_baseline.toml",
+  "--require-zmk-source",
+  "--require-software-complete",
+  "--require-hardware-classified",
+  "--markdown",
+]
+
+[[makefile_task_invariants]]
 id = "makefile_build_runs_release_with_flash_layout_config"
 task = "build"
 command = "cargo"
@@ -2858,6 +2888,7 @@ script_contains = [
 [[makefile_task_invariants]]
 id = "makefile_migration_final_checks_firmware_artifacts"
 task = "migration-status-final"
+dependencies_include = ["rmk-zmk-scenario-tests"]
 script_contains = [
   "HARDWARE_EVIDENCE",
   "FIRMWARE_REF",
@@ -2871,7 +2902,7 @@ script_contains = [
 [[makefile_task_invariants]]
 id = "makefile_current_migration_final_uses_clean_git_ref"
 task = "migration-status-final-current"
-dependencies_equal = ["clean-current-git-ref"]
+dependencies_equal = ["clean-current-git-ref", "rmk-zmk-scenario-tests"]
 script_contains = [
   "HARDWARE_EVIDENCE",
   "git status --porcelain --untracked-files=normal",

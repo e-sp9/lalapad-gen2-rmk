@@ -178,6 +178,10 @@ It reports both migration-contract coverage and an explicit IQS9151 symbol
 implementation status summary. `--require-porting-complete`
 makes both metrics hard gates, so release builds fail if any source item is
 unclassified or any explicit implementation status is non-implemented. The
+`cargo make migration-status*` entrypoints also run the same RMK ZMK-derived
+runtime scenario suite before reporting a migration percentage, so a stale
+Space/Enter/system tri-layer runtime regression cannot be hidden by static
+coverage alone. The
 text and JSON reports also include coverage grouped by result kind, making it
 clear whether a regression is in RMK keymap/config checks, ZMK source
 inventory, DTS/Kconfig mirrors, Rust constants, or firmware code needles. The
