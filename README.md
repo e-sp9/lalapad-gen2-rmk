@@ -265,7 +265,10 @@ it must show software coverage and implementation at `100.00%`, while hardware
 validation can remain below 100% as long as every hardware-only check is still
 classified. Its Markdown report includes hardware area, side, and remaining
 check tables so release review can see which real-device evidence is still
-missing. Use `--require-hardware-validated --require-firmware-ref
+missing. If a check is marked `validated` but its evidence is incomplete,
+stale, or not tied to the flashed artifact hash, it is shown as
+`validated_invalid` in the remaining table and does not increase the validated
+count. Use `--require-hardware-validated --require-firmware-ref
 <tag-or-commit>` only when claiming that a specific flashed firmware has passed
 every real-device check.
 

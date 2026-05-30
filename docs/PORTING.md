@@ -492,6 +492,9 @@ overlay file using the format in
 `tools/hardware_validation_evidence.example.toml`; each evidence entry updates
 one manifest check by id and must provide `validated_at`, `tester`,
 `firmware_ref`, and `artifact_or_notes` before it can count as `validated`.
+Evidence entries that declare `status = "validated"` but fail these checks are
+reported as `validated_invalid` in the remaining table, so they remain visible
+as work to fix and do not inflate the validated count.
 Each manifest check must also declare non-empty `evidence_needles`, so
 `--require-hardware-classified` catches hardware checks that lack concrete
 observation terms before any release claim is made.

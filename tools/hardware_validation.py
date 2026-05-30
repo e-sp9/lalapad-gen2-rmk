@@ -435,6 +435,20 @@ def summarize(
         )
         return bucket
 
+    def append_remaining(check: dict[str, Any], status_text: str) -> None:
+        remaining.append(
+            {
+                "id": str(check.get("id", "")),
+                "area": str(check.get("area", "")),
+                "side": str(check.get("side", "")),
+                "status": status_text,
+                "evidence": str(check.get("evidence", "")),
+                "evidence_needles": ", ".join(
+                    str(needle) for needle in check.get("evidence_needles", [])
+                ),
+            }
+        )
+
     for index, check in enumerate(checks):
         if not isinstance(check, dict):
             errors.append(f"check #{index + 1} must be a table")
@@ -469,25 +483,26 @@ def summarize(
             side_bucket["by_status"][status] += 1
             counts_as_validated = False
             if status in VALIDATED_STATUSES:
+                validation_errors: list[str] = []
                 missing_evidence = [
                     field
                     for field in VALIDATED_EVIDENCE_FIELDS
                     if not str(check.get(field, "")).strip()
                 ]
                 if missing_evidence:
-                    errors.append(
+                    validation_errors.append(
                         f"{check_id}: validated checks require evidence field(s): "
                         f"{', '.join(missing_evidence)}"
                     )
                 else:
                     evidence_errors = validate_validated_evidence(check_id, check)
                     if evidence_errors:
-                        errors.extend(evidence_errors)
+                        validation_errors.extend(evidence_errors)
                     elif (
                         required_firmware_ref is not None
                         and str(check.get("firmware_ref", "")) != required_firmware_ref
                     ):
-                        errors.append(
+                        validation_errors.append(
                             f"{check_id}: validated firmware_ref "
                             f"{str(check.get('firmware_ref', ''))!r} does not match "
                             f"required {required_firmware_ref!r}"
@@ -497,26 +512,18 @@ def summarize(
                         and required_artifact_pair_sha256
                         not in str(check.get("artifact_or_notes", ""))
                     ):
-                        errors.append(
+                        validation_errors.append(
                             f"{check_id}: artifact_or_notes must mention firmware artifact "
                             f"pair_sha256 {required_artifact_pair_sha256}"
                         )
-                    else:
-                        validated += 1
-                        counts_as_validated = True
+                if validation_errors:
+                    errors.extend(validation_errors)
+                    append_remaining(check, "validated_invalid")
+                else:
+                    validated += 1
+                    counts_as_validated = True
             else:
-                remaining.append(
-                    {
-                        "id": check_id,
-                        "area": area,
-                        "side": side,
-                        "status": status,
-                        "evidence": str(check.get("evidence", "")),
-                        "evidence_needles": ", ".join(
-                            str(needle) for needle in check.get("evidence_needles", [])
-                        ),
-                    }
-                )
+                append_remaining(check, status)
             if counts_as_validated:
                 area_bucket["validated"] += 1
                 side_bucket["validated"] += 1

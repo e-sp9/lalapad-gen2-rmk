@@ -1266,6 +1266,18 @@ fn migration_status_ties_hardware_evidence_to_firmware_artifact_manifest() {
     let parsed: serde_json::Value = serde_json::from_slice(&missing_pair_sha_json.stdout).unwrap();
     assert_eq!(parsed["hardware"]["validated"].as_i64(), Some(0));
     assert_eq!(parsed["hardware"]["classified"].as_bool(), Some(false));
+    assert_eq!(
+        parsed["hardware"]["remaining"].as_array().unwrap().len(),
+        12
+    );
+    assert!(
+        parsed["hardware"]["remaining"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|item| item["status"].as_str() == Some("validated_invalid")),
+        "invalid validated evidence should remain visible as work to fix: {parsed:?}"
+    );
     assert!(
         parsed["hardware"]["errors"]
             .as_array()
@@ -2148,6 +2160,10 @@ artifact_or_notes = "missing firmware_ref should not count"
     let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(parsed["validated"].as_i64(), Some(0));
     assert_eq!(parsed["classified"].as_bool(), Some(false));
+    assert_eq!(
+        parsed["remaining"][0]["status"].as_str(),
+        Some("validated_invalid")
+    );
     assert_eq!(parsed["by_area"]["trackpad"]["validated"].as_i64(), Some(0));
     assert_eq!(
         parsed["by_area"]["trackpad"]["by_status"]["validated"].as_i64(),
@@ -2391,6 +2407,14 @@ artifact_or_notes = "missing tester should not count"
     let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(parsed["validated"].as_i64(), Some(0));
     assert_eq!(parsed["classified"].as_bool(), Some(false));
+    assert_eq!(
+        parsed["remaining"][0]["id"].as_str(),
+        Some("iqs9151_right_i2c_identity")
+    );
+    assert_eq!(
+        parsed["remaining"][0]["status"].as_str(),
+        Some("validated_invalid")
+    );
     assert!(
         parsed["errors"].as_array().unwrap()[0]
             .as_str()
