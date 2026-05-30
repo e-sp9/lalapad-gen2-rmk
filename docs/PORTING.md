@@ -566,6 +566,9 @@ probe/scope/multimeter reading, serial/I2C output, Vial observation, or similar
 bench artifact.
 `--require-firmware-ref` only rejects stale validated evidence; combine it with
 `--require-validated` when all checks must be proven for that exact firmware.
+`--require-validated` also requires the generated
+`metadata.hardware_check_inventory_sha256` and existing non-empty
+`artifact_paths` files for every counted validated entry.
 The combined migration gate requires `--firmware-artifact-manifest` whenever
 `--require-hardware-validated` is used. Whenever a firmware artifact manifest
 is supplied, every validated hardware evidence note must mention that

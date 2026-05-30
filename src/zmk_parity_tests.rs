@@ -4804,6 +4804,12 @@ artifact_or_notes = "log: /tmp/right-i2c.log; right P0_04 SDA and P0_05 SCL show
         "--require-evidence-inventory",
         "--require-classified",
     ]);
+    let missing_require_validated_output = run_hardware_validation(&[
+        "--evidence",
+        missing_path.to_str().unwrap(),
+        "--json",
+        "--require-validated",
+    ]);
     let _ = std::fs::remove_file(&missing_path);
     assert!(
         !missing_output.status.success(),
@@ -4815,6 +4821,17 @@ artifact_or_notes = "log: /tmp/right-i2c.log; right P0_04 SDA and P0_05 SCL show
         String::from_utf8_lossy(&missing_output.stdout)
             .contains("missing metadata.hardware_check_inventory_sha256"),
         "missing inventory metadata error should be visible in the report"
+    );
+    assert!(
+        !missing_require_validated_output.status.success(),
+        "--require-validated accepted evidence without required inventory metadata\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&missing_require_validated_output.stdout),
+        String::from_utf8_lossy(&missing_require_validated_output.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&missing_require_validated_output.stdout)
+            .contains("missing metadata.hardware_check_inventory_sha256"),
+        "--require-validated should surface the missing inventory metadata error"
     );
 
     let stale_evidence = format!(
@@ -5331,6 +5348,7 @@ fn local_validation_entrypoints_match_ci_gates() {
             && README_MD.contains("EVIDENCE_ARTIFACT_ROOT")
             && README_MD.contains("artifact_paths")
             && README_MD.contains("non-empty real file in `artifact_paths`")
+            && README_MD.contains("`--require-validated` also requires the")
             && README_MD.contains("HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-report")
             && PORTING_MD.contains("cargo make migration-status-report")
             && PORTING_MD.contains("cargo make migration-status")
@@ -5349,6 +5367,7 @@ fn local_validation_entrypoints_match_ci_gates() {
             && PORTING_MD.contains("EVIDENCE_ARTIFACT_ROOT")
             && PORTING_MD.contains("artifact_paths")
             && PORTING_MD.contains("existing non-empty `artifact_paths` file")
+            && PORTING_MD.contains("`--require-validated` also requires the")
             && PORTING_MD.contains("HARDWARE_EVIDENCE=hardware-validation-evidence.local.toml cargo make migration-status-final-current"),
         "README and porting notes should document the local Markdown migration dashboard, RMK behavior regression suite, artifact manifest, current-ref evidence template, and current-ref final gate"
     );

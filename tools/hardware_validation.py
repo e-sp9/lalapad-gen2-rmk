@@ -1356,7 +1356,10 @@ def main() -> None:
     parser.add_argument(
         "--require-validated",
         action="store_true",
-        help="fail until every real-hardware check has status validated",
+        help=(
+            "fail until every real-hardware check has status validated, with "
+            "current inventory metadata and retained artifact_paths"
+        ),
     )
     parser.add_argument(
         "--require-evidence-inventory",
@@ -1446,7 +1449,7 @@ def main() -> None:
     manifest, evidence_errors = merge_evidence(
         manifest_doc,
         [load_toml(path) for path in args.evidence],
-        args.require_evidence_inventory,
+        args.require_evidence_inventory or args.require_validated,
     )
     summary = summarize(
         manifest,
