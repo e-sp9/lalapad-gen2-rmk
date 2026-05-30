@@ -74,9 +74,10 @@ that are missing the generated `metadata.hardware_check_inventory_sha256`, or
 whose hash no longer matches the current hardware validation manifest. Each
 validated note must also mention the per-check evidence artifact types listed by
 `evidence_artifacts`, such as `video`, `scope`, `Vial screenshot`, or
-`key-event log`, and each validated entry must list at least one existing file
-in `artifact_paths`. Relative evidence artifact paths are resolved under
-`EVIDENCE_ARTIFACT_ROOT` when set, or from the current directory otherwise.
+`key-event log`, and each validated entry must list at least one existing
+non-empty file in `artifact_paths`. Relative evidence artifact paths are
+resolved under `EVIDENCE_ARTIFACT_ROOT` when set, or from the current directory
+otherwise.
 The retained file types must match the required artifact types; a video-only
 check cannot pass final validation with only a text log attached. Every
 retained file must also be named by path or basename in `artifact_or_notes`,

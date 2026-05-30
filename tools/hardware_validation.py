@@ -398,6 +398,19 @@ def validate_evidence_artifact_paths(
                 f"{check_id}: artifact_paths[{index}] file does not exist: {artifact_path}"
             )
             continue
+        try:
+            artifact_size = resolved_path.stat().st_size
+        except OSError as exc:
+            errors.append(
+                f"{check_id}: artifact_paths[{index}] file is not readable: "
+                f"{artifact_path}: {exc}"
+            )
+            continue
+        if artifact_size <= 0:
+            errors.append(
+                f"{check_id}: artifact_paths[{index}] file is empty: {artifact_path}"
+            )
+            continue
         duplicate_index = seen_resolved_paths.get(resolved_path)
         if duplicate_index is not None:
             errors.append(

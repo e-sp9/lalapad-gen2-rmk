@@ -432,7 +432,7 @@ available inside a readable Git repository with no uncommitted changes, and
 that repository must be at the manifest-pinned `metadata.source_commit`, before
 a complete validation claim can pass.
 It also requires each validated hardware evidence entry to include at least one
-existing `artifact_paths` file. Relative paths are resolved from
+existing non-empty `artifact_paths` file. Relative paths are resolved from
 `EVIDENCE_ARTIFACT_ROOT` when set, otherwise from the current directory, so the
 pass condition is tied to actual captured videos, logs, photos, screenshots, or
 scope traces rather than text notes alone. The file type must also match the

@@ -3226,6 +3226,49 @@ artifact_or_notes = "files: hardware-evidence/iqs9151-right-i2c-identity-log.log
         "hard migration artifact path gate should explain the missing evidence file"
     );
 
+    let empty_artifact = artifact_root.join("hardware-evidence/empty-right-i2c.log");
+    std::fs::write(&empty_artifact, "").unwrap();
+    let empty_evidence = r#"
+[[evidence]]
+id = "iqs9151_right_i2c_identity"
+status = "validated"
+validated_at = "2026-05-29"
+tester = "hardware bench"
+firmware_ref = "35b3f1f"
+artifact_paths = ["hardware-evidence/empty-right-i2c.log"]
+artifact_or_notes = "log: hardware-evidence/empty-right-i2c.log; right P0_04 SDA and P0_05 SCL showed I2C activity from scan, address 0x56 ACKed, and product-number register 0x1000 read 0x09bc."
+"#;
+    let empty_path = write_temp_file(
+        "hardware-validation-evidence-paths-empty-artifact",
+        empty_evidence,
+    );
+    let empty_json = run_hardware_validation(&[
+        "--evidence",
+        empty_path.to_str().unwrap(),
+        "--evidence-artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--json",
+    ]);
+    assert!(
+        empty_json.status.success(),
+        "plain hardware validation report should not hard-fail for empty artifact paths without require flags\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&empty_json.stdout),
+        String::from_utf8_lossy(&empty_json.stderr)
+    );
+    let empty_parsed: serde_json::Value = serde_json::from_slice(&empty_json.stdout).unwrap();
+    assert_eq!(empty_parsed["validated"].as_i64(), Some(0));
+    assert!(
+        empty_parsed["errors"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|error| error
+                .as_str()
+                .unwrap()
+                .contains("artifact_paths[0] file is empty")),
+        "empty retained evidence path should be rejected instead of counting as hardware evidence"
+    );
+
     let wrong_kind_artifact = artifact_root.join("hardware-evidence/right-trackpad.log");
     std::fs::write(&wrong_kind_artifact, "right trackpad text log, not video\n").unwrap();
     let wrong_kind_evidence = r#"
@@ -3455,6 +3498,7 @@ artifact_or_notes = "photo and multimeter: hardware-evidence/charge.jpg; right P
     let _ = std::fs::remove_file(&path);
     let _ = std::fs::remove_file(&verbatim_copy_aid_path);
     let _ = std::fs::remove_file(&missing_path);
+    let _ = std::fs::remove_file(&empty_path);
     let _ = std::fs::remove_file(&wrong_kind_path);
     let _ = std::fs::remove_file(&unrelated_video_path);
     let _ = std::fs::remove_file(&video_path);
