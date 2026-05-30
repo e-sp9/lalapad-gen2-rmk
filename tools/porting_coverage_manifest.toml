@@ -500,6 +500,7 @@ iqs9151_bit_flags = [
 rows = 7
 cols = 12
 layers = 4
+vial_kle_geometry_sha256 = "0fc7c9e3084d2587bff412357e5415f08fac9fe17f10ce30fbfba0ba4c854849"
 
 vial_custom_keycodes = [
   { name = "BT0", title = "Bluetooth Channel 0", shortName = "BT0" },

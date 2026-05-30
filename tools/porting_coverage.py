@@ -4121,6 +4121,20 @@ def collect_vial_positions(value: Any) -> list[tuple[int, int]]:
     return positions
 
 
+def vial_kle_geometry_signature(value: Any) -> str:
+    def normalize(item: Any) -> Any:
+        if isinstance(item, str):
+            return "<key>" if re.fullmatch(r"\d+,\d+", item) else item
+        if isinstance(item, list):
+            return [normalize(child) for child in item]
+        if isinstance(item, dict):
+            return {str(key): normalize(item[key]) for key in sorted(item)}
+        return item
+
+    payload = json.dumps(normalize(value), sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode()).hexdigest()
+
+
 def keyboard_toml_vial_positions(config: dict[str, Any]) -> list[tuple[int, int]]:
     layers = keymap(config)
     rows = int(config["layout"]["rows"])
@@ -4355,6 +4369,20 @@ def check_vial_keyboard_toml_layout(
 
     required_positions = keyboard_toml_vial_positions(config)
     actual_positions = collect_vial_positions(vial["layouts"]["keymap"])
+    expected_geometry_sha = manifest.get("layout", {}).get("vial_kle_geometry_sha256")
+    actual_geometry_sha = vial_kle_geometry_signature(vial["layouts"]["keymap"])
+    geometry_ok = actual_geometry_sha == expected_geometry_sha
+    results.append(
+        Result(
+            "vial_kle_geometry_signature",
+            "vial",
+            1 if geometry_ok else 0,
+            1,
+            "ok"
+            if geometry_ok
+            else f"vial.json KLE geometry sha256 expected {expected_geometry_sha!r}, got {actual_geometry_sha!r}",
+        )
+    )
     allowed_no_action_positions = {
         (int(position["row"]), int(position["col"]))
         for position in manifest.get("layout", {}).get("vial_allowed_no_action_positions", [])

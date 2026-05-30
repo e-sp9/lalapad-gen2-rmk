@@ -1,8 +1,8 @@
 [coverage]
-passed = 3246
-total = 3246
-result_count = 571
-result_inventory_sha256 = "ca24e06c9612a104931eeda406cf9648eff5ec2859bb7132b93cb11a312b810d"
+passed = 3247
+total = 3247
+result_count = 572
+result_inventory_sha256 = "06abfeee4c30951df6bfd9094400b64658c0ccb5710b3bf6f978fc1672d8a72d"
 
 [coverage.by_kind.behavior]
 passed = 10
@@ -105,8 +105,8 @@ passed = 66
 total = 66
 
 [coverage.by_kind.vial]
-passed = 331
-total = 331
+passed = 332
+total = 332
 
 [coverage.by_kind.vial_user_key_semantics]
 passed = 57

@@ -318,6 +318,9 @@ ZMK source inventories, Kconfig/DTS mirrors, Cargo dependency resolution, Rust
 constants, IQS9151 byte arrays, local RMK composite mouse and dynamic-scale
 storage patch invariants, Vial identity and custom-key semantics, or firmware
 code-needle checks instead of treating the total percentage as a black box.
+The Vial checks also pin a normalized KLE geometry signature, so row grouping,
+spacing directives, and half-size thumb/trackpad controls cannot drift while
+the same matrix coordinates remain present.
 GPIO flag mirror checks specifically tie active-low, pull-up, and open-drain
 ZMK DTS flags to the RMK TOML fields and Rust constructor paths that implement
 the same electrical behavior.

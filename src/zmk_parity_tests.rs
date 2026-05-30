@@ -252,7 +252,7 @@ fn porting_coverage_complete_gate_accepts_explicit_status_completion() {
     assert!(stdout.contains("- scenario:"));
     assert!(stdout.contains("- split: 100/100 = 100.00%"));
     assert!(stdout.contains("- trackpad_virtual: 66/66 = 100.00%"));
-    assert!(stdout.contains("- vial: 331/331 = 100.00%"));
+    assert!(stdout.contains("- vial: 332/332 = 100.00%"));
     assert!(stdout.contains("- vial_user_key_semantics: 57/57 = 100.00%"));
     assert!(stdout.contains("- zmk_source_cell:"));
     assert!(stdout.contains("Porting status: 69/69 = 100.00% implemented"));
@@ -5030,6 +5030,12 @@ with tempfile.TemporaryDirectory() as extra_dir:
     Path(extra_dir, "vial.json").write_text(json.dumps(extra_vial), encoding="utf-8")
     extra = pc.check_vial_keyboard_toml_layout(manifest, keyboard, Path(extra_dir))
 
+bad_geometry_vial = copy.deepcopy(vial)
+bad_geometry_vial["layouts"]["keymap"][0][5]["x"] = 1
+with tempfile.TemporaryDirectory() as bad_geometry_dir:
+    Path(bad_geometry_dir, "vial.json").write_text(json.dumps(bad_geometry_vial), encoding="utf-8")
+    bad_geometry = pc.check_vial_keyboard_toml_layout(manifest, keyboard, Path(bad_geometry_dir))
+
 def pack(results):
     return [result.__dict__ | {"ok": result.ok} for result in results]
 
@@ -5037,6 +5043,7 @@ print(json.dumps({
     "ok": pack(ok),
     "bad": pack(bad),
     "extra": pack(extra),
+    "bad_geometry": pack(bad_geometry),
     "keyboard_positions": pc.keyboard_toml_vial_positions(keyboard),
     "vial_positions": pc.collect_vial_positions(vial["layouts"]["keymap"]),
 }))
@@ -5086,6 +5093,17 @@ print(json.dumps({
     assert_eq!(ok_exposed["passed"].as_i64(), Some(68));
     assert_eq!(ok_exposed["total"].as_i64(), Some(68));
     assert_eq!(ok_exposed["ok"], true);
+
+    let ok_geometry = parsed["ok"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "vial_kle_geometry_signature")
+        .expect("Vial KLE geometry result is missing");
+    assert_eq!(ok_geometry["kind"], "vial");
+    assert_eq!(ok_geometry["passed"].as_i64(), Some(1));
+    assert_eq!(ok_geometry["total"].as_i64(), Some(1));
+    assert_eq!(ok_geometry["ok"], true);
 
     let bad_bounds = parsed["bad"]
         .as_array()
@@ -5153,6 +5171,23 @@ print(json.dumps({
             .as_str()
             .unwrap()
             .contains("unexpected Vial positions [(0, 5)]")
+    );
+
+    let bad_geometry = parsed["bad_geometry"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "vial_kle_geometry_signature")
+        .expect("changed Vial KLE geometry result is missing");
+    assert_eq!(bad_geometry["kind"], "vial");
+    assert_eq!(bad_geometry["passed"].as_i64(), Some(0));
+    assert_eq!(bad_geometry["total"].as_i64(), Some(1));
+    assert_eq!(bad_geometry["ok"], false);
+    assert!(
+        bad_geometry["message"]
+            .as_str()
+            .unwrap()
+            .contains("vial.json KLE geometry sha256 expected")
     );
 }
 
