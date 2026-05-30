@@ -311,6 +311,10 @@ def build_status(args: argparse.Namespace) -> MigrationStatus:
         args.require_firmware_ref,
     )
     artifact_errors = firmware_artifacts["errors"] if firmware_artifacts else []
+    if args.require_hardware_validated and firmware_artifacts is None:
+        artifact_errors = artifact_errors + [
+            "firmware artifact manifest is required when --require-hardware-validated is used"
+        ]
     required_firmware_ref = args.require_firmware_ref
     if (
         required_firmware_ref is None

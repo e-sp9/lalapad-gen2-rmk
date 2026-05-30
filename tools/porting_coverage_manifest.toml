@@ -2690,6 +2690,10 @@ features = [
   "adafruit_bl",
   "passkey_entry",
 ]
+feature_closure_contains = [
+  { feature = "nrf52840_ble", contains = ["storage"] },
+  { feature = "adafruit_bl", contains = ["storage"] },
+]
 bins = [
   { name = "central", path = "src/central.rs", test = false, bench = false },
   { name = "peripheral", path = "src/peripheral.rs", test = false, bench = false },

@@ -3090,6 +3090,21 @@ def feature_set(value: Any) -> set[str]:
     return {str(item) for item in value}
 
 
+def cargo_feature_closure(features: dict[str, Any], roots: list[str]) -> set[str]:
+    seen: set[str] = set()
+    stack = list(roots)
+    while stack:
+        feature = stack.pop()
+        if feature in seen:
+            continue
+        seen.add(feature)
+        for dependency in feature_set(features.get(feature, [])):
+            dependency_feature = dependency.split("/", 1)[0].split("?", 1)[0]
+            if dependency_feature in features and dependency_feature not in seen:
+                stack.append(dependency_feature)
+    return seen
+
+
 def check_cargo_dependency_invariants(manifest: dict[str, Any], project_root: Path) -> list[Result]:
     results: list[Result] = []
     for check in manifest.get("cargo_dependency_invariants", []):
@@ -3124,6 +3139,7 @@ def check_cargo_dependency_invariants(manifest: dict[str, Any], project_root: Pa
             messages.append(f"rmk patch path {expected_patch_path!r} is not a directory")
 
         expected_features = set(check["features"])
+        vendor_features = vendor.get("features", {})
         for dep_id, dep_path, expected_optional in [
             ("top-level rmk dependency", ["dependencies", "rmk"], True),
             (
@@ -3171,6 +3187,19 @@ def check_cargo_dependency_invariants(manifest: dict[str, Any], project_root: Pa
                 messages.append(
                     f"{dep_id} default-features expected {expected_default_features}, got {actual_default_features}"
                 )
+
+        for implication in check.get("feature_closure_contains", []):
+            feature = str(implication["feature"])
+            expected_closure_items = [str(item) for item in implication["contains"]]
+            closure = cargo_feature_closure(vendor_features, [feature])
+            for expected_item in expected_closure_items:
+                total += 1
+                if expected_item in closure:
+                    passed += 1
+                else:
+                    messages.append(
+                        f"vendor rmk feature {feature!r} closure missing {expected_item!r}"
+                    )
 
         bins_by_name = {str(entry.get("name", "")): entry for entry in cargo.get("bin", [])}
         for expected_bin in check.get("bins", []):

@@ -136,6 +136,45 @@ fn complete_hardware_evidence_overlay(firmware_ref: &str) -> String {
     evidence
 }
 
+fn complete_hardware_evidence_overlay_with_pair_sha(
+    firmware_ref: &str,
+    pair_sha256: &str,
+) -> String {
+    complete_hardware_evidence_overlay(firmware_ref).replace(
+        "observed",
+        &format!("firmware artifact pair_sha256 {pair_sha256}; observed"),
+    )
+}
+
+fn test_firmware_artifact_manifest(firmware_ref: &str, pair_sha256: &str) -> String {
+    format!(
+        r#"{{
+  "artifact_count": 2,
+  "artifacts": [
+    {{
+      "kind": "uf2",
+      "path": "firmware/normal/lalapad-gen2-rmk-central.uf2",
+      "role": "central",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "side": "right",
+      "size": 123
+    }},
+    {{
+      "kind": "uf2",
+      "path": "firmware/normal/lalapad-gen2-rmk-peripheral.uf2",
+      "role": "peripheral",
+      "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "side": "left",
+      "size": 456
+    }}
+  ],
+  "firmware_ref": "{firmware_ref}",
+  "pair_sha256": "{pair_sha256}"
+}}
+"#,
+    )
+}
+
 fn run_python(script: &str) -> std::process::Output {
     Command::new("python3")
         .arg("-c")
@@ -206,7 +245,7 @@ fn porting_coverage_complete_gate_accepts_explicit_status_completion() {
     }
     assert!(stdout.contains("Porting coverage by kind:"));
     assert!(stdout.contains("- code_topology: 28/28 = 100.00%"));
-    assert!(stdout.contains("- dependency: 21/21 = 100.00%"));
+    assert!(stdout.contains("- dependency: 23/23 = 100.00%"));
     assert!(stdout.contains("- gpio_flag_mirror: 36/36 = 100.00%"));
     assert!(stdout.contains("- release_workflow: 32/32 = 100.00%"));
     assert!(stdout.contains("- rmk_patch: 59/59 = 100.00%"));
@@ -993,8 +1032,14 @@ right = 1
 #[test]
 fn migration_status_accepts_complete_hardware_evidence_for_final_gate() {
     let firmware_ref = "test-firmware-ref";
-    let evidence = complete_hardware_evidence_overlay(firmware_ref);
+    let pair_sha256 = "177853881150ba3f48109a796c7ac539c2d5d4c73a1491bd198c76fc8ee3c786";
+    let evidence = complete_hardware_evidence_overlay_with_pair_sha(firmware_ref, pair_sha256);
     let path = write_temp_file("migration-status-complete-evidence", &evidence);
+    let artifact_manifest = test_firmware_artifact_manifest(firmware_ref, pair_sha256);
+    let artifact_path = write_temp_file(
+        "migration-status-complete-firmware-artifacts",
+        &artifact_manifest,
+    );
     let zmk_keymap_path = default_zmk_config_dir()
         .expect("complete final gate requires upstream ZMK source")
         .join("lalapadgen2.keymap");
@@ -1010,6 +1055,8 @@ fn migration_status_accepts_complete_hardware_evidence_for_final_gate() {
         zmk_keymap,
         "--evidence",
         path.to_str().unwrap(),
+        "--firmware-artifact-manifest",
+        artifact_path.to_str().unwrap(),
         "--require-zmk-source",
         "--require-firmware-ref",
         firmware_ref,
@@ -1035,6 +1082,34 @@ fn migration_status_accepts_complete_hardware_evidence_for_final_gate() {
     );
     assert_eq!(parsed["fully_validated"].as_bool(), Some(true));
 
+    let missing_artifact_manifest_output = run_migration_status(&[
+        "--coverage-baseline",
+        "tools/porting_coverage_baseline.toml",
+        "--hardware-baseline",
+        "tools/hardware_validation_baseline.toml",
+        "--zmk-keymap",
+        zmk_keymap,
+        "--evidence",
+        path.to_str().unwrap(),
+        "--require-zmk-source",
+        "--require-firmware-ref",
+        firmware_ref,
+        "--require-software-complete",
+        "--require-hardware-classified",
+        "--require-hardware-validated",
+    ]);
+    assert!(
+        !missing_artifact_manifest_output.status.success(),
+        "complete migration status accepted final validation without an artifact manifest\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&missing_artifact_manifest_output.stdout),
+        String::from_utf8_lossy(&missing_artifact_manifest_output.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&missing_artifact_manifest_output.stdout)
+            .contains("firmware artifact manifest is required"),
+        "missing-artifact failure should explain the final-gate artifact manifest requirement"
+    );
+
     let missing_source_output = run_migration_status(&[
         "--coverage-baseline",
         "tools/porting_coverage_baseline.toml",
@@ -1044,6 +1119,8 @@ fn migration_status_accepts_complete_hardware_evidence_for_final_gate() {
         "/tmp/lalapad-missing-zmk-source/lalapadgen2.keymap",
         "--evidence",
         path.to_str().unwrap(),
+        "--firmware-artifact-manifest",
+        artifact_path.to_str().unwrap(),
         "--require-zmk-source",
         "--require-firmware-ref",
         firmware_ref,
@@ -1071,12 +1148,15 @@ fn migration_status_accepts_complete_hardware_evidence_for_final_gate() {
         zmk_keymap,
         "--evidence",
         path.to_str().unwrap(),
+        "--firmware-artifact-manifest",
+        artifact_path.to_str().unwrap(),
         "--require-zmk-source",
         "--require-firmware-ref",
         "stale-firmware-ref",
         "--require-hardware-validated",
     ]);
     let _ = std::fs::remove_file(&path);
+    let _ = std::fs::remove_file(&artifact_path);
 
     assert!(
         !stale_output.status.success(),
@@ -1091,10 +1171,7 @@ fn migration_status_ties_hardware_evidence_to_firmware_artifact_manifest() {
     let firmware_ref = "artifact-backed-firmware-ref";
     let pair_sha256 = "177853881150ba3f48109a796c7ac539c2d5d4c73a1491bd198c76fc8ee3c786";
     let evidence_without_pair_sha = complete_hardware_evidence_overlay(firmware_ref);
-    let evidence = evidence_without_pair_sha.replace(
-        "observed",
-        &format!("firmware artifact pair_sha256 {pair_sha256}; observed"),
-    );
+    let evidence = complete_hardware_evidence_overlay_with_pair_sha(firmware_ref, pair_sha256);
     let evidence_one_missing_pair_sha = evidence.replacen(
         &format!("firmware artifact pair_sha256 {pair_sha256}; "),
         "",
@@ -1109,32 +1186,8 @@ fn migration_status_ties_hardware_evidence_to_firmware_artifact_manifest() {
         &evidence_one_missing_pair_sha,
     );
     let evidence_path = write_temp_file("migration-status-artifact-backed-evidence", &evidence);
-    let artifact_manifest = r#"
-{
-  "artifact_count": 2,
-  "artifacts": [
-    {
-      "kind": "uf2",
-      "path": "firmware/normal/lalapad-gen2-rmk-central.uf2",
-      "role": "central",
-      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      "side": "right",
-      "size": 123
-    },
-    {
-      "kind": "uf2",
-      "path": "firmware/normal/lalapad-gen2-rmk-peripheral.uf2",
-      "role": "peripheral",
-      "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      "side": "left",
-      "size": 456
-    }
-  ],
-  "firmware_ref": "artifact-backed-firmware-ref",
-  "pair_sha256": "177853881150ba3f48109a796c7ac539c2d5d4c73a1491bd198c76fc8ee3c786"
-}
-"#;
-    let artifact_path = write_temp_file("migration-status-firmware-artifacts", artifact_manifest);
+    let artifact_manifest = test_firmware_artifact_manifest(firmware_ref, pair_sha256);
+    let artifact_path = write_temp_file("migration-status-firmware-artifacts", &artifact_manifest);
 
     let output = run_migration_status(&[
         "--json",
@@ -5410,6 +5463,17 @@ with tempfile.TemporaryDirectory() as tempdir:
 
 with tempfile.TemporaryDirectory() as tempdir:
     root = Path(tempdir)
+    write_cargo_project(root, Path("Cargo.toml").read_text())
+    vendor_text = (root / "vendor/rmk-0.8.2/Cargo.toml").read_text().replace(
+        '    "storage",\n',
+        "",
+        1,
+    )
+    (root / "vendor/rmk-0.8.2/Cargo.toml").write_text(vendor_text)
+    bad_ble_storage_feature_result = pc.check_cargo_dependency_invariants(manifest, root)
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
     cargo = pc.load_toml(Path("Cargo.toml"))
     cargo.pop("patch", None)
     cargo_text = Path("Cargo.toml").read_text()
@@ -5428,6 +5492,7 @@ print(json.dumps({
     "bad_features": pack(bad_features_result),
     "bad_default_features": pack(bad_default_features_result),
     "bad_bin": pack(bad_bin_result),
+    "bad_ble_storage_feature": pack(bad_ble_storage_feature_result),
     "no_patch": pack(no_patch_result),
 }))
 "#,
@@ -5445,8 +5510,8 @@ print(json.dumps({
     assert_eq!(ok.len(), 1);
     assert_eq!(ok[0]["id"], "cargo_uses_local_rmk_0_8_2_patch");
     assert_eq!(ok[0]["kind"], "dependency");
-    assert_eq!(ok[0]["passed"].as_i64(), Some(21));
-    assert_eq!(ok[0]["total"].as_i64(), Some(21));
+    assert_eq!(ok[0]["passed"].as_i64(), Some(23));
+    assert_eq!(ok[0]["total"].as_i64(), Some(23));
     assert_eq!(ok[0]["ok"], true);
 
     let bad_features = &parsed["bad_features"][0];
@@ -5475,6 +5540,22 @@ print(json.dumps({
     assert!(bad_bin["message"].as_str().unwrap().contains(
         "[[bin]] peripheral.path expected 'src/peripheral.rs', got 'src/wrong-peripheral.rs'"
     ));
+
+    let bad_ble_storage_feature = &parsed["bad_ble_storage_feature"][0];
+    assert_eq!(bad_ble_storage_feature["kind"], "dependency");
+    assert_eq!(bad_ble_storage_feature["ok"], false);
+    assert!(
+        bad_ble_storage_feature["message"]
+            .as_str()
+            .unwrap()
+            .contains("vendor rmk feature 'nrf52840_ble' closure missing 'storage'")
+    );
+    assert!(
+        bad_ble_storage_feature["message"]
+            .as_str()
+            .unwrap()
+            .contains("vendor rmk feature 'adafruit_bl' closure missing 'storage'")
+    );
 
     let no_patch = &parsed["no_patch"][0];
     assert_eq!(no_patch["kind"], "dependency");

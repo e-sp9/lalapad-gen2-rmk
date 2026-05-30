@@ -76,7 +76,10 @@ present, the final gate also requires each validated hardware evidence note to
 mention the artifact manifest `pair_sha256`, so the observation is bound to the
 exact central/peripheral UF2 pair that was flashed. `cargo make
 hardware-validation-session-current` pre-fills that hash in the local evidence
-overlay generated for a clean current-ref bench session.
+overlay generated for a clean current-ref bench session. Direct
+`tools/migration_status.py --require-hardware-validated` use also requires
+`--firmware-artifact-manifest`; the final validation gate cannot pass from an
+evidence file alone.
 
 ## Flashing With UF2
 
