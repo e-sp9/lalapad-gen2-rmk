@@ -98,7 +98,9 @@ jobs:
           command -v cargo-objcopy      >/dev/null || cargo install --locked cargo-binutils
           command -v cargo-hex-to-uf2   >/dev/null || cargo install --locked cargo-hex-to-uf2
           command -v cargo-make         >/dev/null || cargo install --locked cargo-make
-          command -v rmkit              >/dev/null || cargo install --locked rmkit
+          if ! command -v rmkit >/dev/null || [ "$(rmkit --version)" != "rmkit 0.0.21" ]; then
+            cargo install --locked --force rmkit --version 0.0.21
+          fi
 
       - name: Verify RMK config and flash layout
         run: |

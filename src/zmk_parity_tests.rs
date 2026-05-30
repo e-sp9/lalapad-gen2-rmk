@@ -2543,10 +2543,14 @@ fn local_validation_entrypoints_match_ci_gates() {
         "cargo make porting-coverage should require complete implementation status and a stable denominator baseline"
     );
     assert!(
-        rmk_config_schema_task.contains("rmkit get-chip --keyboard-toml-path keyboard.toml")
+        rmk_config_schema_task.contains("rmkit 0.0.21")
+            && rmk_config_schema_task
+                .contains("cargo install --locked --force rmkit --version 0.0.21")
+            && rmk_config_schema_task.contains("rmkit --version")
+            && rmk_config_schema_task.contains("rmkit get-chip --keyboard-toml-path keyboard.toml")
             && rmk_config_schema_task
                 .contains("rmkit get-project-name --keyboard-toml-path keyboard.toml"),
-        "cargo make rmk-config-schema should validate keyboard.toml with rmkit before RMK-dependent gates"
+        "cargo make rmk-config-schema should pin rmkit and validate keyboard.toml before RMK-dependent gates"
     );
     assert!(
         rmk_behavior_tests_task.contains("KEYBOARD_TOML_PATH=\"$rmk_host_keyboard\"")
@@ -6693,6 +6697,14 @@ with tempfile.TemporaryDirectory() as tempdir:
 with tempfile.TemporaryDirectory() as tempdir:
     root = Path(tempdir)
     (root / "Makefile.toml").write_text(
+        Path("Makefile.toml").read_text().replace("rmkit 0.0.21", "rmkit 0.0.22", 1),
+        encoding="utf-8",
+    )
+    bad_rmk_config_schema_version = pc.check_makefile_task_invariants(manifest, root)
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    (root / "Makefile.toml").write_text(
         Path("Makefile.toml").read_text().replace('dependencies = ["rmk-zmk-scenario-tests"]', 'dependencies = []', 1),
         encoding="utf-8",
     )
@@ -6810,6 +6822,7 @@ def pack(results):
 print(json.dumps({
     "ok": pack(ok),
     "bad_rmk_config_schema_task": pack(bad_rmk_config_schema_task),
+    "bad_rmk_config_schema_version": pack(bad_rmk_config_schema_version),
     "bad_porting_coverage_task": pack(bad_porting_coverage_task),
     "bad_migration_status_task": pack(bad_migration_status_task),
     "bad_family": pack(bad_family),
@@ -6864,6 +6877,21 @@ print(json.dumps({
             .as_str()
             .unwrap()
             .contains("rmkit get-project-name --keyboard-toml-path keyboard.toml")
+    );
+
+    let bad_rmk_config_schema_version = parsed["bad_rmk_config_schema_version"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "makefile_rmk_config_schema_guard")
+        .expect("changed RMK config schema version result is missing");
+    assert_eq!(bad_rmk_config_schema_version["kind"], "build_task");
+    assert_eq!(bad_rmk_config_schema_version["ok"], false);
+    assert!(
+        bad_rmk_config_schema_version["message"]
+            .as_str()
+            .unwrap()
+            .contains("rmkit 0.0.21")
     );
 
     let bad_porting_coverage_task = parsed["bad_porting_coverage_task"]
@@ -7173,13 +7201,13 @@ print(json.dumps({
         ok.iter()
             .map(|result| result["passed"].as_i64().unwrap())
             .sum::<i64>(),
-        47
+        49
     );
     assert_eq!(
         ok.iter()
             .map(|result| result["total"].as_i64().unwrap())
             .sum::<i64>(),
-        47
+        49
     );
 
     let bad_migration_gate = parsed["bad_migration_gate"]

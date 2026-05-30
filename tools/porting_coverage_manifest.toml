@@ -2832,6 +2832,9 @@ args_contains = ["tools/check_flash_layout.py", "--config-only"]
 id = "makefile_rmk_config_schema_guard"
 task = "rmk-config-schema"
 script_contains = [
+  "rmkit 0.0.21",
+  "cargo install --locked --force rmkit --version 0.0.21",
+  "rmkit --version",
   "rmkit get-chip --keyboard-toml-path keyboard.toml",
   "rmkit get-project-name --keyboard-toml-path keyboard.toml",
 ]
@@ -3006,6 +3009,8 @@ needles = [
   "Checkout upstream ZMK config",
   "repository: e-sp9/zmk-config-LalaPadGen2",
   "command -v rmkit",
+  'if ! command -v rmkit >/dev/null || [ "$(rmkit --version)" != "rmkit 0.0.21" ]; then',
+  "cargo install --locked --force rmkit --version 0.0.21",
   "cargo make rmk-config-schema",
   "cargo make porting-coverage",
   "python3 tools/migration_status.py",
