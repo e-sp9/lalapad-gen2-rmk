@@ -4045,6 +4045,75 @@ fn hardware_validation_firmware_ref_gate_allows_zero_validated_checks() {
 }
 
 #[test]
+fn hardware_validation_and_migration_status_reject_mutable_required_firmware_refs() {
+    let hardware_output = run_hardware_validation(&[
+        "--json",
+        "--require-firmware-ref",
+        "refs/remotes/upstream/main",
+    ]);
+    assert!(
+        !hardware_output.status.success(),
+        "hardware validation accepted a mutable required firmware ref\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&hardware_output.stdout),
+        String::from_utf8_lossy(&hardware_output.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&hardware_output.stderr)
+            .contains("--require-firmware-ref must be an immutable flashed tag or commit"),
+        "hardware validation should explain the immutable required ref constraint"
+    );
+    assert!(
+        !String::from_utf8_lossy(&hardware_output.stderr).contains("Traceback"),
+        "mutable required firmware ref should be a CLI validation error, not a traceback"
+    );
+
+    let migration_output = run_migration_status(&[
+        "--json",
+        "--coverage-baseline",
+        "tools/porting_coverage_baseline.toml",
+        "--hardware-baseline",
+        "tools/hardware_validation_baseline.toml",
+        "--require-software-complete",
+        "--require-hardware-classified",
+        "--require-firmware-ref",
+        "main",
+    ]);
+    assert!(
+        !migration_output.status.success(),
+        "migration status accepted a mutable required firmware ref\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&migration_output.stdout),
+        String::from_utf8_lossy(&migration_output.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&migration_output.stderr)
+            .contains("--require-firmware-ref must be an immutable flashed tag or commit"),
+        "migration status should explain the immutable required ref constraint"
+    );
+    assert!(
+        !String::from_utf8_lossy(&migration_output.stderr).contains("Traceback"),
+        "mutable required migration ref should be a CLI validation error, not a traceback"
+    );
+
+    let prerelease_output = run_migration_status(&[
+        "--json",
+        "--coverage-baseline",
+        "tools/porting_coverage_baseline.toml",
+        "--hardware-baseline",
+        "tools/hardware_validation_baseline.toml",
+        "--require-software-complete",
+        "--require-hardware-classified",
+        "--require-firmware-ref",
+        "v0.2.65-dev.1",
+    ]);
+    assert!(
+        prerelease_output.status.success(),
+        "migration status rejected a legitimate immutable prerelease required ref\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&prerelease_output.stdout),
+        String::from_utf8_lossy(&prerelease_output.stderr)
+    );
+}
+
+#[test]
 fn hardware_validation_can_generate_complete_evidence_template() {
     let output = run_hardware_validation(&["--evidence-template"]);
 

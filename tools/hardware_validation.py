@@ -1466,6 +1466,8 @@ def main() -> None:
             args.artifact_pair_sha256_template = manifest_pair_sha256
     if args.firmware_ref_template and is_mutable_firmware_ref(args.firmware_ref_template):
         parser.error("--firmware-ref-template must be an immutable flashed tag or commit")
+    if args.require_firmware_ref and is_mutable_firmware_ref(args.require_firmware_ref):
+        parser.error("--require-firmware-ref must be an immutable flashed tag or commit")
     if args.artifact_pair_sha256_template and not SHA256_RE.fullmatch(
         args.artifact_pair_sha256_template
     ):

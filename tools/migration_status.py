@@ -756,6 +756,10 @@ def main() -> None:
 
     if args.json and args.markdown:
         parser.error("--json and --markdown are mutually exclusive")
+    if args.require_firmware_ref and hardware_validation.is_mutable_firmware_ref(
+        args.require_firmware_ref
+    ):
+        parser.error("--require-firmware-ref must be an immutable flashed tag or commit")
 
     status = build_status(args)
     if args.json:
