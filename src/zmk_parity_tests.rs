@@ -3088,6 +3088,20 @@ fn porting_coverage_includes_exact_rmk_inventory_gates() {
     );
     assert_eq!(runtime_keymap_mirror_result["ok"], true);
 
+    let runtime_keymap_mirror_inventory_result = results
+        .iter()
+        .find(|result| result["id"] == "runtime_keymap_mirror_positions_are_unique_and_in_bounds")
+        .expect("runtime keymap mirror position inventory result is missing");
+    assert_eq!(
+        runtime_keymap_mirror_inventory_result["kind"],
+        "runtime_keymap_mirror"
+    );
+    assert_eq!(runtime_keymap_mirror_inventory_result["ok"], true);
+    assert_eq!(
+        runtime_keymap_mirror_inventory_result["passed"],
+        runtime_keymap_mirror_inventory_result["total"]
+    );
+
     let runtime_keymap_mirror_coverage_result = results
         .iter()
         .find(|result| result["id"] == "runtime_keymap_mirror_covers_runtime_scenario_positions")
@@ -4148,6 +4162,7 @@ spec.loader.exec_module(pc)
 manifest = pc.load_toml(Path("tools/porting_coverage_manifest.toml"))
 keyboard = pc.load_toml(Path("keyboard.toml"))
 ok = pc.check_runtime_keymap_mirrors(manifest, keyboard, Path("."))[0]
+inventory_ok = pc.check_runtime_keymap_mirror_position_inventory(manifest, keyboard)[0]
 coverage_ok = pc.check_runtime_keymap_mirror_coverage(manifest, keyboard)[0]
 fixture_coverage_ok = pc.check_runtime_keymap_mirror_fixture_coverage(manifest, Path("."))[0]
 
@@ -4171,6 +4186,22 @@ missing_position = pc.check_runtime_keymap_mirror_coverage(
 )[0]
 missing_fixture_position = pc.check_runtime_keymap_mirror_fixture_coverage(
     missing_position_manifest, Path(".")
+)[0]
+
+duplicate_position_manifest = copy.deepcopy(manifest)
+duplicate_position_manifest["runtime_keymap_mirrors"][0]["positions"].append(
+    copy.deepcopy(duplicate_position_manifest["runtime_keymap_mirrors"][0]["positions"][0])
+)
+duplicate_position = pc.check_runtime_keymap_mirror_position_inventory(
+    duplicate_position_manifest, keyboard
+)[0]
+
+out_of_bounds_manifest = copy.deepcopy(manifest)
+out_of_bounds_manifest["runtime_keymap_mirrors"][0]["positions"].append(
+    {"layer": 99, "row": 0, "col": 0}
+)
+out_of_bounds_position = pc.check_runtime_keymap_mirror_position_inventory(
+    out_of_bounds_manifest, keyboard
 )[0]
 
 new_runtime_manifest = copy.deepcopy(manifest)
@@ -4202,11 +4233,14 @@ def pack(result):
 
 print(json.dumps({
     "ok": pack(ok),
+    "inventory_ok": pack(inventory_ok),
     "coverage_ok": pack(coverage_ok),
     "fixture_coverage_ok": pack(fixture_coverage_ok),
     "keyboard_drift": pack(keyboard_drift),
     "missing_position": pack(missing_position),
     "missing_fixture_position": pack(missing_fixture_position),
+    "duplicate_position": pack(duplicate_position),
+    "out_of_bounds_position": pack(out_of_bounds_position),
     "new_runtime_coordinate": pack(new_runtime_coordinate),
     "fixture_drift": pack(fixture_drift),
 }))
@@ -4225,6 +4259,10 @@ print(json.dumps({
     assert_eq!(parsed["ok"]["total"].as_i64(), Some(60));
     assert_eq!(parsed["ok"]["passed"].as_i64(), Some(60));
     assert_eq!(parsed["ok"]["ok"], true);
+    assert_eq!(parsed["inventory_ok"]["kind"], "runtime_keymap_mirror");
+    assert_eq!(parsed["inventory_ok"]["total"].as_i64(), Some(60));
+    assert_eq!(parsed["inventory_ok"]["passed"].as_i64(), Some(60));
+    assert_eq!(parsed["inventory_ok"]["ok"], true);
     assert_eq!(parsed["coverage_ok"]["kind"], "runtime_keymap_mirror");
     assert_eq!(parsed["coverage_ok"]["total"].as_i64(), Some(29));
     assert_eq!(parsed["coverage_ok"]["passed"].as_i64(), Some(29));
@@ -4271,6 +4309,30 @@ print(json.dumps({
             .as_str()
             .unwrap()
             .contains("L0R3C9")
+    );
+
+    assert_eq!(
+        parsed["duplicate_position"]["kind"],
+        "runtime_keymap_mirror"
+    );
+    assert_eq!(parsed["duplicate_position"]["ok"], false);
+    assert!(
+        parsed["duplicate_position"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("duplicate runtime mirror position L0R0C0")
+    );
+
+    assert_eq!(
+        parsed["out_of_bounds_position"]["kind"],
+        "runtime_keymap_mirror"
+    );
+    assert_eq!(parsed["out_of_bounds_position"]["ok"], false);
+    assert!(
+        parsed["out_of_bounds_position"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("runtime mirror position out of bounds L99R0C0")
     );
 
     assert_eq!(

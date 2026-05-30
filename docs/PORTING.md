@@ -266,7 +266,9 @@ scenario layer-resolution manifest, so adding a new runtime scenario without
 covering its coordinates also fails the migration denominator. The mirror
 coverage gate also scans the runtime fixture itself and requires every non-`No`
 cell, including transparent fallthrough cells, to be mirrored against
-`keyboard.toml`.
+`keyboard.toml`. The mirror position inventory is also checked for duplicate
+and out-of-bounds coordinates so the migration denominator cannot be inflated
+or weakened by stale coordinate entries.
 The gate additionally resolves every position on layer 1, layer 2, and the
 system tri-layer against the ZMK source keymap to catch transparent-key
 fallthrough drift beyond the hand-written representative scenarios.

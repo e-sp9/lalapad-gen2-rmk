@@ -4156,6 +4156,58 @@ def manifest_runtime_keymap_mirror_positions(
     return positions
 
 
+def manifest_runtime_keymap_mirror_position_list(
+    manifest: dict[str, Any],
+) -> list[tuple[int, int, int]]:
+    positions: list[tuple[int, int, int]] = []
+    for check in manifest.get("runtime_keymap_mirrors", []):
+        for position in check.get("positions", []):
+            positions.append(
+                (
+                    int(position["layer"]),
+                    int(position["row"]),
+                    int(position["col"]),
+                )
+            )
+    return positions
+
+
+def check_runtime_keymap_mirror_position_inventory(
+    manifest: dict[str, Any], config: dict[str, Any]
+) -> list[Result]:
+    positions = manifest_runtime_keymap_mirror_position_list(manifest)
+    km = keymap(config)
+    seen: set[tuple[int, int, int]] = set()
+    passed = 0
+    messages: list[str] = []
+    for layer, row, col in positions:
+        label = f"L{layer}R{row}C{col}"
+        if (layer, row, col) in seen:
+            messages.append(f"duplicate runtime mirror position {label}")
+            continue
+        seen.add((layer, row, col))
+        if (
+            layer < 0
+            or layer >= len(km)
+            or row < 0
+            or row >= len(km[layer])
+            or col < 0
+            or col >= len(km[layer][row])
+        ):
+            messages.append(f"runtime mirror position out of bounds {label}")
+            continue
+        passed += 1
+    return [
+        Result(
+            "runtime_keymap_mirror_positions_are_unique_and_in_bounds",
+            "runtime_keymap_mirror",
+            passed,
+            len(positions),
+            "ok" if not messages else "; ".join(messages),
+        )
+    ]
+
+
 def runtime_test_sequence_positions(manifest: dict[str, Any]) -> set[tuple[int, int, int]]:
     positions: set[tuple[int, int, int]] = set()
     for check in manifest.get("runtime_scenario_tests", []):
@@ -5409,6 +5461,7 @@ def run(
     results.extend(check_file_contains_invariants(manifest, project_root))
     results.extend(check_rust_unit_tests(manifest, project_root))
     results.extend(check_runtime_keymap_mirrors(manifest, keyboard, project_root))
+    results.extend(check_runtime_keymap_mirror_position_inventory(manifest, keyboard))
     results.extend(check_runtime_keymap_mirror_coverage(manifest, keyboard))
     results.extend(check_runtime_keymap_mirror_fixture_coverage(manifest, project_root))
     results.extend(check_runtime_scenario_tests(manifest, project_root))
