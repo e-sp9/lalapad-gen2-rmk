@@ -4814,6 +4814,42 @@ fn hardware_validation_rejects_placeholder_template_bindings() {
     assert!(stale_pair_stderr.contains("pair_sha256"));
     assert!(stale_pair_stderr.contains("does not match artifact entries"));
 
+    let mut missing_required_manifest: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&artifact_manifest_path).unwrap()).unwrap();
+    let missing_required_artifacts = missing_required_manifest["artifacts"]
+        .as_array_mut()
+        .unwrap();
+    missing_required_artifacts.retain(|artifact| {
+        artifact["path"] != "firmware/reset/lalapad-gen2-rmk-reset-peripheral.uf2"
+    });
+    missing_required_manifest["artifact_count"] =
+        serde_json::Value::Number(missing_required_artifacts.len().into());
+    let missing_required_path = artifact_manifest_path
+        .with_file_name("missing-required-template-firmware-artifacts.local.json");
+    std::fs::write(
+        &missing_required_path,
+        serde_json::to_string_pretty(&missing_required_manifest).unwrap(),
+    )
+    .unwrap();
+    let missing_required = run_hardware_validation(&[
+        "--checklist",
+        "--firmware-artifact-manifest-template",
+        missing_required_path.to_str().unwrap(),
+    ]);
+    let _ = std::fs::remove_file(&missing_required_path);
+    assert!(
+        !missing_required.status.success(),
+        "hardware validation accepted artifact manifest template missing a required reset UF2\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&missing_required.stdout),
+        String::from_utf8_lossy(&missing_required.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&missing_required.stderr).contains(
+            "missing required reset-uf2 firmware/reset/lalapad-gen2-rmk-reset-peripheral.uf2"
+        ),
+        "missing required firmware artifact rejection should name the missing reset UF2"
+    );
+
     let mut wrong_metadata_manifest: serde_json::Value =
         serde_json::from_slice(&std::fs::read(&artifact_manifest_path).unwrap()).unwrap();
     let central_artifact = wrong_metadata_manifest["artifacts"]

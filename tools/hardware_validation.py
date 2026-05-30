@@ -981,6 +981,11 @@ def firmware_artifact_manifest_errors(manifest: dict[str, Any]) -> list[str]:
     }
     if len(artifacts_by_path) != len(artifacts):
         errors.append("firmware artifact manifest artifacts must be objects with unique paths")
+    for spec in firmware_artifact_specs.HARDWARE_VALIDATION_REQUIRED_ARTIFACTS:
+        if spec.path not in artifacts_by_path:
+            errors.append(
+                f"firmware artifact manifest missing required {spec.kind} {spec.path}"
+            )
     for index, artifact in enumerate(artifacts):
         if not isinstance(artifact, dict):
             errors.append(f"firmware artifact manifest artifacts[{index}] must be an object")

@@ -81,3 +81,9 @@ EXPECTED_METADATA_BY_PATH = {
     }
     for spec in ARTIFACTS
 }
+
+HARDWARE_VALIDATION_REQUIRED_GROUPS = frozenset({"uf2", "reset_uf2"})
+
+HARDWARE_VALIDATION_REQUIRED_ARTIFACTS = tuple(
+    spec for spec in ARTIFACTS if spec.required_group in HARDWARE_VALIDATION_REQUIRED_GROUPS
+)

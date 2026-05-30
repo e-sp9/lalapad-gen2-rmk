@@ -362,11 +362,7 @@ def firmware_artifact_status(
             f"{pair_sha256!r} does not match artifact entries {expected_pair_sha256!r}"
         )
 
-    required_artifact_specs = [
-        spec
-        for spec in firmware_artifact_specs.ARTIFACTS
-        if spec.required_group in {"uf2", "reset_uf2"}
-    ]
+    required_artifact_specs = firmware_artifact_specs.HARDWARE_VALIDATION_REQUIRED_ARTIFACTS
     required_uf2_paths = [spec.path for spec in required_artifact_specs]
     for spec in required_artifact_specs:
         artifact = artifacts_by_path.get(spec.path)
