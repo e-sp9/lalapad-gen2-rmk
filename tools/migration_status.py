@@ -466,6 +466,7 @@ def print_text(status: MigrationStatus) -> None:
         "Hardware validation: "
         f"{hardware['validated']}/{hardware['total']} = {hardware_rate}"
     )
+    print(f"Hardware check inventory SHA256: {hardware['check_inventory_sha256']}")
     if status.firmware_artifacts is not None:
         artifacts = status.firmware_artifacts
         artifact_status = "pass" if not artifacts["errors"] else "fail"
@@ -572,6 +573,11 @@ def print_markdown(status: MigrationStatus) -> None:
         f"git_commit=`{hardware_validation.markdown_escape(status.software.zmk_source.get('git_commit') or 'n/a')}`; "
         f"dirty={dirty_text}; "
         f"dirty_paths=`{hardware_validation.markdown_escape(dirty_paths_text)}`"
+    )
+    print()
+    print(
+        "Hardware check inventory SHA256: "
+        f"`{hardware_validation.markdown_escape(hardware['check_inventory_sha256'])}`"
     )
     print()
     print(

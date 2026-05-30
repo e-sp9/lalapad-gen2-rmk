@@ -94,6 +94,7 @@ COPY_AID_PLACEHOLDER_RE = re.compile(
 class HardwareValidationSummary:
     total: int
     validated: int
+    check_inventory_sha256: str
     by_status: dict[str, int]
     by_area: dict[str, dict[str, Any]]
     by_side: dict[str, dict[str, Any]]
@@ -449,6 +450,7 @@ def summarize(
     required_artifact_pair_sha256: str | None = None,
 ) -> HardwareValidationSummary:
     checks = manifest.get("checks", [])
+    _, check_inventory_sha256 = manifest_inventory_digest(manifest)
     by_status = {status: 0 for status in sorted(VALID_STATUSES)}
     by_area: dict[str, dict[str, Any]] = {}
     by_side: dict[str, dict[str, Any]] = {}
@@ -459,7 +461,14 @@ def summarize(
 
     if not isinstance(checks, list):
         return HardwareValidationSummary(
-            0, 0, by_status, {}, {}, [], ["checks must be an array"]
+            0,
+            0,
+            check_inventory_sha256,
+            by_status,
+            {},
+            {},
+            [],
+            ["checks must be an array"],
         )
     if not checks:
         errors.append("checks must contain at least one hardware validation item")
@@ -580,6 +589,7 @@ def summarize(
     return HardwareValidationSummary(
         total=len(checks),
         validated=validated,
+        check_inventory_sha256=check_inventory_sha256,
         by_status=by_status,
         by_area=dict(sorted(by_area.items())),
         by_side=dict(sorted(by_side.items())),
@@ -593,6 +603,7 @@ def as_json(summary: HardwareValidationSummary) -> dict[str, Any]:
         "total": summary.total,
         "validated": summary.validated,
         "rate": summary.rate,
+        "check_inventory_sha256": summary.check_inventory_sha256,
         "by_status": summary.by_status,
         "by_area": summary.by_area,
         "by_side": summary.by_side,
@@ -704,6 +715,8 @@ def as_markdown(manifest: dict[str, Any], summary: HardwareValidationSummary) ->
         "## Real-Hardware Validation",
         "",
         headline,
+        "",
+        f"Check inventory SHA256: `{markdown_escape(summary.check_inventory_sha256)}`",
         "",
         f"Status: {status_counts or 'none'}",
         "",
@@ -834,6 +847,7 @@ def print_text(summary: HardwareValidationSummary) -> None:
         f"{status}={count}" for status, count in summary.by_status.items() if count
     )
     print(f"Hardware validation status: {status_counts or 'none'}")
+    print(f"Hardware check inventory SHA256: {summary.check_inventory_sha256}")
     for label, group in [("area", summary.by_area), ("side", summary.by_side)]:
         if group:
             print(f"Hardware validation by {label}:")

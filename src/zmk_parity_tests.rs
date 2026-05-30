@@ -1170,6 +1170,12 @@ fn migration_status_combines_software_and_hardware_progress() {
     assert_eq!(parsed["hardware"]["classified"].as_bool(), Some(true));
     assert_eq!(parsed["hardware"]["validated"].as_i64(), Some(0));
     assert_eq!(parsed["hardware"]["total"].as_i64(), Some(12));
+    let hardware_baseline = hardware_validation_baseline_toml();
+    assert_eq!(
+        parsed["hardware"]["check_inventory_sha256"].as_str(),
+        hardware_baseline["hardware_validation"]["check_inventory_sha256"].as_str(),
+        "migration status should report the hardware check inventory hash used for validation"
+    );
     let remaining = parsed["hardware"]["remaining"].as_array().unwrap();
     let right_trackpad = remaining
         .iter()
@@ -1209,6 +1215,7 @@ fn migration_status_combines_software_and_hardware_progress() {
         "| Software coverage | {expected_passed} | {expected_total} | 100.00% |"
     )));
     assert!(stdout.contains("### Hardware Progress By Area"));
+    assert!(stdout.contains("Hardware check inventory SHA256: `"));
     assert!(stdout.contains("| trackpad | 0 | 7 | 0.00% |"));
     assert!(stdout.contains("### Hardware Progress By Side"));
     assert!(stdout.contains("| right | 0 | 5 | 0.00% |"));
@@ -2020,6 +2027,14 @@ fn hardware_validation_markdown_report_lists_required_evidence() {
     assert!(stdout.contains(&format!(
         "Hardware validation: 0/{expected_total} = 0.00% validated"
     )));
+    let baseline = hardware_validation_baseline_toml();
+    let inventory_sha256 = baseline["hardware_validation"]["check_inventory_sha256"]
+        .as_str()
+        .unwrap();
+    assert!(
+        stdout.contains(&format!("Check inventory SHA256: `{inventory_sha256}`")),
+        "hardware validation markdown report should expose the checked manifest inventory"
+    );
     assert!(stdout.contains("### Progress By Area"));
     assert!(stdout.contains("| Area | Validated | Total | Rate | Status counts |"));
     assert!(stdout.contains("| trackpad | 0 | 7 | 0.00% | `requires_hardware`=7 |"));
@@ -2125,6 +2140,15 @@ fn hardware_validation_reports_required_observations_in_json_and_text() {
     );
 
     let parsed: serde_json::Value = serde_json::from_slice(&json.stdout).unwrap();
+    let baseline = hardware_validation_baseline_toml();
+    let inventory_sha256 = baseline["hardware_validation"]["check_inventory_sha256"]
+        .as_str()
+        .unwrap();
+    assert_eq!(
+        parsed["check_inventory_sha256"].as_str(),
+        Some(inventory_sha256),
+        "hardware validation JSON should expose the checked manifest inventory"
+    );
     let right_trackpad = parsed["remaining"]
         .as_array()
         .unwrap()
@@ -2139,6 +2163,12 @@ fn hardware_validation_reports_required_observations_in_json_and_text() {
     );
 
     let text_stdout = String::from_utf8_lossy(&text.stdout);
+    assert!(
+        text_stdout.contains(&format!(
+            "Hardware check inventory SHA256: {inventory_sha256}"
+        )),
+        "hardware validation text report should expose the checked manifest inventory"
+    );
     assert!(
         text_stdout
             .contains("right_trackpad_cursor_tap_scroll (trackpad/right): requires_hardware")
