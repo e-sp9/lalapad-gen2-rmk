@@ -740,6 +740,11 @@ path = "keyboard.serial_number"
 expected = "vial:f64c2b3c:000001"
 
 [[config_values]]
+id = "host_vial_unlock_keys"
+path = "host.unlock_keys"
+expected = [[0, 0], [0, 1]]
+
+[[config_values]]
 id = "ble_enabled"
 path = "ble.enabled"
 expected = true

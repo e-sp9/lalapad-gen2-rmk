@@ -3042,6 +3042,7 @@ fn porting_coverage_includes_exact_rmk_inventory_gates() {
         "keyboard_vendor_id",
         "keyboard_product_id",
         "keyboard_serial_number",
+        "host_vial_unlock_keys",
         "rmk_combo_capacity_matches_shipped_combo_inventory",
         "rmk_combo_max_length_matches_shipped_combo_shape",
         "rmk_debounce_time_matches_lalapad_tuning",
