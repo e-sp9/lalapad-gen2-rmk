@@ -1,8 +1,8 @@
 [coverage]
-passed = 3799
-total = 3799
+passed = 3801
+total = 3801
 result_count = 607
-result_inventory_sha256 = "cf610d9cd19820e8c12951cb9cae8e0cccad585138eb0137193d9e328935a173"
+result_inventory_sha256 = "7638dc02215466131d2c411f0691bb1d6c3f60b72574d92df4c1cb91a513fd75"
 
 [coverage.by_kind.behavior]
 passed = 10
@@ -133,8 +133,8 @@ passed = 41
 total = 41
 
 [coverage.by_kind.zmk_inventory]
-passed = 621
-total = 621
+passed = 625
+total = 625
 
 [coverage.by_kind.zmk_pin]
 passed = 15
@@ -151,10 +151,6 @@ total = 336
 [coverage.by_kind.zmk_source_combo]
 passed = 5
 total = 5
-
-[coverage.by_kind.zmk_source_combo_delta]
-passed = 2
-total = 2
 
 [coverage.by_kind.zmk_source_delta]
 passed = 3

@@ -1,8 +1,8 @@
 [metadata]
 source = "ZMK LaLaPad Gen2 config/lalapadgen2.keymap"
 source_repo_hint = "../zmk-config-LalaPadGen2"
-source_commit = "53f50084e4196482938f11b1ac1d1ddea3b63ccd"
-description = "Machine-readable porting target for the RMK migration coverage gate. Expected values describe the RMK target behavior, including documented RMK-specific deltas needed to preserve the user's established thumb layer-tap workflow."
+source_commit = "a48ae199b02b8bdf9875be03bb460f0ada94e8cb"
+description = "Machine-readable porting target for the RMK migration coverage gate. Expected values describe the RMK target behavior against the pinned upstream ZMK source."
 
 [source_inventory]
 keymap_layers = [
@@ -27,6 +27,8 @@ combo_properties = [
   { source_file = "lalapadgen2.keymap", source_block = "combos", expected = ["compatible=\"zmk,combos\""] },
   { source_file = "lalapadgen2.keymap", source_block = "CONBO_ESC", expected = ["bindings=<&kp ESCAPE>", "key-positions=<0 1>"] },
   { source_file = "lalapadgen2.keymap", source_block = "COMBO_TAB", expected = ["bindings=<&kp TAB>", "key-positions=<10 11>"] },
+  { source_file = "lalapadgen2.keymap", source_block = "COMBO_KANA", expected = ["bindings=<&kp LANGUAGE_1>", "key-positions=<16 17>"] },
+  { source_file = "lalapadgen2.keymap", source_block = "COMBO_EUSU", expected = ["bindings=<&kp LANGUAGE_2>", "key-positions=<12 13>"] },
 ]
 build_files = [
   { source_file = "../build.yaml", expected = ["include:board=seeeduino_xiao_ble:shield=lalapadgen2_right rgbled_adapter:snippet=studio-rpc-usb-uart", "include:board=seeeduino_xiao_ble:shield=lalapadgen2_left rgbled_adapter", "include:board=seeeduino_xiao_ble:shield=settings_reset"] },
@@ -3064,7 +3066,7 @@ file = ".github/workflows/firmware.yml"
 needles = [
   "Checkout upstream ZMK config",
   "repository: e-sp9/zmk-config-LalaPadGen2",
-  "ref: 53f50084e4196482938f11b1ac1d1ddea3b63ccd",
+  "ref: a48ae199b02b8bdf9875be03bb460f0ada94e8cb",
   "command -v rmkit",
   'if ! command -v rmkit >/dev/null || [ "$(rmkit --version)" != "rmkit 0.0.21" ]; then',
   "cargo install --locked --force rmkit --version 0.0.21",
@@ -3326,28 +3328,14 @@ id = "combo_kana"
 actions = ["J", "K"]
 output = "Language1"
 layer = 0
-source = "RMK target delta: Kana combo mirrors the direct Language1 key positions even when the checked-out upstream ZMK source has not published COMBO_KANA."
+source = "ZMK COMBO_KANA key-positions <16 17>"
 
 [[combos]]
 id = "combo_eisu"
 actions = ["D", "F"]
 output = "Language2"
 layer = 0
-source = "RMK target delta: Eisu combo mirrors the direct Language2 key positions even when the checked-out upstream ZMK source has not published COMBO_EUSU."
-
-[[source_combo_deltas]]
-id = "delta_combo_kana"
-actions = ["J", "K"]
-output = "Language1"
-layer = 0
-reason = "RMK preserves the user's established Kana combo as an explicit target-side delta when the canonical ZMK checkout only contains Escape and Tab combos."
-
-[[source_combo_deltas]]
-id = "delta_combo_eisu"
-actions = ["D", "F"]
-output = "Language2"
-layer = 0
-reason = "RMK preserves the user's established Eisu combo as an explicit target-side delta when the canonical ZMK checkout only contains Escape and Tab combos."
+source = "ZMK COMBO_EUSU key-positions <12 13>"
 
 [[scenarios]]
 id = "space_tap_is_space"

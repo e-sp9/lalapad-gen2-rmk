@@ -61,7 +61,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: e-sp9/zmk-config-LalaPadGen2
-          ref: 53f50084e4196482938f11b1ac1d1ddea3b63ccd
+          ref: a48ae199b02b8bdf9875be03bb460f0ada94e8cb
           path: zmk-config-LalaPadGen2
 
       - name: Install Rust toolchain
