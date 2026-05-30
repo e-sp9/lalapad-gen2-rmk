@@ -12,7 +12,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
 import firmware_artifact_manifest
+import firmware_artifact_specs
 import hardware_validation
 import porting_coverage
 
@@ -280,7 +283,7 @@ def firmware_artifact_status(
     if len(artifacts_by_path) != len(artifacts):
         errors.append("firmware artifact manifest artifacts must be objects with unique paths")
 
-    known_specs_by_path = {spec.path: spec for spec in firmware_artifact_manifest.ARTIFACTS}
+    known_specs_by_path = {spec.path: spec for spec in firmware_artifact_specs.ARTIFACTS}
     for artifact in artifacts:
         if not isinstance(artifact, dict):
             continue
@@ -361,7 +364,7 @@ def firmware_artifact_status(
 
     required_artifact_specs = [
         spec
-        for spec in firmware_artifact_manifest.ARTIFACTS
+        for spec in firmware_artifact_specs.ARTIFACTS
         if spec.required_group in {"uf2", "reset_uf2"}
     ]
     required_uf2_paths = [spec.path for spec in required_artifact_specs]

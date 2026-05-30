@@ -15,6 +15,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import firmware_artifact_specs
+
 
 VALID_STATUSES = frozenset(
     {
@@ -134,50 +138,6 @@ ARTIFACT_PATH_TEMPLATE_EXTENSIONS = {
     "vial screenshot": "png",
     "video": "mp4",
 }
-FIRMWARE_ARTIFACT_EXPECTED_METADATA = {
-    "firmware/normal/lalapad-gen2-rmk-central.uf2": {
-        "role": "central",
-        "side": "right",
-        "kind": "uf2",
-    },
-    "firmware/normal/lalapad-gen2-rmk-peripheral.uf2": {
-        "role": "peripheral",
-        "side": "left",
-        "kind": "uf2",
-    },
-    "firmware/hex/lalapad-gen2-rmk-central.hex": {
-        "role": "central",
-        "side": "right",
-        "kind": "ihex",
-    },
-    "firmware/hex/lalapad-gen2-rmk-peripheral.hex": {
-        "role": "peripheral",
-        "side": "left",
-        "kind": "ihex",
-    },
-    "firmware/reset/lalapad-gen2-rmk-reset-central.uf2": {
-        "role": "reset-central",
-        "side": "right",
-        "kind": "reset-uf2",
-    },
-    "firmware/reset/lalapad-gen2-rmk-reset-peripheral.uf2": {
-        "role": "reset-peripheral",
-        "side": "left",
-        "kind": "reset-uf2",
-    },
-    "firmware/lalapad-gen2-rmk-central-dfu.zip": {
-        "role": "central",
-        "side": "right",
-        "kind": "adafruit-nrf52-dfu-zip",
-    },
-    "firmware/lalapad-gen2-rmk-peripheral-dfu.zip": {
-        "role": "peripheral",
-        "side": "left",
-        "kind": "adafruit-nrf52-dfu-zip",
-    },
-}
-
-
 @dataclass
 class HardwareValidationSummary:
     total: int
@@ -1013,7 +973,7 @@ def firmware_artifact_manifest_errors(manifest: dict[str, Any]) -> list[str]:
             if not value:
                 errors.append(f"firmware artifact manifest artifacts[{index}].{field} is missing")
         path = str(artifact.get("path", "")).strip()
-        expected_metadata = FIRMWARE_ARTIFACT_EXPECTED_METADATA.get(path)
+        expected_metadata = firmware_artifact_specs.EXPECTED_METADATA_BY_PATH.get(path)
         if expected_metadata is not None:
             for field, expected_value in expected_metadata.items():
                 if artifact.get(field) != expected_value:

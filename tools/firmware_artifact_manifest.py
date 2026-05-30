@@ -9,78 +9,16 @@ import json
 import subprocess
 import sys
 import zipfile
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import firmware_artifact_specs
 import hardware_validation
 
 
-@dataclass(frozen=True)
-class ArtifactSpec:
-    path: str
-    role: str
-    side: str
-    kind: str
-    required_group: str | None = None
-
-
-ARTIFACTS = (
-    ArtifactSpec(
-        "firmware/normal/lalapad-gen2-rmk-central.uf2",
-        "central",
-        "right",
-        "uf2",
-        "uf2",
-    ),
-    ArtifactSpec(
-        "firmware/normal/lalapad-gen2-rmk-peripheral.uf2",
-        "peripheral",
-        "left",
-        "uf2",
-        "uf2",
-    ),
-    ArtifactSpec(
-        "firmware/hex/lalapad-gen2-rmk-central.hex",
-        "central",
-        "right",
-        "ihex",
-    ),
-    ArtifactSpec(
-        "firmware/hex/lalapad-gen2-rmk-peripheral.hex",
-        "peripheral",
-        "left",
-        "ihex",
-    ),
-    ArtifactSpec(
-        "firmware/reset/lalapad-gen2-rmk-reset-central.uf2",
-        "reset-central",
-        "right",
-        "reset-uf2",
-        "reset_uf2",
-    ),
-    ArtifactSpec(
-        "firmware/reset/lalapad-gen2-rmk-reset-peripheral.uf2",
-        "reset-peripheral",
-        "left",
-        "reset-uf2",
-        "reset_uf2",
-    ),
-    ArtifactSpec(
-        "firmware/lalapad-gen2-rmk-central-dfu.zip",
-        "central",
-        "right",
-        "adafruit-nrf52-dfu-zip",
-        "dfu",
-    ),
-    ArtifactSpec(
-        "firmware/lalapad-gen2-rmk-peripheral-dfu.zip",
-        "peripheral",
-        "left",
-        "adafruit-nrf52-dfu-zip",
-        "dfu",
-    ),
-)
+ARTIFACTS = firmware_artifact_specs.ARTIFACTS
 
 
 def sha256_file(path: Path) -> str:
@@ -131,7 +69,9 @@ def dfu_manifest(path: Path) -> dict[str, Any]:
     }
 
 
-def artifact_entry(root: Path, spec: ArtifactSpec) -> dict[str, Any] | None:
+def artifact_entry(
+    root: Path, spec: firmware_artifact_specs.ArtifactSpec
+) -> dict[str, Any] | None:
     path = root / spec.path
     if not path.exists():
         return None
