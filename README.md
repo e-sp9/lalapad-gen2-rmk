@@ -133,6 +133,7 @@ rmkit get-project-name --keyboard-toml-path keyboard.toml
 cargo make porting-coverage
 cargo make migration-status
 cargo make migration-status-report
+cargo make host-parity-tests
 cargo make rmk-zmk-scenario-tests
 cargo make rmk-behavior-tests
 python3 tools/hardware_validation.py --hardware-baseline tools/hardware_validation_baseline.toml --require-classified
@@ -163,7 +164,8 @@ python3 tools/hardware_validation.py --evidence hardware-validation-evidence.loc
 ```
 
 `cargo make porting-coverage` first runs the RMK host-runtime thumb layer-tap
-scenario suite, then `tools/porting_coverage.py` reads
+scenario suite and the project host parity test suite, then
+`tools/porting_coverage.py` reads
 `tools/porting_coverage_manifest.toml` and,
 when the upstream ZMK checkout from the manifest is present, also parses
 `config/lalapadgen2.keymap`, shield overlays, ZMK Kconfig values, and selected

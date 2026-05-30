@@ -33,7 +33,11 @@ args = [
     "--require-zmk-source",
     "--require-porting-complete",
 ]
-dependencies = ["rmk-zmk-scenario-tests"]
+dependencies = ["rmk-zmk-scenario-tests", "host-parity-tests"]
+
+[tasks.host-parity-tests]
+command = "cargo"
+args = ["test", "--lib", "--target", "x86_64-unknown-linux-gnu"]
 
 [tasks.rmk-behavior-tests]
 script = '''
@@ -106,7 +110,7 @@ python3 tools/hardware_validation.py \
 '''
 
 [tasks.hardware-validation-session-current]
-dependencies = ["clean-current-git-ref", "firmware-artifact-manifest-current", "rmk-zmk-scenario-tests"]
+dependencies = ["clean-current-git-ref", "firmware-artifact-manifest-current", "rmk-zmk-scenario-tests", "host-parity-tests"]
 script = '''
 if [ -n "$(git status --porcelain --untracked-files=normal)" ]; then
   echo "working tree has tracked or untracked non-ignored changes; commit or stash them before preparing current-ref hardware evidence" >&2
@@ -174,10 +178,10 @@ args = [
     "--require-software-complete",
     "--require-hardware-classified",
 ]
-dependencies = ["rmk-zmk-scenario-tests"]
+dependencies = ["rmk-zmk-scenario-tests", "host-parity-tests"]
 
 [tasks.migration-status-report]
-dependencies = ["rmk-zmk-scenario-tests"]
+dependencies = ["rmk-zmk-scenario-tests", "host-parity-tests"]
 script = '''
 zmk_keymap="${ZMK_KEYMAP:-}"
 if [ -z "$zmk_keymap" ]; then
@@ -217,7 +221,7 @@ python3 "$@"
 '''
 
 [tasks.migration-status-final]
-dependencies = ["rmk-zmk-scenario-tests"]
+dependencies = ["rmk-zmk-scenario-tests", "host-parity-tests"]
 script = '''
 : "${HARDWARE_EVIDENCE:?set HARDWARE_EVIDENCE=path/to/evidence.toml}"
 : "${FIRMWARE_REF:?set FIRMWARE_REF=<tag-or-commit>}"
@@ -250,7 +254,7 @@ python3 "$@"
 '''
 
 [tasks.migration-status-final-current]
-dependencies = ["clean-current-git-ref", "rmk-zmk-scenario-tests"]
+dependencies = ["clean-current-git-ref", "rmk-zmk-scenario-tests", "host-parity-tests"]
 script = '''
 : "${HARDWARE_EVIDENCE:?set HARDWARE_EVIDENCE=path/to/evidence.toml}"
 if [ -n "$(git status --porcelain --untracked-files=normal)" ]; then

@@ -2773,7 +2773,7 @@ bins = [
 ]
 
 [[makefile_task_invariants]]
-id = "makefile_porting_coverage_runs_runtime_scenarios_first"
+id = "makefile_porting_coverage_runs_runtime_scenarios_and_host_parity_first"
 task = "porting-coverage"
 command = "python3"
 args_contains = [
@@ -2783,10 +2783,10 @@ args_contains = [
   "--require-zmk-source",
   "--require-porting-complete",
 ]
-dependencies_include = ["rmk-zmk-scenario-tests"]
+dependencies_include = ["rmk-zmk-scenario-tests", "host-parity-tests"]
 
 [[makefile_task_invariants]]
-id = "makefile_migration_status_runs_runtime_scenarios_first"
+id = "makefile_migration_status_runs_runtime_scenarios_and_host_parity_first"
 task = "migration-status"
 command = "python3"
 args_contains = [
@@ -2799,12 +2799,12 @@ args_contains = [
   "--require-software-complete",
   "--require-hardware-classified",
 ]
-dependencies_include = ["rmk-zmk-scenario-tests"]
+dependencies_include = ["rmk-zmk-scenario-tests", "host-parity-tests"]
 
 [[makefile_task_invariants]]
-id = "makefile_migration_status_report_runs_runtime_scenarios_first"
+id = "makefile_migration_status_report_runs_runtime_scenarios_and_host_parity_first"
 task = "migration-status-report"
-dependencies_include = ["rmk-zmk-scenario-tests"]
+dependencies_include = ["rmk-zmk-scenario-tests", "host-parity-tests"]
 script_contains = [
   "tools/migration_status.py",
   "--coverage-baseline tools/porting_coverage_baseline.toml",
@@ -2814,6 +2814,12 @@ script_contains = [
   "--require-hardware-classified",
   "--markdown",
 ]
+
+[[makefile_task_invariants]]
+id = "makefile_host_parity_tests_run_full_project_host_suite"
+task = "host-parity-tests"
+command = "cargo"
+args_contains = ["test", "--lib", "--target", "x86_64-unknown-linux-gnu"]
 
 [[makefile_task_invariants]]
 id = "makefile_build_runs_release_with_flash_layout_config"
@@ -2950,7 +2956,12 @@ script_contains = [
 [[makefile_task_invariants]]
 id = "makefile_current_hardware_session_bundles_clean_ref_evidence"
 task = "hardware-validation-session-current"
-dependencies_equal = ["clean-current-git-ref", "firmware-artifact-manifest-current", "rmk-zmk-scenario-tests"]
+dependencies_equal = [
+  "clean-current-git-ref",
+  "firmware-artifact-manifest-current",
+  "rmk-zmk-scenario-tests",
+  "host-parity-tests",
+]
 script_contains = [
   "git status --porcelain --untracked-files=normal",
   "git describe --tags --exact-match",
@@ -2972,7 +2983,7 @@ script_contains = [
 [[makefile_task_invariants]]
 id = "makefile_migration_final_checks_firmware_artifacts"
 task = "migration-status-final"
-dependencies_include = ["rmk-zmk-scenario-tests"]
+dependencies_include = ["rmk-zmk-scenario-tests", "host-parity-tests"]
 script_contains = [
   "HARDWARE_EVIDENCE",
   "FIRMWARE_REF",
@@ -2986,7 +2997,7 @@ script_contains = [
 [[makefile_task_invariants]]
 id = "makefile_current_migration_final_uses_clean_git_ref"
 task = "migration-status-final-current"
-dependencies_equal = ["clean-current-git-ref", "rmk-zmk-scenario-tests"]
+dependencies_equal = ["clean-current-git-ref", "rmk-zmk-scenario-tests", "host-parity-tests"]
 script_contains = [
   "HARDWARE_EVIDENCE",
   "git status --porcelain --untracked-files=normal",
@@ -3020,7 +3031,7 @@ needles = [
   "--require-zmk-source",
   "--require-software-complete",
   "--require-hardware-classified",
-  "cargo test --lib --target x86_64-unknown-linux-gnu",
+  "cargo make host-parity-tests",
   "cargo make rmk-behavior-tests",
   "cargo make build",
 ]

@@ -295,13 +295,15 @@ Run:
 ```sh
 cargo make porting-coverage
 cargo make migration-status
+cargo make host-parity-tests
 ```
 
 The firmware GitHub Actions workflow checks out `e-sp9/zmk-config-LalaPadGen2`,
 parses `vial.json`, RMK/Cargo/manifest TOML, and flash layout, runs this
-source-backed complete-porting gate, and runs the host-side parity test suite
-plus the vendored RMK hold-on-other-press behavior regression suite before
-building release binaries. The gate
+source-backed complete-porting gate, runs the host-side parity test suite as
+part of the same local porting gate, and runs the vendored RMK
+hold-on-other-press behavior regression suite before building release binaries.
+The gate
 must report `100.00%` coverage and `100.00%` implementation status against the
 committed upstream checkout used by CI. The
 denominator can grow when upstream source files add classified behavior, so the

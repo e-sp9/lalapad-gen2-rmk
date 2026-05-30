@@ -126,7 +126,7 @@ jobs:
             --markdown >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run host parity tests
-        run: cargo test --lib --target x86_64-unknown-linux-gnu
+        run: cargo make host-parity-tests
 
       - name: Run RMK behavior regression tests
         run: cargo make rmk-behavior-tests
