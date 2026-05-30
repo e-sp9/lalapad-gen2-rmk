@@ -2227,6 +2227,14 @@ fn hardware_validation_can_generate_complete_evidence_template() {
             stdout.contains(check["requirement"].as_str().unwrap()),
             "evidence template should include requirement comments for {check_id}"
         );
+        assert!(
+            stdout.contains(check["evidence"].as_str().unwrap()),
+            "evidence template should include evidence instructions for {check_id}"
+        );
+        assert!(
+            stdout.contains(check["source"].as_str().unwrap()),
+            "evidence template should include source comments for {check_id}"
+        );
         for needle in check["evidence_needles"].as_array().unwrap() {
             assert!(
                 stdout.contains(needle.as_str().unwrap()),
@@ -2464,6 +2472,14 @@ validated_at = "2026-05-29"
 tester = "bench operator"
 firmware_ref = "35b3f1f"
 artifact_or_notes = "right cursor tap vertical scroll horizontal scroll"
+
+[[evidence]]
+id = "left_trackpad_split_cursor_tap_scroll"
+status = "validated"
+validated_at = "2026-05-29"
+tester = "bench operator"
+firmware_ref = "35b3f1f"
+artifact_or_notes = "TODO log: /tmp/left-trackpad.log; left split cursor tap vertical scroll horizontal scroll"
 "#;
     let path = write_temp_file("hardware-validation-placeholder-evidence", evidence);
     let output = run_hardware_validation(&["--evidence", path.to_str().unwrap(), "--json"]);
@@ -2527,6 +2543,12 @@ artifact_or_notes = "right cursor tap vertical scroll horizontal scroll"
             "right_trackpad_cursor_tap_scroll: artifact_or_notes must include a concrete photo/log/probe/Vial observation note"
         )),
         "behavior keywords alone should not count as concrete hardware evidence: {errors:?}"
+    );
+    assert!(
+        errors.iter().any(|error| error.contains(
+            "left_trackpad_split_cursor_tap_scroll: artifact_or_notes must not contain placeholder markers"
+        )),
+        "artifact_or_notes with TODO marker should not count even if it has a log path and all required observations: {errors:?}"
     );
     assert!(
         !require_output.status.success(),

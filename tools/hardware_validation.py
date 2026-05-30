@@ -79,6 +79,10 @@ EVIDENCE_UPDATE_FIELDS = (
 )
 MARKDOWN_HEADING_RE = re.compile(r"^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$")
 ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+PLACEHOLDER_NOTE_MARKER_RE = re.compile(
+    r"\b(todo|tbd|placeholder|unknown)\b",
+    re.IGNORECASE,
+)
 
 
 @dataclass
@@ -202,6 +206,8 @@ def validate_validated_evidence(check_id: str, check: dict[str, Any]) -> list[st
 
     if artifact_or_notes and is_placeholder_value(artifact_or_notes):
         errors.append(f"{check_id}: artifact_or_notes must describe the observed evidence")
+    elif artifact_or_notes and PLACEHOLDER_NOTE_MARKER_RE.search(artifact_or_notes):
+        errors.append(f"{check_id}: artifact_or_notes must not contain placeholder markers")
     elif artifact_or_notes and artifact_or_notes.strip().lower() in GENERIC_ARTIFACT_VALUES:
         errors.append(f"{check_id}: artifact_or_notes must describe the observed evidence")
     elif artifact_or_notes and len(artifact_or_notes) < 12:
@@ -615,6 +621,8 @@ def as_evidence_template(
             lines.extend(toml_comment(check.get("requirement", "")))
             lines.append("# Required evidence:")
             lines.extend(toml_comment(check.get("evidence", "")))
+            lines.append("# Evidence source:")
+            lines.extend(toml_comment(check.get("source", "")))
             evidence_needles = check.get("evidence_needles", [])
             if evidence_needles:
                 lines.append("# Artifact/notes must mention:")
