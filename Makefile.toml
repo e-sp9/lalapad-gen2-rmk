@@ -365,6 +365,104 @@ args = [
 ]
 dependencies = ["firmware-dirs", "build"]
 
+[tasks.objcopy-reset-central]
+install_crate = { crate_name = "cargo-binutils", binary = "cargo", test_arg = [
+    "objcopy",
+    "--help",
+] }
+dependencies = ["firmware-dirs", "install-llvm-tools", "flip-link", "flash-layout-config", "rmk-config-schema"]
+script = '''
+reset_keyboard_toml="$(mktemp "${TMPDIR:-/tmp}/lalapad-reset-keyboard.XXXXXX.toml")"
+trap 'rm -f "$reset_keyboard_toml"' EXIT
+python3 - "$reset_keyboard_toml" <<'PY'
+import sys
+from pathlib import Path
+
+source = Path("keyboard.toml").read_text(encoding="utf-8").splitlines()
+output = []
+in_storage = False
+inserted = False
+found_storage = False
+for line in source:
+    stripped = line.strip()
+    if stripped.startswith("[") and stripped.endswith("]"):
+        if in_storage and not inserted:
+            output.append("clear_storage = true")
+            inserted = True
+        in_storage = stripped == "[storage]"
+        found_storage = found_storage or in_storage
+    if in_storage and stripped.startswith("clear_storage"):
+        if not inserted:
+            output.append("clear_storage = true")
+            inserted = True
+        continue
+    output.append(line)
+if in_storage and not inserted:
+    output.append("clear_storage = true")
+if not found_storage:
+    raise SystemExit("keyboard.toml must contain [storage] for reset firmware")
+Path(sys.argv[1]).write_text("\n".join(output) + "\n", encoding="utf-8")
+PY
+KEYBOARD_TOML_PATH="$reset_keyboard_toml" \
+cargo objcopy \
+  --release \
+  --bin \
+  central \
+  -- \
+  -O \
+  ihex \
+  firmware/reset/lalapad-gen2-rmk-reset-central.hex
+'''
+
+[tasks.objcopy-reset-peripheral]
+install_crate = { crate_name = "cargo-binutils", binary = "cargo", test_arg = [
+    "objcopy",
+    "--help",
+] }
+dependencies = ["firmware-dirs", "install-llvm-tools", "flip-link", "flash-layout-config", "rmk-config-schema"]
+script = '''
+reset_keyboard_toml="$(mktemp "${TMPDIR:-/tmp}/lalapad-reset-keyboard.XXXXXX.toml")"
+trap 'rm -f "$reset_keyboard_toml"' EXIT
+python3 - "$reset_keyboard_toml" <<'PY'
+import sys
+from pathlib import Path
+
+source = Path("keyboard.toml").read_text(encoding="utf-8").splitlines()
+output = []
+in_storage = False
+inserted = False
+found_storage = False
+for line in source:
+    stripped = line.strip()
+    if stripped.startswith("[") and stripped.endswith("]"):
+        if in_storage and not inserted:
+            output.append("clear_storage = true")
+            inserted = True
+        in_storage = stripped == "[storage]"
+        found_storage = found_storage or in_storage
+    if in_storage and stripped.startswith("clear_storage"):
+        if not inserted:
+            output.append("clear_storage = true")
+            inserted = True
+        continue
+    output.append(line)
+if in_storage and not inserted:
+    output.append("clear_storage = true")
+if not found_storage:
+    raise SystemExit("keyboard.toml must contain [storage] for reset firmware")
+Path(sys.argv[1]).write_text("\n".join(output) + "\n", encoding="utf-8")
+PY
+KEYBOARD_TOML_PATH="$reset_keyboard_toml" \
+cargo objcopy \
+  --release \
+  --bin \
+  peripheral \
+  -- \
+  -O \
+  ihex \
+  firmware/reset/lalapad-gen2-rmk-reset-peripheral.hex
+'''
+
 [tasks.uf2-central]
 install_crate = { crate_name = "cargo-hex-to-uf2", binary = "cargo", test_arg = [
     "hex-to-uf2",
@@ -399,18 +497,57 @@ args = [
 ]
 dependencies = ["objcopy-peripheral"]
 
+[tasks.uf2-reset-central]
+install_crate = { crate_name = "cargo-hex-to-uf2", binary = "cargo", test_arg = [
+    "hex-to-uf2",
+    "--help",
+] }
+command = "cargo"
+args = [
+    "hex-to-uf2",
+    "--input-path",
+    "firmware/reset/lalapad-gen2-rmk-reset-central.hex",
+    "--output-path",
+    "firmware/reset/lalapad-gen2-rmk-reset-central.uf2",
+    "--family",
+    "nrf52840",
+]
+dependencies = ["objcopy-reset-central"]
+
+[tasks.uf2-reset-peripheral]
+install_crate = { crate_name = "cargo-hex-to-uf2", binary = "cargo", test_arg = [
+    "hex-to-uf2",
+    "--help",
+] }
+command = "cargo"
+args = [
+    "hex-to-uf2",
+    "--input-path",
+    "firmware/reset/lalapad-gen2-rmk-reset-peripheral.hex",
+    "--output-path",
+    "firmware/reset/lalapad-gen2-rmk-reset-peripheral.uf2",
+    "--family",
+    "nrf52840",
+]
+dependencies = ["objcopy-reset-peripheral"]
+
 [tasks.flash-layout]
 command = "python3"
 args = ["tools/check_flash_layout.py", "--require-uf2"]
 dependencies = ["uf2-central", "uf2-peripheral"]
 
+[tasks.reset-flash-layout]
+command = "python3"
+args = ["tools/check_flash_layout.py", "--require-reset-uf2"]
+dependencies = ["uf2-reset-central", "uf2-reset-peripheral"]
+
 [tasks.firmware-artifact-manifest]
 command = "python3"
-args = ["tools/firmware_artifact_manifest.py", "--require-uf2"]
-dependencies = ["uf2"]
+args = ["tools/firmware_artifact_manifest.py", "--require-uf2", "--require-reset-uf2"]
+dependencies = ["uf2", "reset-uf2"]
 
 [tasks.firmware-artifact-manifest-current]
-dependencies = ["clean-current-git-ref", "uf2"]
+dependencies = ["clean-current-git-ref", "uf2", "reset-uf2"]
 script = '''
 if [ -n "$(git status --porcelain --untracked-files=normal)" ]; then
   echo "working tree has tracked or untracked non-ignored changes; commit or stash them, or pass --firmware-ref manually" >&2
@@ -421,9 +558,13 @@ firmware_ref="$(git describe --tags --exact-match 2>/dev/null || git rev-parse -
 artifact_manifest="${FIRMWARE_ARTIFACT_MANIFEST:-firmware-artifacts.local.json}"
 python3 tools/firmware_artifact_manifest.py \
   --require-uf2 \
+  --require-reset-uf2 \
   --firmware-ref "$firmware_ref" \
   --output "$artifact_manifest"
 '''
 
 [tasks.uf2]
 dependencies = ["flash-layout"]
+
+[tasks.reset-uf2]
+dependencies = ["reset-flash-layout"]

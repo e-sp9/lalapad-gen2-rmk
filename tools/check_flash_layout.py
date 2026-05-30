@@ -18,6 +18,10 @@ UF2_FILES = (
     Path("firmware/normal/lalapad-gen2-rmk-central.uf2"),
     Path("firmware/normal/lalapad-gen2-rmk-peripheral.uf2"),
 )
+RESET_UF2_FILES = (
+    Path("firmware/reset/lalapad-gen2-rmk-reset-central.uf2"),
+    Path("firmware/reset/lalapad-gen2-rmk-reset-peripheral.uf2"),
+)
 
 
 def fail(message: str) -> None:
@@ -115,6 +119,11 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config-only", action="store_true", help="skip generated UF2 checks")
     parser.add_argument("--require-uf2", action="store_true", help="fail if expected UF2 files are missing")
+    parser.add_argument(
+        "--require-reset-uf2",
+        action="store_true",
+        help="fail if expected reset/storage-clear UF2 files are missing",
+    )
     args = parser.parse_args()
 
     app_start, app_end = read_flash_region(Path("memory.x"))
@@ -129,9 +138,12 @@ def main() -> None:
     if args.config_only:
         return
 
-    for uf2 in UF2_FILES:
+    expected_uf2s = [(uf2, args.require_uf2) for uf2 in UF2_FILES]
+    expected_uf2s.extend((uf2, args.require_reset_uf2) for uf2 in RESET_UF2_FILES)
+
+    for uf2, required in expected_uf2s:
         if not uf2.exists():
-            if args.require_uf2:
+            if required:
                 fail(f"missing generated UF2: {uf2}")
             continue
 

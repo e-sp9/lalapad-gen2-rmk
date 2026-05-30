@@ -51,6 +51,20 @@ ARTIFACTS = (
         "ihex",
     ),
     ArtifactSpec(
+        "firmware/reset/lalapad-gen2-rmk-reset-central.uf2",
+        "reset-central",
+        "right",
+        "reset-uf2",
+        "reset_uf2",
+    ),
+    ArtifactSpec(
+        "firmware/reset/lalapad-gen2-rmk-reset-peripheral.uf2",
+        "reset-peripheral",
+        "left",
+        "reset-uf2",
+        "reset_uf2",
+    ),
+    ArtifactSpec(
         "firmware/lalapad-gen2-rmk-central-dfu.zip",
         "central",
         "right",
@@ -136,6 +150,7 @@ def build_manifest(
     root: Path,
     firmware_ref: str,
     require_uf2: bool,
+    require_reset_uf2: bool,
     require_dfu: bool,
 ) -> tuple[dict[str, Any], list[str]]:
     artifacts: list[dict[str, Any]] = []
@@ -143,6 +158,8 @@ def build_manifest(
     required_groups = set()
     if require_uf2:
         required_groups.add("uf2")
+    if require_reset_uf2:
+        required_groups.add("reset_uf2")
     if require_dfu:
         required_groups.add("dfu")
 
@@ -205,6 +222,7 @@ def main() -> None:
     parser.add_argument("--root", type=Path, default=Path("."))
     parser.add_argument("--firmware-ref", default=None)
     parser.add_argument("--require-uf2", action="store_true")
+    parser.add_argument("--require-reset-uf2", action="store_true")
     parser.add_argument("--require-dfu", action="store_true")
     parser.add_argument("--markdown", action="store_true")
     parser.add_argument("--output", type=Path, default=None)
@@ -216,6 +234,7 @@ def main() -> None:
         root,
         firmware_ref,
         args.require_uf2,
+        args.require_reset_uf2,
         args.require_dfu,
     )
     if args.markdown:

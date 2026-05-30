@@ -96,6 +96,7 @@ Build UF2 files for the XIAO BLE / Adafruit nRF52 bootloader:
 
 ```shell
 cargo make uf2 --release
+cargo make reset-uf2 --release
 ```
 
 This build runs a flash-layout guard that fails if the linked application or
@@ -105,12 +106,14 @@ The generated files are:
 
 - `firmware/normal/lalapad-gen2-rmk-central.uf2` for the right half
 - `firmware/normal/lalapad-gen2-rmk-peripheral.uf2` for the left half
+- `firmware/reset/lalapad-gen2-rmk-reset-central.uf2` for clearing right-half storage
+- `firmware/reset/lalapad-gen2-rmk-reset-peripheral.uf2` for clearing left-half storage
 
 After building UF2 files, generate a local hash manifest for the exact files
 that will be flashed or referenced in hardware evidence:
 
 ```shell
-python3 tools/firmware_artifact_manifest.py --require-uf2 > firmware-artifacts.local.json
+python3 tools/firmware_artifact_manifest.py --require-uf2 --require-reset-uf2 > firmware-artifacts.local.json
 ```
 
 For a clean local build, prefer the current-ref helper. It writes the manifest
@@ -122,7 +125,8 @@ exact tag or short commit, and refuses mutable working-tree state:
 cargo make firmware-artifact-manifest-current
 ```
 
-Reset/storage-clear UF2 files, when generated for hardware testing, are kept under `firmware/reset/`.
+Reset/storage-clear UF2 files are built from the same central/peripheral bins
+with RMK `clear_storage = true` injected through `KEYBOARD_TOML_PATH`.
 
 ## Validation
 
@@ -143,6 +147,8 @@ python3 tools/hardware_validation.py --markdown
 python3 tools/hardware_validation.py --checklist
 python3 tools/hardware_validation.py --evidence-template
 python3 tools/check_flash_layout.py --config-only
+python3 tools/check_flash_layout.py --require-reset-uf2
+cargo make reset-uf2
 cargo check --release --bin central
 cargo check --release --bin peripheral
 cargo build --release
@@ -160,7 +166,7 @@ steps are:
 ```shell
 cargo make hardware-validation-evidence-template-current > hardware-validation-evidence.local.toml
 python3 tools/hardware_validation.py --checklist > hardware-validation-checklist.local.md
-python3 tools/firmware_artifact_manifest.py --require-uf2 > firmware-artifacts.local.json
+python3 tools/firmware_artifact_manifest.py --require-uf2 --require-reset-uf2 > firmware-artifacts.local.json
 cargo make firmware-artifact-manifest-current
 python3 tools/hardware_validation.py --evidence hardware-validation-evidence.local.toml --markdown
 ```
@@ -334,11 +340,12 @@ collecting those observations. `cargo make
 hardware-validation-evidence-template-current` fills the template from the
 current tag or commit and refuses to run with tracked or untracked non-ignored
 changes, which avoids recording evidence against a mutable local build.
-`tools/firmware_artifact_manifest.py --require-uf2` records the flashed UF2
-file sizes and SHA256 hashes so `artifact_or_notes` can point to an exact
-artifact set. `cargo make firmware-artifact-manifest-current` records the same
-hashes in `firmware-artifacts.local.json`, or in `FIRMWARE_ARTIFACT_MANIFEST`
-when set, and requires a clean current tag or commit for its `firmware_ref`.
+`tools/firmware_artifact_manifest.py --require-uf2 --require-reset-uf2`
+records the normal and storage-clear UF2 file sizes and SHA256 hashes so
+`artifact_or_notes` can point to an exact artifact set.
+`cargo make firmware-artifact-manifest-current` records the same hashes in
+`firmware-artifacts.local.json`, or in `FIRMWARE_ARTIFACT_MANIFEST` when set,
+and requires a clean current tag or commit for its `firmware_ref`.
 `cargo make
 hardware-validation-session-current` runs the RMK ZMK-derived runtime
 scenarios, project host parity tests, RMK behavior regression suite, and the
@@ -353,7 +360,7 @@ current firmware ref and the generated artifact `pair_sha256`. Generated
 When `--firmware-artifact-manifest` is supplied to a migration-status command,
 every validated hardware evidence note must mention that manifest's
 `pair_sha256`, even for partial evidence dashboards. This keeps each counted
-hardware observation tied to the exact central/peripheral UF2 pair that was
+hardware observation tied to the exact normal/reset UF2 files that were
 flashed. Plain report commands render these problems in the error list; use
 `--require-hardware-classified` or the final cargo-make gates when the command
 must fail on stale or incomplete artifact evidence.

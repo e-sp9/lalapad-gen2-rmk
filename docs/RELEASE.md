@@ -31,11 +31,13 @@ Outputs:
 
 - `firmware/normal/lalapad-gen2-rmk-central.uf2`
 - `firmware/normal/lalapad-gen2-rmk-peripheral.uf2`
+- `firmware/reset/lalapad-gen2-rmk-reset-central.uf2`
+- `firmware/reset/lalapad-gen2-rmk-reset-peripheral.uf2`
 
 Generate a local artifact hash manifest after the UF2 files are built:
 
 ```sh
-python3 tools/firmware_artifact_manifest.py --require-uf2 > firmware-artifacts.local.json
+python3 tools/firmware_artifact_manifest.py --require-uf2 --require-reset-uf2 > firmware-artifacts.local.json
 cargo make firmware-artifact-manifest-current
 cargo make hardware-validation-session-current
 ```
@@ -64,7 +66,7 @@ still be source-complete, but it is not yet fully validated against real
 hardware for that firmware reference. When `--firmware-artifact-manifest` is
 present, the final gate also requires each validated hardware evidence note to
 mention the artifact manifest `pair_sha256`, so the observation is bound to the
-exact central/peripheral UF2 pair that was flashed. It also re-reads the local
+exact normal and storage-clear UF2 files that were flashed. It also re-reads the local
 artifact files listed by the manifest under `--artifact-root` (the current
 directory by default) and rejects stale manifests whose size or SHA256 no
 longer matches the current files. The final gate also rejects evidence files

@@ -2885,6 +2885,30 @@ args_contains = ["objcopy", "--release", "--bin", "peripheral", "--", "-O", "ihe
 dependencies_include = ["firmware-dirs", "build"]
 
 [[makefile_task_invariants]]
+id = "makefile_objcopy_reset_central_uses_clear_storage"
+task = "objcopy-reset-central"
+script_contains = [
+  "KEYBOARD_TOML_PATH=\"$reset_keyboard_toml\"",
+  "clear_storage = true",
+  "--bin",
+  "central",
+  "firmware/reset/lalapad-gen2-rmk-reset-central.hex",
+]
+dependencies_include = ["firmware-dirs", "install-llvm-tools", "flip-link", "flash-layout-config", "rmk-config-schema"]
+
+[[makefile_task_invariants]]
+id = "makefile_objcopy_reset_peripheral_uses_clear_storage"
+task = "objcopy-reset-peripheral"
+script_contains = [
+  "KEYBOARD_TOML_PATH=\"$reset_keyboard_toml\"",
+  "clear_storage = true",
+  "--bin",
+  "peripheral",
+  "firmware/reset/lalapad-gen2-rmk-reset-peripheral.hex",
+]
+dependencies_include = ["firmware-dirs", "install-llvm-tools", "flip-link", "flash-layout-config", "rmk-config-schema"]
+
+[[makefile_task_invariants]]
 id = "makefile_uf2_central_family_and_paths"
 task = "uf2-central"
 command = "cargo"
@@ -2899,6 +2923,20 @@ args_contains = ["hex-to-uf2", "--input-path", "firmware/hex/lalapad-gen2-rmk-pe
 dependencies_include = ["objcopy-peripheral"]
 
 [[makefile_task_invariants]]
+id = "makefile_uf2_reset_central_family_and_paths"
+task = "uf2-reset-central"
+command = "cargo"
+args_contains = ["hex-to-uf2", "--input-path", "firmware/reset/lalapad-gen2-rmk-reset-central.hex", "--output-path", "firmware/reset/lalapad-gen2-rmk-reset-central.uf2", "--family", "nrf52840"]
+dependencies_include = ["objcopy-reset-central"]
+
+[[makefile_task_invariants]]
+id = "makefile_uf2_reset_peripheral_family_and_paths"
+task = "uf2-reset-peripheral"
+command = "cargo"
+args_contains = ["hex-to-uf2", "--input-path", "firmware/reset/lalapad-gen2-rmk-reset-peripheral.hex", "--output-path", "firmware/reset/lalapad-gen2-rmk-reset-peripheral.uf2", "--family", "nrf52840"]
+dependencies_include = ["objcopy-reset-peripheral"]
+
+[[makefile_task_invariants]]
 id = "makefile_uf2_requires_flash_layout"
 task = "flash-layout"
 command = "python3"
@@ -2906,27 +2944,40 @@ args_contains = ["tools/check_flash_layout.py", "--require-uf2"]
 dependencies_include = ["uf2-central", "uf2-peripheral"]
 
 [[makefile_task_invariants]]
+id = "makefile_reset_uf2_requires_flash_layout"
+task = "reset-flash-layout"
+command = "python3"
+args_contains = ["tools/check_flash_layout.py", "--require-reset-uf2"]
+dependencies_include = ["uf2-reset-central", "uf2-reset-peripheral"]
+
+[[makefile_task_invariants]]
 id = "makefile_uf2_target_runs_flash_layout"
 task = "uf2"
 dependencies_include = ["flash-layout"]
 
 [[makefile_task_invariants]]
+id = "makefile_reset_uf2_target_runs_flash_layout"
+task = "reset-uf2"
+dependencies_include = ["reset-flash-layout"]
+
+[[makefile_task_invariants]]
 id = "makefile_firmware_artifact_manifest_requires_built_uf2"
 task = "firmware-artifact-manifest"
 command = "python3"
-args_contains = ["tools/firmware_artifact_manifest.py", "--require-uf2"]
-dependencies_include = ["uf2"]
+args_contains = ["tools/firmware_artifact_manifest.py", "--require-uf2", "--require-reset-uf2"]
+dependencies_include = ["uf2", "reset-uf2"]
 
 [[makefile_task_invariants]]
 id = "makefile_current_firmware_artifact_manifest_uses_clean_git_ref"
 task = "firmware-artifact-manifest-current"
-dependencies_equal = ["clean-current-git-ref", "uf2"]
+dependencies_equal = ["clean-current-git-ref", "uf2", "reset-uf2"]
 script_contains = [
   "git status --porcelain --untracked-files=normal",
   "git describe --tags --exact-match",
   "git rev-parse --short=12 HEAD",
   "tools/firmware_artifact_manifest.py",
   "--require-uf2",
+  "--require-reset-uf2",
   "--firmware-ref \"$firmware_ref\"",
   "artifact_manifest=\"${FIRMWARE_ARTIFACT_MANIFEST:-firmware-artifacts.local.json}\"",
   "--output \"$artifact_manifest\"",
@@ -3091,14 +3142,18 @@ id = "firmware_workflow_dfu_and_release_artifacts"
 file = ".github/workflows/firmware.yml"
 needles = [
   "cargo make uf2",
+  "cargo make reset-uf2",
   "adafruit-nrfutil dfu genpkg",
   "--dev-type 0x0052",
+  "firmware/reset/lalapad-gen2-rmk-reset-central.uf2",
+  "firmware/reset/lalapad-gen2-rmk-reset-peripheral.uf2",
   "--application firmware/hex/lalapad-gen2-rmk-central.hex",
   "firmware/lalapad-gen2-rmk-central-dfu.zip",
   "--application firmware/hex/lalapad-gen2-rmk-peripheral.hex",
   "firmware/lalapad-gen2-rmk-peripheral-dfu.zip",
   "tools/firmware_artifact_manifest.py",
   "--require-uf2",
+  "--require-reset-uf2",
   "--require-dfu",
   "--firmware-ref \"${GITHUB_REF_NAME:-$GITHUB_SHA}\"",
   "firmware/lalapad-gen2-rmk-artifacts.json",

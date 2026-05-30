@@ -140,6 +140,9 @@ jobs:
       - name: Generate hex + uf2 for both halves
         run: cargo make uf2
 
+      - name: Generate reset/storage-clear UF2 for both halves
+        run: cargo make reset-uf2
+
       - name: Install adafruit-nrfutil
         run: pip install --upgrade adafruit-nrfutil
 
@@ -163,6 +166,8 @@ jobs:
           ls -la \
             firmware/normal/lalapad-gen2-rmk-central.uf2 \
             firmware/normal/lalapad-gen2-rmk-peripheral.uf2 \
+            firmware/reset/lalapad-gen2-rmk-reset-central.uf2 \
+            firmware/reset/lalapad-gen2-rmk-reset-peripheral.uf2 \
             firmware/hex/lalapad-gen2-rmk-central.hex \
             firmware/hex/lalapad-gen2-rmk-peripheral.hex \
             firmware/lalapad-gen2-rmk-central-dfu.zip \
@@ -172,6 +177,7 @@ jobs:
         run: |
           python3 tools/firmware_artifact_manifest.py \
             --require-uf2 \
+            --require-reset-uf2 \
             --require-dfu \
             --firmware-ref "${GITHUB_REF_NAME:-$GITHUB_SHA}" \
             > firmware/lalapad-gen2-rmk-artifacts.json
@@ -183,6 +189,8 @@ jobs:
           path: |
             firmware/normal/lalapad-gen2-rmk-central.uf2
             firmware/normal/lalapad-gen2-rmk-peripheral.uf2
+            firmware/reset/lalapad-gen2-rmk-reset-central.uf2
+            firmware/reset/lalapad-gen2-rmk-reset-peripheral.uf2
             firmware/hex/lalapad-gen2-rmk-central.hex
             firmware/hex/lalapad-gen2-rmk-peripheral.hex
             firmware/lalapad-gen2-rmk-central-dfu.zip
@@ -198,6 +206,8 @@ jobs:
           files: |
             firmware/normal/lalapad-gen2-rmk-central.uf2
             firmware/normal/lalapad-gen2-rmk-peripheral.uf2
+            firmware/reset/lalapad-gen2-rmk-reset-central.uf2
+            firmware/reset/lalapad-gen2-rmk-reset-peripheral.uf2
             firmware/hex/lalapad-gen2-rmk-central.hex
             firmware/hex/lalapad-gen2-rmk-peripheral.hex
             firmware/lalapad-gen2-rmk-central-dfu.zip

@@ -2515,6 +2515,8 @@ with tempfile.TemporaryDirectory() as tempdir:
         "firmware/normal/lalapad-gen2-rmk-peripheral.uf2": b"peripheral uf2",
         "firmware/hex/lalapad-gen2-rmk-central.hex": b":central\n",
         "firmware/hex/lalapad-gen2-rmk-peripheral.hex": b":peripheral\n",
+        "firmware/reset/lalapad-gen2-rmk-reset-central.uf2": b"reset central uf2",
+        "firmware/reset/lalapad-gen2-rmk-reset-peripheral.uf2": b"reset peripheral uf2",
     }
     for path, contents in files.items():
         target = root / path
@@ -2538,6 +2540,7 @@ with tempfile.TemporaryDirectory() as tempdir:
             "--firmware-ref",
             "v0.3.0",
             "--require-uf2",
+            "--require-reset-uf2",
             "--require-dfu",
             "--output",
             str(output_path),
@@ -2596,7 +2599,7 @@ print(json.dumps({
     assert_eq!(parsed["stdout"].as_str(), Some(""));
     assert_eq!(parsed["output_path_exists"].as_bool(), Some(true));
     assert_eq!(manifest["firmware_ref"].as_str(), Some("v0.3.0"));
-    assert_eq!(manifest["artifact_count"].as_i64(), Some(6));
+    assert_eq!(manifest["artifact_count"].as_i64(), Some(8));
     assert!(
         manifest["pair_sha256"]
             .as_str()
@@ -2616,6 +2619,15 @@ print(json.dumps({
         central_uf2["sha256"].as_str(),
         parsed["central_uf2_sha256"].as_str()
     );
+    let reset_central_uf2 = manifest["artifacts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|artifact| artifact["path"] == "firmware/reset/lalapad-gen2-rmk-reset-central.uf2")
+        .expect("reset central UF2 artifact is missing");
+    assert_eq!(reset_central_uf2["role"].as_str(), Some("reset-central"));
+    assert_eq!(reset_central_uf2["side"].as_str(), Some("right"));
+    assert_eq!(reset_central_uf2["kind"].as_str(), Some("reset-uf2"));
     let central_dfu = manifest["artifacts"]
         .as_array()
         .unwrap()
@@ -4079,6 +4091,12 @@ fn local_validation_entrypoints_match_ci_gates() {
     let firmware_artifact_manifest_task = makefile_task_block("firmware-artifact-manifest");
     let firmware_artifact_manifest_current_task =
         makefile_task_block("firmware-artifact-manifest-current");
+    let objcopy_reset_central_task = makefile_task_block("objcopy-reset-central");
+    let objcopy_reset_peripheral_task = makefile_task_block("objcopy-reset-peripheral");
+    let uf2_reset_central_task = makefile_task_block("uf2-reset-central");
+    let uf2_reset_peripheral_task = makefile_task_block("uf2-reset-peripheral");
+    let reset_flash_layout_task = makefile_task_block("reset-flash-layout");
+    let reset_uf2_task = makefile_task_block("reset-uf2");
     let hardware_validation_task = makefile_task_block("hardware-validation");
     let hardware_validation_report_task = makefile_task_block("hardware-validation-report");
     let hardware_validation_checklist_task = makefile_task_block("hardware-validation-checklist");
@@ -4252,12 +4270,13 @@ fn local_validation_entrypoints_match_ci_gates() {
     assert!(
         firmware_artifact_manifest_task.contains("tools/firmware_artifact_manifest.py")
             && firmware_artifact_manifest_task.contains("--require-uf2")
-            && firmware_artifact_manifest_task.contains("dependencies = [\"uf2\"]"),
-        "cargo make firmware-artifact-manifest should generate hashes from built UF2 artifacts"
+            && firmware_artifact_manifest_task.contains("--require-reset-uf2")
+            && firmware_artifact_manifest_task.contains("dependencies = [\"uf2\", \"reset-uf2\"]"),
+        "cargo make firmware-artifact-manifest should generate hashes from built normal and reset UF2 artifacts"
     );
     assert!(
         firmware_artifact_manifest_current_task
-            .contains("dependencies = [\"clean-current-git-ref\", \"uf2\"]")
+            .contains("dependencies = [\"clean-current-git-ref\", \"uf2\", \"reset-uf2\"]")
             && firmware_artifact_manifest_current_task
                 .contains("git status --porcelain --untracked-files=normal")
             && firmware_artifact_manifest_current_task
@@ -4266,12 +4285,60 @@ fn local_validation_entrypoints_match_ci_gates() {
             && firmware_artifact_manifest_current_task
                 .contains("tools/firmware_artifact_manifest.py")
             && firmware_artifact_manifest_current_task.contains("--require-uf2")
+            && firmware_artifact_manifest_current_task.contains("--require-reset-uf2")
             && firmware_artifact_manifest_current_task.contains("--firmware-ref \"$firmware_ref\"")
             && firmware_artifact_manifest_current_task.contains(
                 "artifact_manifest=\"${FIRMWARE_ARTIFACT_MANIFEST:-firmware-artifacts.local.json}\""
             )
             && firmware_artifact_manifest_current_task.contains("--output \"$artifact_manifest\""),
-        "cargo make firmware-artifact-manifest-current should hash built UF2 artifacts against the clean current git ref and the manifest path used by current final validation"
+        "cargo make firmware-artifact-manifest-current should hash built normal/reset UF2 artifacts against the clean current git ref and the manifest path used by current final validation"
+    );
+    assert!(
+        objcopy_reset_central_task.contains("KEYBOARD_TOML_PATH=\"$reset_keyboard_toml\"")
+            && objcopy_reset_central_task.contains("clear_storage = true")
+            && objcopy_reset_central_task.contains("--bin")
+            && objcopy_reset_central_task.contains("central")
+            && objcopy_reset_central_task
+                .contains("firmware/reset/lalapad-gen2-rmk-reset-central.hex"),
+        "cargo make objcopy-reset-central should build the central reset/storage-clear image with RMK clear_storage enabled"
+    );
+    assert!(
+        objcopy_reset_peripheral_task.contains("KEYBOARD_TOML_PATH=\"$reset_keyboard_toml\"")
+            && objcopy_reset_peripheral_task.contains("clear_storage = true")
+            && objcopy_reset_peripheral_task.contains("--bin")
+            && objcopy_reset_peripheral_task.contains("peripheral")
+            && objcopy_reset_peripheral_task
+                .contains("firmware/reset/lalapad-gen2-rmk-reset-peripheral.hex"),
+        "cargo make objcopy-reset-peripheral should build the peripheral reset/storage-clear image with RMK clear_storage enabled"
+    );
+    assert!(
+        uf2_reset_central_task.contains("firmware/reset/lalapad-gen2-rmk-reset-central.hex")
+            && uf2_reset_central_task
+                .contains("firmware/reset/lalapad-gen2-rmk-reset-central.uf2")
+            && uf2_reset_central_task.contains("--family")
+            && uf2_reset_central_task.contains("nrf52840")
+            && uf2_reset_central_task.contains("dependencies = [\"objcopy-reset-central\"]"),
+        "cargo make uf2-reset-central should package the central reset image as nRF52840 UF2"
+    );
+    assert!(
+        uf2_reset_peripheral_task.contains("firmware/reset/lalapad-gen2-rmk-reset-peripheral.hex")
+            && uf2_reset_peripheral_task
+                .contains("firmware/reset/lalapad-gen2-rmk-reset-peripheral.uf2")
+            && uf2_reset_peripheral_task.contains("--family")
+            && uf2_reset_peripheral_task.contains("nrf52840")
+            && uf2_reset_peripheral_task.contains("dependencies = [\"objcopy-reset-peripheral\"]"),
+        "cargo make uf2-reset-peripheral should package the peripheral reset image as nRF52840 UF2"
+    );
+    assert!(
+        reset_flash_layout_task.contains("tools/check_flash_layout.py")
+            && reset_flash_layout_task.contains("--require-reset-uf2")
+            && reset_flash_layout_task
+                .contains("dependencies = [\"uf2-reset-central\", \"uf2-reset-peripheral\"]"),
+        "cargo make reset-flash-layout should verify reset UF2 files do not overlap RMK storage"
+    );
+    assert!(
+        reset_uf2_task.contains("dependencies = [\"reset-flash-layout\"]"),
+        "cargo make reset-uf2 should run the reset UF2 flash-layout guard"
     );
     assert!(
         hardware_validation_task.contains("tools/hardware_validation.py")
@@ -4368,7 +4435,8 @@ fn local_validation_entrypoints_match_ci_gates() {
         "tools/hardware_validation.py --evidence-template --artifact-pair-sha256-template <sha256>",
         "tools/hardware_validation.py --evidence path/to/evidence.toml --markdown",
         "tools/hardware_validation.py --evidence path/to/evidence.toml --require-validated --require-firmware-ref <tag-or-commit>",
-        "python3 tools/firmware_artifact_manifest.py --require-uf2 > firmware-artifacts.local.json",
+        "cargo make reset-uf2 --release",
+        "python3 tools/firmware_artifact_manifest.py --require-uf2 --require-reset-uf2 > firmware-artifacts.local.json",
         "cargo make firmware-artifact-manifest-current",
         "cargo make rmk-zmk-scenario-tests",
         "cargo make rmk-behavior-tests",
@@ -4418,6 +4486,7 @@ fn local_validation_entrypoints_match_ci_gates() {
         FIRMWARE_WORKFLOW_YAML.contains("Generate firmware artifact manifest")
             && FIRMWARE_WORKFLOW_YAML.contains("firmware/lalapad-gen2-rmk-artifacts.json")
             && FIRMWARE_WORKFLOW_YAML.contains("--require-uf2")
+            && FIRMWARE_WORKFLOW_YAML.contains("--require-reset-uf2")
             && FIRMWARE_WORKFLOW_YAML.contains("--require-dfu"),
         "firmware CI should publish a hash manifest for release artifacts"
     );
@@ -4427,7 +4496,8 @@ fn local_validation_entrypoints_match_ci_gates() {
             && README_MD.contains("cargo make migration-status-release-ready")
             && README_MD.contains("cargo make rmk-zmk-scenario-tests")
             && README_MD.contains("cargo make rmk-behavior-tests")
-            && README_MD.contains("python3 tools/firmware_artifact_manifest.py --require-uf2 > firmware-artifacts.local.json")
+            && README_MD.contains("cargo make reset-uf2")
+            && README_MD.contains("python3 tools/firmware_artifact_manifest.py --require-uf2 --require-reset-uf2 > firmware-artifacts.local.json")
             && README_MD.contains("cargo make firmware-artifact-manifest-current")
             && README_MD.contains("cargo make hardware-validation-evidence-template-current")
             && README_MD.contains("cargo make hardware-validation-session-current")
@@ -4444,7 +4514,7 @@ fn local_validation_entrypoints_match_ci_gates() {
             && PORTING_MD.contains("cargo make migration-status-release-ready")
             && PORTING_MD.contains("cargo make rmk-zmk-scenario-tests")
             && PORTING_MD.contains("cargo make rmk-behavior-tests")
-            && PORTING_MD.contains("python3 tools/firmware_artifact_manifest.py --require-uf2 > firmware-artifacts.local.json")
+            && PORTING_MD.contains("python3 tools/firmware_artifact_manifest.py --require-uf2 --require-reset-uf2 > firmware-artifacts.local.json")
             && PORTING_MD.contains("cargo make firmware-artifact-manifest-current")
             && PORTING_MD.contains("cargo make hardware-validation-evidence-template-current")
             && PORTING_MD.contains("cargo make hardware-validation-session-current")
@@ -8591,19 +8661,19 @@ print(json.dumps({
 
     let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     let ok = parsed["ok"].as_array().unwrap();
-    assert_eq!(ok.len(), 23);
+    assert_eq!(ok.len(), 29);
     assert!(ok.iter().all(|result| result["kind"] == "build_task"));
     assert_eq!(
         ok.iter()
             .map(|result| result["passed"].as_i64().unwrap())
             .sum::<i64>(),
-        78
+        98
     );
     assert_eq!(
         ok.iter()
             .map(|result| result["total"].as_i64().unwrap())
             .sum::<i64>(),
-        78
+        98
     );
 
     let bad_rmk_config_schema_task = parsed["bad_rmk_config_schema_task"]
@@ -9056,13 +9126,13 @@ print(json.dumps({
         ok.iter()
             .map(|result| result["passed"].as_i64().unwrap())
             .sum::<i64>(),
-        52
+        56
     );
     assert_eq!(
         ok.iter()
             .map(|result| result["total"].as_i64().unwrap())
             .sum::<i64>(),
-        52
+        56
     );
 
     let bad_migration_gate = parsed["bad_migration_gate"]

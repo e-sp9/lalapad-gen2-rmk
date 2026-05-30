@@ -497,7 +497,7 @@ python3 tools/hardware_validation.py --evidence-template
 cargo make hardware-validation-evidence-template-current
 cargo make hardware-validation-session-current
 cargo make rmk-zmk-scenario-tests
-python3 tools/firmware_artifact_manifest.py --require-uf2 > firmware-artifacts.local.json
+python3 tools/firmware_artifact_manifest.py --require-uf2 --require-reset-uf2 > firmware-artifacts.local.json
 cargo make firmware-artifact-manifest-current
 python3 tools/hardware_validation.py --evidence-template --firmware-ref-template <tag-or-commit>
 python3 tools/hardware_validation.py --evidence path/to/evidence.toml --markdown
@@ -551,11 +551,11 @@ The combined migration gate requires `--firmware-artifact-manifest` whenever
 `--require-hardware-validated` is used. Whenever a firmware artifact manifest
 is supplied, every validated hardware evidence note must mention that
 manifest's `pair_sha256`, so both partial hardware dashboards and final
-hardware claims stay tied to the exact generated UF2 artifact hashes. The
+hardware claims stay tied to the exact generated normal/reset UF2 artifact hashes. The
 dashboard also re-reads the artifact files under `--artifact-root` (default:
 the current directory) and checks their recorded size and SHA256, so a stale
 `firmware-artifacts.local.json` cannot silently validate a different local UF2
-pair. Plain report commands still render these as dashboard errors; add
+set. Plain report commands still render these as dashboard errors; add
 `--require-hardware-classified` or use the final cargo-make gates when stale or
 incomplete artifact evidence should make the command fail.
 Use `--evidence-template > hardware-validation-evidence.local.toml` to generate
@@ -566,17 +566,17 @@ hardware-validation-evidence-template-current` when validating a clean local
 build; it pre-fills the current exact tag or short commit and fails if the
 working tree has tracked or untracked non-ignored changes.
 After building the UF2 files that will be flashed, use
-`python3 tools/firmware_artifact_manifest.py --require-uf2 >
-firmware-artifacts.local.json` to preserve the exact central/peripheral file
-sizes and SHA256 hashes alongside the hardware evidence overlay. Prefer
-`cargo make firmware-artifact-manifest-current` for a clean local build; it
-creates `firmware-artifacts.local.json`, or `FIRMWARE_ARTIFACT_MANIFEST` when
-set, with the current exact tag or short commit as `firmware_ref` and refuses
-tracked or untracked non-ignored changes.
+`python3 tools/firmware_artifact_manifest.py --require-uf2 --require-reset-uf2
+> firmware-artifacts.local.json` to preserve the exact normal and
+storage-clear file sizes and SHA256 hashes alongside the hardware evidence
+overlay. Prefer `cargo make firmware-artifact-manifest-current` for a clean
+local build; it creates `firmware-artifacts.local.json`, or
+`FIRMWARE_ARTIFACT_MANIFEST` when set, with the current exact tag or short
+commit as `firmware_ref` and refuses tracked or untracked non-ignored changes.
 When any migration-status command is run with `--firmware-artifact-manifest`,
 each validated hardware evidence note must also mention that manifest's
-`pair_sha256`, tying the bench observation to the exact UF2 pair rather than
-only to a moving file name or host-side state. `--evidence-template` accepts
+`pair_sha256`, tying the bench observation to the exact normal/reset UF2 set
+rather than only to a moving file name or host-side state. `--evidence-template` accepts
 `--artifact-pair-sha256-template <sha256>` to seed every evidence note with that
 hash before bench observations are added.
 Use `cargo make hardware-validation-session-current` to prepare a complete
