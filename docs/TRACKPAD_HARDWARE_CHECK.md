@@ -19,6 +19,27 @@ gate and real-device validation rate stay separate.
 6. Test two-finger vertical scroll, then two-finger horizontal scroll. Confirm that scroll does not also move the cursor or emit right-click taps during continuous movement. Flick once and release to confirm inertia continues briefly, then stops when a finger touches the pad again.
 7. Hold one finger still on either trackpad until left mouse button hold starts, then move the other trackpad. Confirm the host performs drag/select and releases the selection when the held finger is lifted.
 
+## BLE Split Pairing And Reconnect Check
+
+Use this check to prove that the right central and left peripheral both joined
+the split link after a host BLE bond reset. A successful host connection to the
+right central half alone is not enough, because the left half can remain
+disconnected while the keyboard still appears paired.
+
+1. Flash the current normal central UF2 to the right half.
+2. Flash the current normal peripheral UF2 to the left half.
+3. Remove the old host BLE pairing.
+4. Power or reset the right central half first, then the left peripheral half.
+5. Pair the keyboard over BLE again.
+6. In a host key-event viewer, press left-side `Q` and `A`.
+7. Press right-side `Y` and `H`.
+8. Power-cycle or reset both halves, reconnect right first and left second, then
+   repeat the same `Q`, `A`, `Y`, and `H` key checks.
+
+Hardware evidence for this check must name the right central, left peripheral,
+BLE re-pair, reconnect order, left `Q`, left `A`, right `Y`, and right `H`
+observations.
+
 ## Thumb Layer-Tap Check
 
 Use a host key-event viewer after flashing the current firmware and re-pairing

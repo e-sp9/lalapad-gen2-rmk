@@ -1207,6 +1207,9 @@ fn migration_status_combines_software_and_hardware_progress() {
     assert!(stdout.contains("### Hardware Remaining"));
     assert!(stdout.contains("| ID | Area | Side | Status | Required observations |"));
     assert!(stdout.contains(
+        "| ble_split_pairing_reconnect | ble_split | both | requires_hardware | right central, left peripheral, BLE re-pair, reconnect right first, left Q, left A, right Y, right H |"
+    ));
+    assert!(stdout.contains(
         "| vial_thumb_layer_taps | vial | both | requires_hardware | Vial, Space, Enter, layer 1, layer 2, Space+Y, NumLock, Enter+Y, PageUp |"
     ));
     assert!(stdout.contains(
@@ -1229,6 +1232,9 @@ fn migration_status_combines_software_and_hardware_progress() {
         String::from_utf8_lossy(&text.stdout)
             .contains("[needs: right, cursor, tap, vertical scroll, horizontal scroll]")
     );
+    assert!(String::from_utf8_lossy(&text.stdout).contains(
+        "[needs: right central, left peripheral, BLE re-pair, reconnect right first, left Q, left A, right Y, right H]"
+    ));
     assert!(
         String::from_utf8_lossy(&text.stdout).contains(
             "[needs: reset central UF2, reset peripheral UF2, normal central UF2, normal peripheral UF2, re-pair, Vial]"
@@ -1962,6 +1968,9 @@ fn hardware_validation_markdown_report_lists_required_evidence() {
         "| ID | Area | Side | Status | Requirement | Required evidence | Required observations | Validated at | Tester | Firmware ref | Artifact/notes |"
     ));
     assert!(stdout.contains("right, cursor, tap, vertical scroll, horizontal scroll"));
+    assert!(stdout.contains(
+        "right central, left peripheral, BLE re-pair, reconnect right first, left Q, left A, right Y, right H"
+    ));
     assert!(
         stdout.contains("Vial, Space, Enter, layer 1, layer 2, Space+Y, NumLock, Enter+Y, PageUp")
     );
@@ -2485,6 +2494,14 @@ firmware_ref = "35b3f1f"
 artifact_or_notes = "log: /tmp/right-i2c.log; I2C scan found 0x56 and product register 0x1000 read 0x09bc on the right half."
 
 [[evidence]]
+id = "ble_split_pairing_reconnect"
+status = "validated"
+validated_at = "2026-05-29"
+tester = "hardware bench"
+firmware_ref = "35b3f1f"
+artifact_or_notes = "video: /tmp/ble-split.mp4; BLE pair and reconnect worked with right central key input only."
+
+[[evidence]]
 id = "storage_reset_and_reflash"
 status = "validated"
 validated_at = "2026-05-29"
@@ -2542,6 +2559,20 @@ artifact_or_notes = "video: /tmp/storage-reset.mp4; flashed reset central UF2 an
             ) && error.contains("'left'")
         }),
         "left IQS9151 identity should require left-side evidence instead of accepting a right-side log: {errors:?}"
+    );
+    assert!(
+        errors.iter().any(|error| {
+            error.contains(
+                "ble_split_pairing_reconnect: artifact_or_notes must mention required observation(s)",
+            ) && error.contains("'left peripheral'")
+                && error.contains("'BLE re-pair'")
+                && error.contains("'reconnect right first'")
+                && error.contains("'left Q'")
+                && error.contains("'left A'")
+                && error.contains("'right Y'")
+                && error.contains("'right H'")
+        }),
+        "BLE split reconnect evidence should require concrete left/right key observations: {errors:?}"
     );
     assert!(
         errors.iter().any(|error| {

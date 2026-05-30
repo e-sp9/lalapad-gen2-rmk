@@ -77,9 +77,9 @@ id = "ble_split_pairing_reconnect"
 area = "ble_split"
 side = "both"
 requirement = "Right central and left peripheral pair, reconnect, and preserve ordinary key input from both halves after host BLE re-pairing."
-evidence = "Flash both halves, clear/re-pair the host BLE bond, reconnect right first, then left, and type keys from both halves."
-evidence_needles = ["right", "left", "BLE", "pair", "reconnect", "key input"]
-source = "docs/TRACKPAD_HARDWARE_CHECK.md#firmware-baseline"
+evidence = "Flash both halves, clear/re-pair the host BLE bond, reconnect right central first and left peripheral second, then verify left Q/A and right Y/H before and after reconnect."
+evidence_needles = ["right central", "left peripheral", "BLE re-pair", "reconnect right first", "left Q", "left A", "right Y", "right H"]
+source = "docs/TRACKPAD_HARDWARE_CHECK.md#ble-split-pairing-and-reconnect-check"
 status = "requires_hardware"
 
 [[checks]]
