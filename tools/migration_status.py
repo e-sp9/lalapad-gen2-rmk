@@ -171,6 +171,7 @@ def firmware_artifact_status(
         return None
 
     errors: list[str] = []
+    resolved_artifact_root = artifact_root.resolve()
     try:
         artifact_manifest = json.loads(artifact_manifest_path.read_text(encoding="utf-8"))
     except OSError as e:
@@ -253,7 +254,14 @@ def firmware_artifact_status(
             if artifact_path.is_absolute():
                 errors.append(f"firmware artifact manifest {path} path must be relative")
             else:
-                artifact_path = artifact_root / artifact_path
+                artifact_path = (resolved_artifact_root / artifact_path).resolve(strict=False)
+                try:
+                    artifact_path.relative_to(resolved_artifact_root)
+                except ValueError:
+                    errors.append(
+                        f"firmware artifact manifest {path} path must stay inside artifact root"
+                    )
+                    continue
                 try:
                     actual_size = artifact_path.stat().st_size
                 except OSError as e:

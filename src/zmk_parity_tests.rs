@@ -1447,6 +1447,36 @@ fn migration_status_ties_hardware_evidence_to_firmware_artifact_manifest() {
     assert!(stdout.contains("lalapad-gen2-rmk-central.uf2"));
     assert!(stdout.contains("does not match file"));
 
+    let escaping_artifact_manifest = artifact_manifest.replace(
+        "firmware/normal/lalapad-gen2-rmk-central.uf2",
+        "../outside-central.uf2",
+    );
+    let escaping_artifact_path =
+        artifact_path.with_file_name("escaping-firmware-artifacts.local.json");
+    std::fs::write(&escaping_artifact_path, escaping_artifact_manifest).unwrap();
+    let escaping_path = run_migration_status(&[
+        "--coverage-baseline",
+        "tools/porting_coverage_baseline.toml",
+        "--hardware-baseline",
+        "tools/hardware_validation_baseline.toml",
+        "--firmware-artifact-manifest",
+        escaping_artifact_path.to_str().unwrap(),
+        "--artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--require-hardware-classified",
+    ]);
+    let _ = std::fs::remove_file(&escaping_artifact_path);
+    assert!(
+        !escaping_path.status.success(),
+        "migration status accepted artifact manifest path escaping the artifact root\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&escaping_path.stdout),
+        String::from_utf8_lossy(&escaping_path.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&escaping_path.stdout)
+            .contains("path must stay inside artifact root")
+    );
+
     let bad_shape_path = write_temp_file("migration-status-bad-artifact-shape", "[]");
     let bad_shape = run_migration_status(&[
         "--coverage-baseline",
