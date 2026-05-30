@@ -4140,6 +4140,81 @@ def check_runtime_keymap_mirrors(
     return results
 
 
+def manifest_runtime_keymap_mirror_positions(
+    manifest: dict[str, Any],
+) -> set[tuple[int, int, int]]:
+    positions: set[tuple[int, int, int]] = set()
+    for check in manifest.get("runtime_keymap_mirrors", []):
+        for position in check.get("positions", []):
+            positions.add(
+                (
+                    int(position["layer"]),
+                    int(position["row"]),
+                    int(position["col"]),
+                )
+            )
+    return positions
+
+
+def runtime_test_sequence_positions(manifest: dict[str, Any]) -> set[tuple[int, int, int]]:
+    positions: set[tuple[int, int, int]] = set()
+    for check in manifest.get("runtime_scenario_tests", []):
+        if not str(check.get("file", "")).endswith("keyboard_lalapad_zmk_scenarios_test.rs"):
+            continue
+        for needle in check.get("needles", []):
+            for row, col in re.findall(r"\[(\d+),\s*(\d+),\s*(?:true|false)\b", needle):
+                positions.add((0, int(row), int(col)))
+            for layer, row, col in re.findall(
+                r"keymap\[(\d+)\]\[(\d+)\]\[(\d+)\]", needle
+            ):
+                positions.add((int(layer), int(row), int(col)))
+    return positions
+
+
+def scenario_resolution_positions(
+    manifest: dict[str, Any], config: dict[str, Any]
+) -> set[tuple[int, int, int]]:
+    positions: set[tuple[int, int, int]] = set()
+    for scenario in manifest.get("scenarios", []):
+        holds = list(scenario.get("holds", []))
+        if "hold" in scenario:
+            holds.append(scenario["hold"])
+        for hold in holds:
+            positions.add((0, int(hold["row"]), int(hold["col"])))
+        active_layers = active_layers_from_holds(config, holds)
+        tap = scenario["tap"]
+        row = int(tap["row"])
+        col = int(tap["col"])
+        positions.add((0, row, col))
+        for layer in active_layers:
+            positions.add((layer, row, col))
+    return positions
+
+
+def check_runtime_keymap_mirror_coverage(
+    manifest: dict[str, Any], config: dict[str, Any]
+) -> list[Result]:
+    expected = runtime_test_sequence_positions(manifest) | scenario_resolution_positions(
+        manifest, config
+    )
+    actual = manifest_runtime_keymap_mirror_positions(manifest)
+    missing = sorted(expected - actual)
+    passed = len(expected) - len(missing)
+    messages = [
+        f"missing runtime mirror position L{layer}R{row}C{col}"
+        for layer, row, col in missing
+    ]
+    return [
+        Result(
+            "runtime_keymap_mirror_covers_runtime_scenario_positions",
+            "runtime_keymap_mirror",
+            passed,
+            len(expected),
+            "ok" if not messages else "; ".join(messages),
+        )
+    ]
+
+
 def check_runtime_scenario_tests(manifest: dict[str, Any], project_root: Path) -> list[Result]:
     results: list[Result] = []
     for check in manifest.get("runtime_scenario_tests", []):
@@ -5292,6 +5367,7 @@ def run(
     results.extend(check_file_contains_invariants(manifest, project_root))
     results.extend(check_rust_unit_tests(manifest, project_root))
     results.extend(check_runtime_keymap_mirrors(manifest, keyboard, project_root))
+    results.extend(check_runtime_keymap_mirror_coverage(manifest, keyboard))
     results.extend(check_runtime_scenario_tests(manifest, project_root))
     results.extend(check_makefile_task_invariants(manifest, project_root))
     results.extend(check_trackpad_virtual_buttons(manifest, keyboard, project_root))

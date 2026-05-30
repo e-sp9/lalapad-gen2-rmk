@@ -3088,6 +3088,20 @@ fn porting_coverage_includes_exact_rmk_inventory_gates() {
     );
     assert_eq!(runtime_keymap_mirror_result["ok"], true);
 
+    let runtime_keymap_mirror_coverage_result = results
+        .iter()
+        .find(|result| result["id"] == "runtime_keymap_mirror_covers_runtime_scenario_positions")
+        .expect("runtime keymap mirror self-coverage result is missing");
+    assert_eq!(
+        runtime_keymap_mirror_coverage_result["kind"],
+        "runtime_keymap_mirror"
+    );
+    assert_eq!(runtime_keymap_mirror_coverage_result["ok"], true);
+    assert_eq!(
+        runtime_keymap_mirror_coverage_result["passed"],
+        runtime_keymap_mirror_coverage_result["total"]
+    );
+
     if default_zmk_config_dir().is_some() {
         let source_scenarios: Vec<_> = results
             .iter()
@@ -4120,10 +4134,37 @@ spec.loader.exec_module(pc)
 manifest = pc.load_toml(Path("tools/porting_coverage_manifest.toml"))
 keyboard = pc.load_toml(Path("keyboard.toml"))
 ok = pc.check_runtime_keymap_mirrors(manifest, keyboard, Path("."))[0]
+coverage_ok = pc.check_runtime_keymap_mirror_coverage(manifest, keyboard)[0]
 
 bad_keyboard = copy.deepcopy(keyboard)
 bad_keyboard["layout"]["keymap"][0][3][4] = "LCtrl"
 keyboard_drift = pc.check_runtime_keymap_mirrors(manifest, bad_keyboard, Path("."))[0]
+
+missing_position_manifest = copy.deepcopy(manifest)
+mirror_positions = missing_position_manifest["runtime_keymap_mirrors"][0]["positions"]
+missing_position_manifest["runtime_keymap_mirrors"][0]["positions"] = [
+    position
+    for position in mirror_positions
+    if not (
+        position["layer"] == 0
+        and position["row"] == 3
+        and position["col"] == 9
+    )
+]
+missing_position = pc.check_runtime_keymap_mirror_coverage(
+    missing_position_manifest, keyboard
+)[0]
+
+new_runtime_manifest = copy.deepcopy(manifest)
+new_runtime_manifest["runtime_scenario_tests"].append({
+    "id": "runtime_new_unmirrored_coordinate",
+    "file": "vendor/rmk-0.8.2/tests/keyboard_lalapad_zmk_scenarios_test.rs",
+    "function": "new_unmirrored_coordinate",
+    "needles": ["[4, 5, true"],
+})
+new_runtime_coordinate = pc.check_runtime_keymap_mirror_coverage(
+    new_runtime_manifest, keyboard
+)[0]
 
 with tempfile.TemporaryDirectory() as root_dir:
     root = Path(root_dir)
@@ -4143,7 +4184,10 @@ def pack(result):
 
 print(json.dumps({
     "ok": pack(ok),
+    "coverage_ok": pack(coverage_ok),
     "keyboard_drift": pack(keyboard_drift),
+    "missing_position": pack(missing_position),
+    "new_runtime_coordinate": pack(new_runtime_coordinate),
     "fixture_drift": pack(fixture_drift),
 }))
 "#,
@@ -4158,9 +4202,13 @@ print(json.dumps({
 
     let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(parsed["ok"]["kind"], "runtime_keymap_mirror");
-    assert_eq!(parsed["ok"]["total"].as_i64(), Some(35));
-    assert_eq!(parsed["ok"]["passed"].as_i64(), Some(35));
+    assert_eq!(parsed["ok"]["total"].as_i64(), Some(36));
+    assert_eq!(parsed["ok"]["passed"].as_i64(), Some(36));
     assert_eq!(parsed["ok"]["ok"], true);
+    assert_eq!(parsed["coverage_ok"]["kind"], "runtime_keymap_mirror");
+    assert_eq!(parsed["coverage_ok"]["total"].as_i64(), Some(29));
+    assert_eq!(parsed["coverage_ok"]["passed"].as_i64(), Some(29));
+    assert_eq!(parsed["coverage_ok"]["ok"], true);
 
     assert_eq!(parsed["keyboard_drift"]["kind"], "runtime_keymap_mirror");
     assert_eq!(parsed["keyboard_drift"]["ok"], false);
@@ -4175,6 +4223,27 @@ print(json.dumps({
             .as_str()
             .unwrap()
             .contains("LCtrl")
+    );
+
+    assert_eq!(parsed["missing_position"]["kind"], "runtime_keymap_mirror");
+    assert_eq!(parsed["missing_position"]["ok"], false);
+    assert!(
+        parsed["missing_position"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("L0R3C9")
+    );
+
+    assert_eq!(
+        parsed["new_runtime_coordinate"]["kind"],
+        "runtime_keymap_mirror"
+    );
+    assert_eq!(parsed["new_runtime_coordinate"]["ok"], false);
+    assert!(
+        parsed["new_runtime_coordinate"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("L0R4C5")
     );
 
     assert_eq!(parsed["fixture_drift"]["kind"], "runtime_keymap_mirror");
