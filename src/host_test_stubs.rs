@@ -1,4 +1,6 @@
 pub(crate) mod rmk {
+    #![allow(dead_code)]
+
     pub mod ble {
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub enum BleState {

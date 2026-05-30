@@ -135,6 +135,9 @@ fn apply_lalapad_dynamic_scale_action(group: u8, action: u8) -> (u16, u16) {
 async fn process_lalapad_dynamic_scale_user_action(group: u8, action: u8) {
     queue_lalapad_dynamic_scale_event(group, action);
     let (cursor_x10, scroll_x10) = apply_lalapad_dynamic_scale_action(group, action);
+    #[cfg(not(feature = "storage"))]
+    let _ = (cursor_x10, scroll_x10);
+
     #[cfg(feature = "storage")]
     crate::channel::FLASH_CHANNEL
         .send(crate::storage::FlashOperationMessage::LalapadDynamicScale {

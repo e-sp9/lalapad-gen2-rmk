@@ -455,6 +455,9 @@ pub(crate) async fn process_vial<
                         (actions, output)
                     };
 
+                    #[cfg(not(feature = "storage"))]
+                    let _ = (actions, output);
+
                     #[cfg(feature = "storage")]
                     FLASH_CHANNEL
                         .send(FlashOperationMessage::VialMessage(KeymapData::Combo(
