@@ -375,6 +375,7 @@ def validate_evidence_artifact_paths(
 
     root = artifact_root.resolve()
     resolved_paths: list[tuple[str, Path]] = []
+    seen_resolved_paths: dict[Path, int] = {}
     artifact_or_notes = str(check.get("artifact_or_notes", "")).strip()
     for index, artifact_path in enumerate(artifact_paths):
         if not isinstance(artifact_path, str) or not artifact_path.strip():
@@ -397,12 +398,20 @@ def validate_evidence_artifact_paths(
                 f"{check_id}: artifact_paths[{index}] file does not exist: {artifact_path}"
             )
             continue
+        duplicate_index = seen_resolved_paths.get(resolved_path)
+        if duplicate_index is not None:
+            errors.append(
+                f"{check_id}: artifact_paths[{index}] duplicates artifact_paths"
+                f"[{duplicate_index}]; separate required artifact types need separate files"
+            )
+            continue
         if not artifact_path_is_referenced(artifact_path, artifact_or_notes):
             errors.append(
                 f"{check_id}: artifact_paths[{index}] must be referenced by path or basename "
                 "in artifact_or_notes"
             )
             continue
+        seen_resolved_paths[resolved_path] = index
         resolved_paths.append((artifact_path, resolved_path))
     if resolved_paths:
         evidence_artifacts = check.get("evidence_artifacts", [])

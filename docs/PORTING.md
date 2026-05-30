@@ -439,7 +439,8 @@ scope traces rather than text notes alone. The file type must also match the
 check's `evidence_artifacts`; for example, a `video` requirement cannot be
 satisfied by only attaching a `.log` file. Each retained file must be named by
 path or basename in `artifact_or_notes`, and separate required artifact types
-must have separate retained files.
+must have separate retained files; duplicating the same resolved file path is
+reported as invalid evidence rather than a second artifact.
 The generated evidence template and checklist now include deterministic
 `hardware-evidence/<check-id>-<artifact-type>.<ext>` suggestions for the
 default `EVIDENCE_ARTIFACT_ROOT=.` and copy-aid notes that name those files.

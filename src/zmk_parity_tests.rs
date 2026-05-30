@@ -3384,6 +3384,42 @@ artifact_or_notes = "photo and multimeter: hardware-evidence/charge.jpg; right P
         "photo-only charge evidence should not satisfy the separate multimeter artifact"
     );
 
+    let charge_duplicate_evidence = charge_photo_only_evidence.replace(
+        "artifact_paths = [\"hardware-evidence/charge.jpg\"]",
+        "artifact_paths = [\"hardware-evidence/charge.jpg\", \"hardware-evidence/charge.jpg\"]",
+    );
+    let charge_duplicate_path = write_temp_file(
+        "hardware-validation-evidence-paths-charge-duplicate",
+        &charge_duplicate_evidence,
+    );
+    let charge_duplicate_json = run_hardware_validation(&[
+        "--evidence",
+        charge_duplicate_path.to_str().unwrap(),
+        "--evidence-artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--json",
+    ]);
+    assert!(
+        charge_duplicate_json.status.success(),
+        "plain hardware validation report should not hard-fail for duplicate charge artifacts without require flags\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&charge_duplicate_json.stdout),
+        String::from_utf8_lossy(&charge_duplicate_json.stderr)
+    );
+    let charge_duplicate_parsed: serde_json::Value =
+        serde_json::from_slice(&charge_duplicate_json.stdout).unwrap();
+    assert_eq!(charge_duplicate_parsed["validated"].as_i64(), Some(0));
+    assert!(
+        charge_duplicate_parsed["errors"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|error| error
+                .as_str()
+                .unwrap()
+                .contains("duplicates artifact_paths[0]")),
+        "duplicate retained evidence path should be rejected instead of satisfying a second artifact type"
+    );
+
     let multimeter_artifact = artifact_root.join("hardware-evidence/charge-multimeter.log");
     std::fs::write(&multimeter_artifact, "multimeter reading fixture\n").unwrap();
     let charge_complete_evidence = charge_photo_only_evidence
@@ -3423,6 +3459,7 @@ artifact_or_notes = "photo and multimeter: hardware-evidence/charge.jpg; right P
     let _ = std::fs::remove_file(&unrelated_video_path);
     let _ = std::fs::remove_file(&video_path);
     let _ = std::fs::remove_file(&charge_photo_only_path);
+    let _ = std::fs::remove_file(&charge_duplicate_path);
     let _ = std::fs::remove_file(&charge_complete_path);
     let _ = std::fs::remove_dir_all(&artifact_root);
 }
