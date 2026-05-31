@@ -31,6 +31,7 @@ args = [
     "--coverage-baseline",
     "tools/porting_coverage_baseline.toml",
     "--require-zmk-source",
+    "--require-zmk-clean-source",
     "--require-zmk-source-commit",
     "--require-porting-complete",
 ]
@@ -260,6 +261,7 @@ args = [
     "--hardware-baseline",
     "tools/hardware_validation_baseline.toml",
     "--require-zmk-source",
+    "--require-zmk-clean-source",
     "--require-zmk-source-commit",
     "--require-software-complete",
     "--require-hardware-classified",
@@ -275,6 +277,7 @@ args = [
     "--hardware-baseline",
     "tools/hardware_validation_baseline.toml",
     "--require-zmk-source",
+    "--require-zmk-clean-source",
     "--require-zmk-source-commit",
     "--require-software-complete",
     "--require-hardware-classified",
@@ -299,6 +302,7 @@ set -- \
   --coverage-baseline tools/porting_coverage_baseline.toml \
   --hardware-baseline tools/hardware_validation_baseline.toml \
   --require-zmk-source \
+  --require-zmk-clean-source \
   --require-zmk-source-commit \
   --require-software-complete \
   --require-hardware-classified \

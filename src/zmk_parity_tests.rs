@@ -1177,6 +1177,7 @@ fn firmware_ci_runs_complete_porting_gate_before_builds() {
     let migration_status_command = "python3 tools/migration_status.py";
     let baseline_arg = "--coverage-baseline";
     let zmk_required_flag = "--require-zmk-source";
+    let zmk_clean_required_flag = "--require-zmk-clean-source";
     let zmk_commit_required_flag = "--require-zmk-source-commit";
     let complete_required_flag = "--require-porting-complete";
     let software_required_flag = "--require-software-complete";
@@ -1192,6 +1193,7 @@ fn firmware_ci_runs_complete_porting_gate_before_builds() {
         baseline_arg,
         "tools/porting_coverage_baseline.toml",
         zmk_required_flag,
+        zmk_clean_required_flag,
         zmk_commit_required_flag,
         source_commit_ref.as_str(),
         software_required_flag,
@@ -1225,6 +1227,7 @@ fn firmware_ci_runs_complete_porting_gate_before_builds() {
     let porting_coverage_task = makefile_task_block("porting-coverage");
     assert!(
         porting_coverage_task.contains(complete_required_flag)
+            && porting_coverage_task.contains(zmk_clean_required_flag)
             && porting_coverage_task.contains(zmk_commit_required_flag)
             && porting_coverage_task
                 .contains("dependencies = [\"rmk-zmk-scenario-tests\", \"host-parity-tests\", \"rmk-behavior-tests\"]"),
@@ -3742,10 +3745,8 @@ artifact_or_notes = "log: /tmp/right-i2c.log; right P0_04 SDA and P0_05 SCL show
             .as_str(),
         Some(artifact_sha256.as_str())
     );
-    let date_literal_evidence = evidence.replace(
-        "validated_at = \"2026-05-29\"",
-        "validated_at = 2026-05-29",
-    );
+    let date_literal_evidence =
+        evidence.replace("validated_at = \"2026-05-29\"", "validated_at = 2026-05-29");
     let date_literal_path = write_temp_file(
         "hardware-validation-evidence-paths-date-literal",
         &date_literal_evidence,
@@ -3775,8 +3776,10 @@ artifact_or_notes = "log: /tmp/right-i2c.log; right P0_04 SDA and P0_05 SCL show
             "artifact_paths = [\"hardware-evidence/right-i2c.log\"]\nartifact_path_sha256 = {{ \"hardware-evidence/right-i2c.log\" = \"{artifact_sha256}\" }}"
         ),
     );
-    let hashed_path =
-        write_temp_file("hardware-validation-evidence-paths-hashed", &hashed_evidence);
+    let hashed_path = write_temp_file(
+        "hardware-validation-evidence-paths-hashed",
+        &hashed_evidence,
+    );
     let hashed_json = run_hardware_validation(&[
         "--evidence",
         hashed_path.to_str().unwrap(),
@@ -3817,8 +3820,7 @@ artifact_or_notes = "log: /tmp/right-i2c.log; right P0_04 SDA and P0_05 SCL show
         String::from_utf8_lossy(&mismatched_hash_json.stderr)
     );
     assert!(
-        String::from_utf8_lossy(&mismatched_hash_json.stdout)
-            .contains("does not match file"),
+        String::from_utf8_lossy(&mismatched_hash_json.stdout).contains("does not match file"),
         "mismatched artifact_path_sha256 should explain the file hash mismatch"
     );
 
@@ -6303,6 +6305,7 @@ fn local_validation_entrypoints_match_ci_gates() {
     assert!(
         porting_coverage_task.contains("--coverage-baseline")
             && porting_coverage_task.contains("tools/porting_coverage_baseline.toml")
+            && porting_coverage_task.contains("--require-zmk-clean-source")
             && porting_coverage_task.contains("--require-zmk-source-commit")
             && porting_coverage_task.contains("--require-porting-complete")
             && porting_coverage_task
@@ -6348,6 +6351,7 @@ fn local_validation_entrypoints_match_ci_gates() {
             && migration_status_task.contains("--coverage-baseline")
             && migration_status_task.contains("--hardware-baseline")
             && migration_status_task.contains("tools/hardware_validation_baseline.toml")
+            && migration_status_task.contains("--require-zmk-clean-source")
             && migration_status_task.contains("--require-zmk-source-commit")
             && migration_status_task.contains("--require-software-complete")
             && migration_status_task.contains("--require-hardware-classified")
@@ -6361,6 +6365,7 @@ fn local_validation_entrypoints_match_ci_gates() {
             && migration_status_release_ready_task.contains("--hardware-baseline")
             && migration_status_release_ready_task.contains("tools/hardware_validation_baseline.toml")
             && migration_status_release_ready_task.contains("--require-zmk-source")
+            && migration_status_release_ready_task.contains("--require-zmk-clean-source")
             && migration_status_release_ready_task.contains("--require-zmk-source-commit")
             && migration_status_release_ready_task.contains("--require-software-complete")
             && migration_status_release_ready_task.contains("--require-hardware-classified")
@@ -6376,6 +6381,7 @@ fn local_validation_entrypoints_match_ci_gates() {
             && migration_status_report_task.contains("--coverage-baseline")
             && migration_status_report_task.contains("--hardware-baseline")
             && migration_status_report_task.contains("--require-zmk-source")
+            && migration_status_report_task.contains("--require-zmk-clean-source")
             && migration_status_report_task.contains("--require-zmk-source-commit")
             && migration_status_report_task.contains("--require-software-complete")
             && migration_status_report_task.contains("--require-hardware-classified")
@@ -6730,6 +6736,7 @@ fn local_validation_entrypoints_match_ci_gates() {
         FIRMWARE_WORKFLOW_YAML.contains("tools/migration_status.py")
             && FIRMWARE_WORKFLOW_YAML.contains("cargo make migration-status-release-ready")
             && FIRMWARE_WORKFLOW_YAML.contains("--hardware-baseline")
+            && FIRMWARE_WORKFLOW_YAML.contains("--require-zmk-clean-source")
             && FIRMWARE_WORKFLOW_YAML.contains("--require-zmk-source-commit")
             && FIRMWARE_WORKFLOW_YAML.contains("--require-software-complete")
             && FIRMWARE_WORKFLOW_YAML.contains("--require-hardware-classified")
@@ -10772,6 +10779,17 @@ with tempfile.TemporaryDirectory() as tempdir:
 
 with tempfile.TemporaryDirectory() as tempdir:
     root = Path(tempdir)
+    makefile = Path("Makefile.toml").read_text()
+    before, marker, after = makefile.partition("[tasks.porting-coverage]")
+    assert marker
+    (root / "Makefile.toml").write_text(
+        before + marker + after.replace('"--require-zmk-clean-source",', "", 1),
+        encoding="utf-8",
+    )
+    bad_porting_coverage_clean_source_task = pc.check_makefile_task_invariants(manifest, root)
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
     (root / "Makefile.toml").write_text(
         Path("Makefile.toml").read_text().replace('args = ["test", "--lib", "--target", "x86_64-unknown-linux-gnu"]', 'args = ["test", "--target", "x86_64-unknown-linux-gnu"]', 1),
         encoding="utf-8",
@@ -10800,6 +10818,17 @@ with tempfile.TemporaryDirectory() as tempdir:
 with tempfile.TemporaryDirectory() as tempdir:
     root = Path(tempdir)
     makefile = Path("Makefile.toml").read_text()
+    before, marker, after = makefile.partition("[tasks.migration-status]")
+    assert marker
+    (root / "Makefile.toml").write_text(
+        before + marker + after.replace('"--require-zmk-clean-source",', "", 1),
+        encoding="utf-8",
+    )
+    bad_migration_status_clean_source_task = pc.check_makefile_task_invariants(manifest, root)
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    makefile = Path("Makefile.toml").read_text()
     before, marker, after = makefile.partition("[tasks.migration-status-release-ready]")
     assert marker
     (root / "Makefile.toml").write_text(
@@ -10807,6 +10836,34 @@ with tempfile.TemporaryDirectory() as tempdir:
         encoding="utf-8",
     )
     bad_migration_status_release_ready_task = pc.check_makefile_task_invariants(manifest, root)
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    makefile = Path("Makefile.toml").read_text()
+    before, marker, after = makefile.partition("[tasks.migration-status-release-ready]")
+    assert marker
+    (root / "Makefile.toml").write_text(
+        before + marker + after.replace('"--require-zmk-clean-source",', "", 1),
+        encoding="utf-8",
+    )
+    bad_migration_status_release_ready_clean_source_task = pc.check_makefile_task_invariants(manifest, root)
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    makefile = Path("Makefile.toml").read_text()
+    before, marker, after = makefile.partition("[tasks.migration-status-report]")
+    assert marker
+    next_task = after.find("\n[tasks.")
+    assert next_task >= 0
+    task_block = marker + after[:next_task]
+    tail = after[next_task:]
+    (root / "Makefile.toml").write_text(
+        before
+        + task_block.replace("--require-zmk-clean-source", "", 1)
+        + tail,
+        encoding="utf-8",
+    )
+    bad_migration_status_report_clean_source_task = pc.check_makefile_task_invariants(manifest, root)
 
 with tempfile.TemporaryDirectory() as tempdir:
     root = Path(tempdir)
@@ -11112,10 +11169,14 @@ print(json.dumps({
     "bad_rmk_config_schema_task": pack(bad_rmk_config_schema_task),
     "bad_rmk_config_schema_version": pack(bad_rmk_config_schema_version),
     "bad_porting_coverage_task": pack(bad_porting_coverage_task),
+    "bad_porting_coverage_clean_source_task": pack(bad_porting_coverage_clean_source_task),
     "bad_host_parity_task": pack(bad_host_parity_task),
     "bad_warning_flags": pack(bad_warning_flags),
     "bad_migration_status_task": pack(bad_migration_status_task),
+    "bad_migration_status_clean_source_task": pack(bad_migration_status_clean_source_task),
     "bad_migration_status_release_ready_task": pack(bad_migration_status_release_ready_task),
+    "bad_migration_status_release_ready_clean_source_task": pack(bad_migration_status_release_ready_clean_source_task),
+    "bad_migration_status_report_clean_source_task": pack(bad_migration_status_report_clean_source_task),
     "bad_family": pack(bad_family),
     "bad_uf2_gate": pack(bad_uf2_gate),
     "bad_rmk_behavior_task": pack(bad_rmk_behavior_task),
@@ -11214,6 +11275,23 @@ print(json.dumps({
             .contains("tasks.porting-coverage.dependencies missing required values ['rmk-zmk-scenario-tests', 'host-parity-tests', 'rmk-behavior-tests']")
     );
 
+    let bad_porting_coverage_clean_source_task = parsed["bad_porting_coverage_clean_source_task"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| {
+            result["id"] == "makefile_porting_coverage_runs_runtime_host_and_rmk_behavior_first"
+        })
+        .expect("changed porting coverage clean source result is missing");
+    assert_eq!(bad_porting_coverage_clean_source_task["kind"], "build_task");
+    assert_eq!(bad_porting_coverage_clean_source_task["ok"], false);
+    assert!(
+        bad_porting_coverage_clean_source_task["message"]
+            .as_str()
+            .unwrap()
+            .contains("--require-zmk-clean-source")
+    );
+
     let bad_host_parity_task = parsed["bad_host_parity_task"]
         .as_array()
         .unwrap()
@@ -11275,6 +11353,23 @@ print(json.dumps({
             .contains("tasks.migration-status.dependencies missing required values ['rmk-zmk-scenario-tests', 'host-parity-tests', 'rmk-behavior-tests']")
     );
 
+    let bad_migration_status_clean_source_task = parsed["bad_migration_status_clean_source_task"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| {
+            result["id"] == "makefile_migration_status_runs_runtime_host_and_rmk_behavior_first"
+        })
+        .expect("changed migration status clean source result is missing");
+    assert_eq!(bad_migration_status_clean_source_task["kind"], "build_task");
+    assert_eq!(bad_migration_status_clean_source_task["ok"], false);
+    assert!(
+        bad_migration_status_clean_source_task["message"]
+            .as_str()
+            .unwrap()
+            .contains("--require-zmk-clean-source")
+    );
+
     let bad_migration_status_release_ready_task = parsed["bad_migration_status_release_ready_task"]
         .as_array()
         .unwrap()
@@ -11291,6 +11386,50 @@ print(json.dumps({
             .as_str()
             .unwrap()
             .contains("tasks.migration-status-release-ready.args missing required values ['--require-release-ready']")
+    );
+
+    let bad_migration_status_release_ready_clean_source_task =
+        parsed["bad_migration_status_release_ready_clean_source_task"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|result| result["id"] == "makefile_migration_status_release_ready_is_hard_gate")
+            .expect("changed release-ready migration status clean source result is missing");
+    assert_eq!(
+        bad_migration_status_release_ready_clean_source_task["kind"],
+        "build_task"
+    );
+    assert_eq!(
+        bad_migration_status_release_ready_clean_source_task["ok"],
+        false
+    );
+    assert!(
+        bad_migration_status_release_ready_clean_source_task["message"]
+            .as_str()
+            .unwrap()
+            .contains("--require-zmk-clean-source")
+    );
+
+    let bad_migration_status_report_clean_source_task =
+        parsed["bad_migration_status_report_clean_source_task"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|result| {
+                result["id"]
+                    == "makefile_migration_status_report_runs_runtime_host_and_rmk_behavior_first"
+            })
+            .expect("changed migration status report clean source result is missing");
+    assert_eq!(
+        bad_migration_status_report_clean_source_task["kind"],
+        "build_task"
+    );
+    assert_eq!(bad_migration_status_report_clean_source_task["ok"], false);
+    assert!(
+        bad_migration_status_report_clean_source_task["message"]
+            .as_str()
+            .unwrap()
+            .contains("--require-zmk-clean-source")
     );
 
     let bad_family = parsed["bad_family"]
@@ -11791,13 +11930,13 @@ print(json.dumps({
         ok.iter()
             .map(|result| result["passed"].as_i64().unwrap())
             .sum::<i64>(),
-        56
+        57
     );
     assert_eq!(
         ok.iter()
             .map(|result| result["total"].as_i64().unwrap())
             .sum::<i64>(),
-        56
+        57
     );
 
     let bad_migration_gate = parsed["bad_migration_gate"]
