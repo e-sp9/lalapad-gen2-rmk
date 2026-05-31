@@ -6567,6 +6567,7 @@ fn local_validation_entrypoints_match_ci_gates() {
             && hardware_validation_finalize_task.contains("--evidence-with-artifact-hashes")
             && hardware_validation_finalize_task.contains("> \"$tmp_hashed_evidence\"")
             && hardware_validation_finalize_task.contains("mv \"$tmp_hashed_evidence\" \"$hashed_evidence\"")
+            && hardware_validation_finalize_task.contains("HARDWARE_EVIDENCE=\"$hashed_evidence\"")
             && hardware_validation_finalize_task.contains("FIRMWARE_REF=\"$FIRMWARE_REF\"")
             && hardware_validation_finalize_task
                 .contains("FIRMWARE_ARTIFACT_MANIFEST=\"${FIRMWARE_ARTIFACT_MANIFEST:-firmware-artifacts.local.json}\"")
@@ -6593,6 +6594,8 @@ fn local_validation_entrypoints_match_ci_gates() {
             && hardware_validation_finalize_current_task.contains("--evidence-with-artifact-hashes")
             && hardware_validation_finalize_current_task.contains("> \"$tmp_hashed_evidence\"")
             && hardware_validation_finalize_current_task.contains("mv \"$tmp_hashed_evidence\" \"$hashed_evidence\"")
+            && hardware_validation_finalize_current_task
+                .contains("HARDWARE_EVIDENCE=\"$hashed_evidence\"")
             && hardware_validation_finalize_current_task
                 .contains("FIRMWARE_ARTIFACT_MANIFEST=\"${FIRMWARE_ARTIFACT_MANIFEST:-firmware-artifacts.local.json}\"")
             && hardware_validation_finalize_current_task
@@ -11002,6 +11005,23 @@ with tempfile.TemporaryDirectory() as tempdir:
 with tempfile.TemporaryDirectory() as tempdir:
     root = Path(tempdir)
     makefile = Path("Makefile.toml").read_text()
+    before, marker, after = makefile.partition("[tasks.hardware-validation-finalize-evidence]")
+    assert marker
+    next_task = after.find("\n[tasks.")
+    assert next_task >= 0
+    task_block = marker + after[:next_task]
+    tail = after[next_task:]
+    (root / "Makefile.toml").write_text(
+        before
+        + task_block.replace('HARDWARE_EVIDENCE="$hashed_evidence"', 'HARDWARE_EVIDENCE="$HARDWARE_EVIDENCE"', 1)
+        + tail,
+        encoding="utf-8",
+    )
+    bad_hardware_finalize_hashed_evidence_binding = pc.check_makefile_task_invariants(manifest, root)
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    makefile = Path("Makefile.toml").read_text()
     before, marker, after = makefile.partition("[tasks.hardware-validation-finalize-current]")
     assert marker
     next_task = after.find("\n[tasks.")
@@ -11018,6 +11038,26 @@ with tempfile.TemporaryDirectory() as tempdir:
         encoding="utf-8",
     )
     bad_hardware_finalize_current_gate = pc.check_makefile_task_invariants(manifest, root)
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    makefile = Path("Makefile.toml").read_text()
+    before, marker, after = makefile.partition("[tasks.hardware-validation-finalize-current]")
+    assert marker
+    next_task = after.find("\n[tasks.")
+    if next_task < 0:
+        task_block = marker + after
+        tail = ""
+    else:
+        task_block = marker + after[:next_task]
+        tail = after[next_task:]
+    (root / "Makefile.toml").write_text(
+        before
+        + task_block.replace('HARDWARE_EVIDENCE="$hashed_evidence"', 'HARDWARE_EVIDENCE="$HARDWARE_EVIDENCE"', 1)
+        + tail,
+        encoding="utf-8",
+    )
+    bad_hardware_finalize_current_hashed_evidence_binding = pc.check_makefile_task_invariants(manifest, root)
 
 def pack(results):
     return [result.__dict__ | {"ok": result.ok} for result in results]
@@ -11049,7 +11089,9 @@ print(json.dumps({
     "bad_hardware_hash_task": pack(bad_hardware_hash_task),
     "bad_hardware_finalize_guard": pack(bad_hardware_finalize_guard),
     "bad_hardware_finalize_release_gate": pack(bad_hardware_finalize_release_gate),
+    "bad_hardware_finalize_hashed_evidence_binding": pack(bad_hardware_finalize_hashed_evidence_binding),
     "bad_hardware_finalize_current_gate": pack(bad_hardware_finalize_current_gate),
+    "bad_hardware_finalize_current_hashed_evidence_binding": pack(bad_hardware_finalize_current_hashed_evidence_binding),
 }))
 "#,
     );
@@ -11502,6 +11544,27 @@ print(json.dumps({
             .contains("cargo make migration-status-final")
     );
 
+    let bad_hardware_finalize_hashed_evidence_binding =
+        parsed["bad_hardware_finalize_hashed_evidence_binding"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|result| {
+                result["id"] == "makefile_hardware_evidence_finalize_runs_hash_then_final_gate"
+            })
+            .expect("changed hardware evidence finalize hashed overlay binding result is missing");
+    assert_eq!(
+        bad_hardware_finalize_hashed_evidence_binding["kind"],
+        "build_task"
+    );
+    assert_eq!(bad_hardware_finalize_hashed_evidence_binding["ok"], false);
+    assert!(
+        bad_hardware_finalize_hashed_evidence_binding["message"]
+            .as_str()
+            .unwrap()
+            .contains("HARDWARE_EVIDENCE=\"$hashed_evidence\"")
+    );
+
     let bad_hardware_finalize_current_gate = parsed["bad_hardware_finalize_current_gate"]
         .as_array()
         .unwrap()
@@ -11518,6 +11581,33 @@ print(json.dumps({
             .as_str()
             .unwrap()
             .contains("cargo make migration-status-final-current")
+    );
+
+    let bad_hardware_finalize_current_hashed_evidence_binding =
+        parsed["bad_hardware_finalize_current_hashed_evidence_binding"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|result| {
+                result["id"]
+                    == "makefile_current_hardware_evidence_finalize_runs_hash_then_current_final_gate"
+            })
+            .expect(
+                "changed current hardware evidence finalize hashed overlay binding result is missing",
+            );
+    assert_eq!(
+        bad_hardware_finalize_current_hashed_evidence_binding["kind"],
+        "build_task"
+    );
+    assert_eq!(
+        bad_hardware_finalize_current_hashed_evidence_binding["ok"],
+        false
+    );
+    assert!(
+        bad_hardware_finalize_current_hashed_evidence_binding["message"]
+            .as_str()
+            .unwrap()
+            .contains("HARDWARE_EVIDENCE=\"$hashed_evidence\"")
     );
 }
 
