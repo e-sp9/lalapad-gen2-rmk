@@ -25,6 +25,7 @@
 - [ ] `HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit FIRMWARE_ARTIFACT_MANIFEST=firmware-artifacts.local.json cargo make migration-status-final`, if claiming complete migration validation for a release with the manifest-pinned clean ZMK source commit
 - [ ] `HARDWARE_EVIDENCE=hardware-validation-evidence.local.toml cargo make migration-status-final-current`, if claiming complete migration validation for the current clean commit
 - [ ] Hardware evidence keeps the generated `metadata.hardware_check_inventory_sha256`, if claiming complete hardware validation
+- [ ] Hardware evidence records `artifact_path_sha256` for every retained `artifact_paths` file, if claiming complete hardware validation
 - [ ] `python3 tools/hardware_validation.py --hardware-baseline tools/hardware_validation_baseline.toml --require-classified`
 - [ ] `python3 tools/hardware_validation.py --markdown`
 - [ ] `python3 tools/hardware_validation.py --checklist`

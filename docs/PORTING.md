@@ -445,6 +445,9 @@ satisfied by only attaching a `.log` file. Each retained file must be named by
 path or basename in `artifact_or_notes`, and separate required artifact types
 must have separate retained files; duplicating the same resolved file path is
 reported as invalid evidence rather than a second artifact.
+Each retained evidence file must also be listed in `artifact_path_sha256` with
+the file's SHA256, so changing a captured video, log, photo, screenshot, or
+scope trace after the evidence overlay is written breaks the final gate.
 Media and trace suffixes are checked against lightweight file signatures, so a
 text file renamed to `.mp4`, `.png`, `.jpg`, `.webp`, `.pcap`, or `.pcapng`
 does not satisfy retained hardware evidence.
@@ -571,7 +574,8 @@ bench artifact.
 `--require-validated` when all checks must be proven for that exact firmware.
 `--require-validated` also requires the generated
 `metadata.hardware_check_inventory_sha256` and existing non-empty
-`artifact_paths` files for every counted validated entry.
+`artifact_paths` files plus matching `artifact_path_sha256` hashes for every
+counted validated entry.
 The combined migration gate requires `--firmware-artifact-manifest` whenever
 `--require-hardware-validated` is used. Whenever a firmware artifact manifest
 is supplied, every validated hardware evidence note must mention that

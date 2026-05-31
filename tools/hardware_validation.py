@@ -82,6 +82,7 @@ EVIDENCE_UPDATE_FIELDS = (
     "firmware_ref",
     "artifact_or_notes",
     "artifact_paths",
+    "artifact_path_sha256",
 )
 MARKDOWN_HEADING_RE = re.compile(r"^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$")
 ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -190,6 +191,14 @@ def artifact_file_signature_error(
             f"{label} signature: {artifact_path}"
         )
     return None
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as f:
+        while chunk := f.read(1024 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 @dataclass
@@ -368,6 +377,15 @@ def artifact_paths_text(check: dict[str, Any]) -> str:
     return ", ".join(str(path) for path in artifact_paths)
 
 
+def artifact_path_hashes_text(check: dict[str, Any]) -> str:
+    artifact_hashes = check.get("artifact_path_sha256", {})
+    if not isinstance(artifact_hashes, dict):
+        return ""
+    return ", ".join(
+        f"{path}={sha256}" for path, sha256 in sorted(artifact_hashes.items())
+    )
+
+
 def artifact_path_is_referenced(artifact_path: str, artifact_or_notes: str) -> bool:
     normalized_note = artifact_or_notes.replace("\\", "/").lower()
     normalized_path = artifact_path.strip().replace("\\", "/").lower()
@@ -461,6 +479,7 @@ def validate_evidence_artifact_paths(
     check: dict[str, Any],
     artifact_root: Path,
     require_artifact_paths: bool,
+    require_artifact_hashes: bool = False,
 ) -> list[str]:
     errors: list[str] = []
     artifact_paths = check.get("artifact_paths")
@@ -472,6 +491,32 @@ def validate_evidence_artifact_paths(
         return [f"{check_id}: artifact_paths must be a string array"]
     if require_artifact_paths and not artifact_paths:
         errors.append(f"{check_id}: artifact_paths must list at least one evidence artifact file")
+    artifact_hashes = check.get("artifact_path_sha256")
+    if artifact_hashes is None:
+        artifact_hashes = {}
+        if require_artifact_hashes and artifact_paths:
+            errors.append(
+                f"{check_id}: artifact_path_sha256 must map every artifact_paths entry "
+                "to its SHA256"
+            )
+    elif not isinstance(artifact_hashes, dict):
+        errors.append(f"{check_id}: artifact_path_sha256 must be a table")
+        artifact_hashes = {}
+    else:
+        artifact_path_set = {
+            path for path in artifact_paths if isinstance(path, str)
+        }
+        for hash_path, value in artifact_hashes.items():
+            if hash_path not in artifact_path_set:
+                errors.append(
+                    f"{check_id}: artifact_path_sha256 contains unknown artifact path "
+                    f"{hash_path!r}"
+                )
+            if not isinstance(value, str) or not SHA256_RE.fullmatch(value.strip()):
+                errors.append(
+                    f"{check_id}: artifact_path_sha256[{hash_path!r}] must be "
+                    "a SHA256 hex string"
+                )
 
     root = artifact_root.resolve()
     resolved_paths: list[tuple[str, Path]] = []
@@ -511,6 +556,20 @@ def validate_evidence_artifact_paths(
                 f"{check_id}: artifact_paths[{index}] file is empty: {artifact_path}"
             )
             continue
+        expected_sha256 = artifact_hashes.get(artifact_path)
+        if expected_sha256 is None:
+            if require_artifact_hashes:
+                errors.append(
+                    f"{check_id}: artifact_path_sha256 missing hash for "
+                    f"artifact_paths[{index}] {artifact_path!r}"
+                )
+        elif isinstance(expected_sha256, str) and SHA256_RE.fullmatch(expected_sha256.strip()):
+            actual_sha256 = sha256_file(resolved_path)
+            if actual_sha256 != expected_sha256.strip().lower():
+                errors.append(
+                    f"{check_id}: artifact_path_sha256[{artifact_path!r}] "
+                    f"{expected_sha256!r} does not match file {actual_sha256!r}"
+                )
         duplicate_index = seen_resolved_paths.get(resolved_path)
         if duplicate_index is not None:
             errors.append(
@@ -766,6 +825,7 @@ def summarize(
     required_firmware_ref: str | None = None,
     required_artifact_pair_sha256: str | None = None,
     require_evidence_artifact_paths: bool = False,
+    require_evidence_artifact_hashes: bool = False,
 ) -> HardwareValidationSummary:
     checks = manifest.get("checks", [])
     _, check_inventory_sha256 = manifest_inventory_digest(manifest)
@@ -818,6 +878,7 @@ def summarize(
                     str(artifact) for artifact in check.get("evidence_artifacts", [])
                 ),
                 "artifact_paths": artifact_paths_text(check),
+                "artifact_path_sha256": artifact_path_hashes_text(check),
             }
         )
 
@@ -876,6 +937,7 @@ def summarize(
                         check,
                         evidence_artifact_root or Path("."),
                         require_evidence_artifact_paths,
+                        require_evidence_artifact_hashes,
                     )
                     if artifact_path_errors:
                         validation_errors.extend(artifact_path_errors)
@@ -1173,6 +1235,7 @@ def as_evidence_template(
         "# Change status to \"validated\" only when validated_at, tester, firmware_ref, and artifact_or_notes are filled.",
         "# Final validation also requires artifact_paths to list non-empty real evidence files under the evidence artifact root.",
         "# Each artifact_paths entry must be named in artifact_or_notes and match a required evidence artifact type.",
+        "# Final validation also requires artifact_path_sha256 to bind each artifact_paths entry to its retained file hash.",
         "# If artifact_or_notes is prefilled with firmware artifact pair_sha256, keep it and append the observed evidence after it.",
         "",
         "[metadata]",
@@ -1197,6 +1260,7 @@ def as_evidence_template(
             lines.append('tester = ""')
             lines.append(f"firmware_ref = {toml_string(firmware_ref)}")
             lines.append("artifact_paths = []")
+            lines.append("artifact_path_sha256 = {}")
             artifact_paths = suggested_artifact_paths(check)
             if artifact_paths:
                 lines.append(
@@ -1204,6 +1268,10 @@ def as_evidence_template(
                     "(relative to EVIDENCE_ARTIFACT_ROOT=.):"
                 )
                 lines.extend(toml_comment(f"suggested: {toml_string_array(artifact_paths)}"))
+                lines.append(
+                    "# Fill artifact_path_sha256 with the SHA256 for each retained "
+                    "artifact_paths entry before running the final gate."
+                )
             artifact_prefix = (
                 f"firmware artifact pair_sha256 {artifact_pair_sha256}; "
                 if artifact_pair_sha256
@@ -1285,15 +1353,15 @@ def as_markdown(manifest: dict[str, Any], summary: HardwareValidationSummary) ->
             "",
             "### Checks",
             "",
-            "| ID | Area | Side | Status | Requirement | Required evidence | Required artifacts | Required observations | Validated at | Tester | Firmware ref | Artifact paths | Artifact/notes |",
-            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+            "| ID | Area | Side | Status | Requirement | Required evidence | Required artifacts | Required observations | Validated at | Tester | Firmware ref | Artifact paths | Artifact hashes | Artifact/notes |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
         ]
     )
     for check in manifest.get("checks", []):
         if not isinstance(check, dict):
             continue
         lines.append(
-            "| {id} | {area} | {side} | `{status}` | {requirement} | {evidence} | {evidence_artifacts} | {evidence_needles} | {validated_at} | {tester} | {firmware_ref} | {artifact_paths} | {artifact_or_notes} |".format(
+            "| {id} | {area} | {side} | `{status}` | {requirement} | {evidence} | {evidence_artifacts} | {evidence_needles} | {validated_at} | {tester} | {firmware_ref} | {artifact_paths} | {artifact_hashes} | {artifact_or_notes} |".format(
                 id=markdown_escape(check.get("id", "")),
                 area=markdown_escape(check.get("area", "")),
                 side=markdown_escape(check.get("side", "")),
@@ -1308,6 +1376,7 @@ def as_markdown(manifest: dict[str, Any], summary: HardwareValidationSummary) ->
                 tester=markdown_escape(check.get("tester", "")),
                 firmware_ref=markdown_escape(check.get("firmware_ref", "")),
                 artifact_paths=markdown_escape(artifact_paths_text(check)),
+                artifact_hashes=markdown_escape(artifact_path_hashes_text(check)),
                 artifact_or_notes=markdown_escape(check.get("artifact_or_notes", "")),
             )
         )
@@ -1329,7 +1398,8 @@ def as_checklist(
         "Record the flashed firmware tag or commit before testing. After each item "
         "passes, copy the check id into an evidence overlay generated with "
         "`--evidence-template` and include the required observations in "
-        "`artifact_or_notes` plus non-empty real evidence files in `artifact_paths`.",
+        "`artifact_or_notes`, non-empty real evidence files in `artifact_paths`, "
+        "and matching hashes in `artifact_path_sha256`.",
         "",
         "When using `firmware-artifacts.local.json`, keep the generated "
         "`pair_sha256` in each `artifact_or_notes` entry and append the bench "
@@ -1389,6 +1459,10 @@ def as_checklist(
                     "    - artifact_paths root: suggested paths are relative to "
                     "EVIDENCE_ARTIFACT_ROOT=. (default)"
                 )
+            lines.append(
+                "    - artifact_path_sha256: map each retained artifact_paths entry "
+                "to its SHA256 before the final gate"
+            )
             lines.append(
                 "    - artifact_or_notes: concrete photo/log/probe/Vial observation "
                 f"that mentions artifacts [{evidence_artifacts_text(check)}] and "
@@ -1456,6 +1530,9 @@ def print_text(summary: HardwareValidationSummary) -> None:
             artifact_paths = item.get("artifact_paths", "")
             if artifact_paths:
                 suffix_parts.append(f"artifact_paths: {artifact_paths}")
+            artifact_hashes = item.get("artifact_path_sha256", "")
+            if artifact_hashes:
+                suffix_parts.append(f"artifact_path_sha256: {artifact_hashes}")
             print(
                 f"- {item['id']} ({item['area']}/{item['side']}): "
                 f"{item['status']} - {item['evidence']} "
@@ -1536,6 +1613,14 @@ def main() -> None:
         help="fail unless each validated evidence entry lists at least one existing non-empty artifact_paths file",
     )
     parser.add_argument(
+        "--require-evidence-artifact-hashes",
+        action="store_true",
+        help=(
+            "fail unless every validated artifact_paths file has a matching "
+            "artifact_path_sha256 entry"
+        ),
+    )
+    parser.add_argument(
         "--require-classified",
         action="store_true",
         help="fail if any hardware validation check is malformed or unclassified",
@@ -1545,7 +1630,7 @@ def main() -> None:
         action="store_true",
         help=(
             "fail until every real-hardware check has status validated, with "
-            "current inventory metadata and retained artifact_paths"
+            "current inventory metadata, retained artifact_paths, and artifact hashes"
         ),
     )
     parser.add_argument(
@@ -1649,6 +1734,7 @@ def main() -> None:
         args.require_firmware_ref,
         None,
         args.require_evidence_artifact_paths or args.require_validated,
+        args.require_evidence_artifact_hashes or args.require_validated,
     )
     if args.json:
         print(json.dumps(as_json(summary), indent=2, sort_keys=True))
@@ -1680,6 +1766,8 @@ def main() -> None:
     if args.require_classified and not summary.classified:
         raise SystemExit(1)
     if args.require_evidence_artifact_paths and not summary.classified:
+        raise SystemExit(1)
+    if args.require_evidence_artifact_hashes and not summary.classified:
         raise SystemExit(1)
     if args.require_firmware_ref is not None and not summary.classified:
         raise SystemExit(1)

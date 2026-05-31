@@ -178,6 +178,7 @@ def hardware_status(
     required_artifact_pair_sha256: str | None,
     require_evidence_inventory: bool,
     require_evidence_artifact_paths: bool,
+    require_evidence_artifact_hashes: bool,
     extra_errors: list[str] | None = None,
 ) -> dict[str, Any]:
     manifest_doc = hardware_validation.load_toml(manifest_path)
@@ -206,6 +207,7 @@ def hardware_status(
         required_firmware_ref,
         required_artifact_pair_sha256,
         require_evidence_artifact_paths,
+        require_evidence_artifact_hashes,
     )
     return hardware_validation.as_json(summary)
 
@@ -462,6 +464,7 @@ def build_status(args: argparse.Namespace) -> MigrationStatus:
         required_artifact_pair_sha256,
         args.require_evidence_inventory or args.require_hardware_validated,
         args.require_evidence_artifact_paths or args.require_hardware_validated,
+        args.require_evidence_artifact_hashes or args.require_hardware_validated,
         artifact_errors,
     )
     hardware_classified = bool(hardware["classified"])
@@ -786,6 +789,7 @@ def main() -> None:
     parser.add_argument("--require-hardware-classified", action="store_true")
     parser.add_argument("--require-release-ready", action="store_true")
     parser.add_argument("--require-evidence-artifact-paths", action="store_true")
+    parser.add_argument("--require-evidence-artifact-hashes", action="store_true")
     parser.add_argument(
         "--require-evidence-inventory",
         action="store_true",
@@ -831,6 +835,8 @@ def main() -> None:
     if args.require_hardware_classified and not status.hardware["classified"]:
         raise SystemExit(1)
     if args.require_evidence_artifact_paths and not status.hardware["classified"]:
+        raise SystemExit(1)
+    if args.require_evidence_artifact_hashes and not status.hardware["classified"]:
         raise SystemExit(1)
     if args.require_evidence_inventory and not status.hardware["classified"]:
         raise SystemExit(1)

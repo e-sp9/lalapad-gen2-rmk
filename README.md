@@ -346,7 +346,8 @@ and it must mention the check-specific observation terms declared by
 combine it with `--require-validated` when a release needs all hardware checks
 proven for that exact firmware. `--require-validated` also requires the
 generated `metadata.hardware_check_inventory_sha256` and existing non-empty
-`artifact_paths` files for every counted validated entry. The
+`artifact_paths` files plus matching `artifact_path_sha256` hashes for every
+counted validated entry. The
 `--evidence-template` command generates a complete local overlay file
 containing every current hardware check; pass
 `--firmware-ref-template <tag-or-commit>` with it to pre-fill the flashed
@@ -401,6 +402,9 @@ the check's required artifacts, so a `video` check needs a video file, a
 trace or log file. Each retained file must be named by path or basename in
 `artifact_or_notes`, and separate required artifact types need separate files;
 listing the same resolved file path twice does not count as separate evidence.
+Each retained file must also have a matching `artifact_path_sha256` entry, so a
+later file replacement at the same path invalidates the evidence instead of
+silently preserving a 100% validation claim.
 Media and trace file extensions are also checked against their file signatures,
 so a text file renamed to `.mp4`, `.png`, `.jpg`, `.webp`, `.pcap`, or
 `.pcapng` does not count as retained hardware evidence.

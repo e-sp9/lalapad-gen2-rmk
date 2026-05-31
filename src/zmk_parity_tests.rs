@@ -108,6 +108,31 @@ fn uf2_fixture_bytes(addr: u32, payload: &[u8]) -> Vec<u8> {
     block
 }
 
+fn sha256_file(path: &std::path::Path) -> String {
+    let output = Command::new("python3")
+        .arg("-c")
+        .arg(
+            r#"
+import hashlib
+import sys
+from pathlib import Path
+
+print(hashlib.sha256(Path(sys.argv[1]).read_bytes()).hexdigest())
+"#,
+        )
+        .arg(path)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "failed to hash fixture file {}\nstdout:\n{}\nstderr:\n{}",
+        path.display(),
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8_lossy(&output.stdout).trim().to_string()
+}
+
 fn makefile_task_block(task: &str) -> &str {
     let marker = format!("[tasks.{task}]");
     let start = MAKEFILE_TOML
@@ -177,7 +202,7 @@ fn complete_hardware_evidence_overlay_inner(
         evidence.push_str("validated_at = \"2026-05-29\"\n");
         evidence.push_str("tester = \"hardware bench fixture\"\n");
         evidence.push_str(&format!("firmware_ref = \"{firmware_ref}\"\n"));
-        let artifact_paths = artifact_root
+        let artifact_entries = artifact_root
             .map(|root| {
                 check["evidence_artifacts"]
                     .as_array()
@@ -206,11 +231,16 @@ fn complete_hardware_evidence_overlay_inner(
                             evidence_artifact_fixture_bytes(extension),
                         )
                         .unwrap();
-                        artifact_path
+                        let sha256 = sha256_file(&full_artifact_path);
+                        (artifact_path, sha256)
                     })
                     .collect::<Vec<_>>()
             })
             .unwrap_or_default();
+        let artifact_paths = artifact_entries
+            .iter()
+            .map(|(path, _sha256)| path.clone())
+            .collect::<Vec<_>>();
         let artifact_path_notes = if artifact_paths.is_empty() {
             format!("/tmp/lalapad-hardware-bench-{check_id}.txt")
         } else {
@@ -229,6 +259,15 @@ fn complete_hardware_evidence_overlay_inner(
                     .join(", "),
             );
             evidence.push_str("]\n");
+            evidence.push_str("artifact_path_sha256 = { ");
+            evidence.push_str(
+                &artifact_entries
+                    .iter()
+                    .map(|(path, sha256)| format!("\"{path}\" = \"{sha256}\""))
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            );
+            evidence.push_str(" }\n");
         }
     }
     evidence
@@ -1715,6 +1754,51 @@ fn migration_status_accepts_complete_hardware_evidence_for_final_gate() {
         "missing-artifact-path failure should explain the final-gate artifact path requirement"
     );
 
+    let no_artifact_hashes_evidence = evidence
+        .lines()
+        .filter(|line| !line.starts_with("artifact_path_sha256 = "))
+        .collect::<Vec<_>>()
+        .join("\n")
+        + "\n";
+    let no_artifact_hashes_path = write_temp_file(
+        "migration-status-complete-evidence-no-artifact-hashes",
+        &no_artifact_hashes_evidence,
+    );
+    let no_artifact_hashes_output = run_migration_status(&[
+        "--coverage-baseline",
+        "tools/porting_coverage_baseline.toml",
+        "--hardware-baseline",
+        "tools/hardware_validation_baseline.toml",
+        "--zmk-keymap",
+        zmk_keymap,
+        "--evidence",
+        no_artifact_hashes_path.to_str().unwrap(),
+        "--firmware-artifact-manifest",
+        artifact_path.to_str().unwrap(),
+        "--artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--evidence-artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--require-zmk-source",
+        "--require-firmware-ref",
+        firmware_ref,
+        "--require-software-complete",
+        "--require-hardware-classified",
+        "--require-hardware-validated",
+    ]);
+    let _ = std::fs::remove_file(&no_artifact_hashes_path);
+    assert!(
+        !no_artifact_hashes_output.status.success(),
+        "complete migration status accepted final evidence without artifact_path_sha256\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&no_artifact_hashes_output.stdout),
+        String::from_utf8_lossy(&no_artifact_hashes_output.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&no_artifact_hashes_output.stdout)
+            .contains("artifact_path_sha256 must map every artifact_paths entry"),
+        "missing-artifact-hash failure should explain the final-gate artifact hash requirement"
+    );
+
     let (dirty_zmk_root, dirty_zmk_keymap_path) = clean_zmk_keymap_fixture()
         .expect("dirty-source release readiness regression requires upstream ZMK source");
     let dirty_zmk_keymap = dirty_zmk_keymap_path.to_str().unwrap();
@@ -2820,7 +2904,7 @@ fn hardware_validation_markdown_report_lists_required_evidence() {
     assert!(stdout.contains("| right | 0 | 5 | 0.00% | `requires_hardware`=5 |"));
     assert!(stdout.contains("### Checks"));
     assert!(stdout.contains(
-        "| ID | Area | Side | Status | Requirement | Required evidence | Required artifacts | Required observations | Validated at | Tester | Firmware ref | Artifact paths | Artifact/notes |"
+        "| ID | Area | Side | Status | Requirement | Required evidence | Required artifacts | Required observations | Validated at | Tester | Firmware ref | Artifact paths | Artifact hashes | Artifact/notes |"
     ));
     assert!(stdout.contains(
         "right, cursor, tap, vertical scroll, horizontal scroll, no cursor during scroll, no right-click during scroll, inertia continues, inertia stops on touch"
@@ -3622,6 +3706,60 @@ artifact_or_notes = "log: /tmp/right-i2c.log; right P0_04 SDA and P0_05 SCL show
     assert!(stdout.contains("Artifact paths"));
     assert!(stdout.contains("hardware-evidence/right-i2c.log"));
 
+    let artifact_sha256 = sha256_file(&artifact_path);
+    let hashed_evidence = evidence.replace(
+        "artifact_paths = [\"hardware-evidence/right-i2c.log\"]",
+        &format!(
+            "artifact_paths = [\"hardware-evidence/right-i2c.log\"]\nartifact_path_sha256 = {{ \"hardware-evidence/right-i2c.log\" = \"{artifact_sha256}\" }}"
+        ),
+    );
+    let hashed_path =
+        write_temp_file("hardware-validation-evidence-paths-hashed", &hashed_evidence);
+    let hashed_json = run_hardware_validation(&[
+        "--evidence",
+        hashed_path.to_str().unwrap(),
+        "--evidence-artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--require-evidence-artifact-hashes",
+        "--json",
+    ]);
+    assert!(
+        hashed_json.status.success(),
+        "hardware validation should accept matching artifact_path_sha256 when hash enforcement is requested\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&hashed_json.stdout),
+        String::from_utf8_lossy(&hashed_json.stderr)
+    );
+    let hashed_parsed: serde_json::Value = serde_json::from_slice(&hashed_json.stdout).unwrap();
+    assert_eq!(hashed_parsed["validated"].as_i64(), Some(1));
+
+    let mismatched_hash_evidence = hashed_evidence.replace(
+        &artifact_sha256,
+        "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    );
+    let mismatched_hash_path = write_temp_file(
+        "hardware-validation-evidence-paths-hash-mismatch",
+        &mismatched_hash_evidence,
+    );
+    let mismatched_hash_json = run_hardware_validation(&[
+        "--evidence",
+        mismatched_hash_path.to_str().unwrap(),
+        "--evidence-artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--require-evidence-artifact-hashes",
+        "--json",
+    ]);
+    assert!(
+        !mismatched_hash_json.status.success(),
+        "hardware validation accepted mismatched artifact_path_sha256 under hash enforcement\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&mismatched_hash_json.stdout),
+        String::from_utf8_lossy(&mismatched_hash_json.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&mismatched_hash_json.stdout)
+            .contains("does not match file"),
+        "mismatched artifact_path_sha256 should explain the file hash mismatch"
+    );
+
     let copy_aid_artifact =
         artifact_root.join("hardware-evidence/iqs9151-right-i2c-identity-log.log");
     std::fs::write(&copy_aid_artifact, "dummy right i2c hardware log\n").unwrap();
@@ -4093,6 +4231,8 @@ artifact_or_notes = "photo and multimeter: hardware-evidence/charge.jpg; right P
     assert_eq!(charge_complete_parsed["validated"].as_i64(), Some(1));
 
     let _ = std::fs::remove_file(&path);
+    let _ = std::fs::remove_file(&hashed_path);
+    let _ = std::fs::remove_file(&mismatched_hash_path);
     let _ = std::fs::remove_file(&verbatim_copy_aid_path);
     let _ = std::fs::remove_file(&missing_path);
     let _ = std::fs::remove_file(&empty_path);
@@ -4737,6 +4877,12 @@ fn hardware_validation_can_generate_complete_evidence_template() {
         ),
         "evidence template should explain that retained artifact_paths files must be non-empty"
     );
+    assert!(
+        stdout.contains(
+            "# Final validation also requires artifact_path_sha256 to bind each artifact_paths entry"
+        ),
+        "evidence template should explain that retained artifact_paths files need hashes"
+    );
     for check in checks {
         let check_id = check["id"].as_str().unwrap();
         let suggested_check_id = check_id.replace('_', "-");
@@ -4753,6 +4899,10 @@ fn hardware_validation_can_generate_complete_evidence_template() {
             0,
             "evidence template should include an empty artifact_paths list for {check_id}"
         );
+        assert!(
+            entry["artifact_path_sha256"].as_table().unwrap().is_empty(),
+            "evidence template should include an empty artifact_path_sha256 table for {check_id}"
+        );
         assert_eq!(entry["artifact_or_notes"].as_str(), Some(""));
         assert!(
             stdout.contains("artifact_paths = []"),
@@ -4761,6 +4911,10 @@ fn hardware_validation_can_generate_complete_evidence_template() {
         assert!(
             stdout.contains("# Suggested artifact_paths after retaining evidence files"),
             "evidence template should include per-check artifact path copy aids"
+        );
+        assert!(
+            stdout.contains("# Fill artifact_path_sha256 with the SHA256 for each retained"),
+            "evidence template should tell users to hash retained evidence artifacts"
         );
         assert!(
             stdout.contains(&format!("hardware-evidence/{suggested_check_id}-")),
@@ -4873,6 +5027,10 @@ fn hardware_validation_can_generate_bench_checklist() {
         stdout.contains("non-empty real evidence files in `artifact_paths`"),
         "checklist should explain that retained artifact_paths files must be non-empty"
     );
+    assert!(
+        stdout.contains("matching hashes in `artifact_path_sha256`"),
+        "checklist should explain that retained artifact_paths files must be hash-bound"
+    );
     assert!(stdout.contains("firmware-artifacts.local.json"));
     assert!(stdout.contains("pair_sha256"));
     assert!(stdout.contains("## trackpad"));
@@ -4909,6 +5067,12 @@ fn hardware_validation_can_generate_bench_checklist() {
                 "artifact_paths: [\"hardware-evidence/{suggested_check_id}-"
             )),
             "checklist should include suggested retained artifact paths for {check_id}"
+        );
+        assert!(
+            stdout.contains(
+                "artifact_path_sha256: map each retained artifact_paths entry to its SHA256"
+            ),
+            "checklist should include artifact hash capture guidance for {check_id}"
         );
         assert!(
             stdout.contains(
@@ -6316,6 +6480,7 @@ fn local_validation_entrypoints_match_ci_gates() {
         "HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit FIRMWARE_ARTIFACT_MANIFEST=firmware-artifacts.local.json cargo make migration-status-final",
         "HARDWARE_EVIDENCE=hardware-validation-evidence.local.toml cargo make migration-status-final-current",
         "tools/hardware_validation.py --hardware-baseline tools/hardware_validation_baseline.toml --require-classified",
+        "Hardware evidence records `artifact_path_sha256` for every retained `artifact_paths` file",
         "tools/hardware_validation.py --markdown",
         "tools/hardware_validation.py --checklist",
         "tools/hardware_validation.py --evidence-template",
@@ -6400,6 +6565,7 @@ fn local_validation_entrypoints_match_ci_gates() {
             && README_MD.contains("FIRMWARE_ARTIFACT_MANIFEST")
             && README_MD.contains("EVIDENCE_ARTIFACT_ROOT")
             && README_MD.contains("artifact_paths")
+            && README_MD.contains("artifact_path_sha256")
             && README_MD.contains("non-empty real file in `artifact_paths`")
             && README_MD.contains("`--require-validated` also requires the")
             && README_MD.contains("HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-report")
@@ -6419,6 +6585,7 @@ fn local_validation_entrypoints_match_ci_gates() {
             && PORTING_MD.contains("FIRMWARE_ARTIFACT_MANIFEST")
             && PORTING_MD.contains("EVIDENCE_ARTIFACT_ROOT")
             && PORTING_MD.contains("artifact_paths")
+            && PORTING_MD.contains("artifact_path_sha256")
             && PORTING_MD.contains("existing non-empty `artifact_paths` file")
             && PORTING_MD.contains("`--require-validated` also requires the")
             && PORTING_MD.contains("HARDWARE_EVIDENCE=hardware-validation-evidence.local.toml cargo make migration-status-final-current"),
@@ -6479,6 +6646,10 @@ fn local_validation_entrypoints_match_ci_gates() {
         "hardware evidence example should document that retained artifact_paths files must be non-empty"
     );
     assert!(
+        HARDWARE_VALIDATION_EVIDENCE_EXAMPLE_TOML.contains("artifact_path_sha256"),
+        "hardware evidence example should document retained artifact hash binding"
+    );
+    assert!(
         RELEASE_MD.contains("HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit FIRMWARE_ARTIFACT_MANIFEST=firmware-artifacts.local.json cargo make migration-status-final")
             && RELEASE_MD.contains("RMK\nZMK-derived runtime scenario suite")
             && RELEASE_MD.contains("ZMK_KEYMAP")
@@ -6487,6 +6658,7 @@ fn local_validation_entrypoints_match_ci_gates() {
             && RELEASE_MD.contains("FIRMWARE_ARTIFACT_MANIFEST")
             && RELEASE_MD.contains("EVIDENCE_ARTIFACT_ROOT")
             && RELEASE_MD.contains("artifact_paths")
+            && RELEASE_MD.contains("artifact_path_sha256")
             && RELEASE_MD.contains("metadata.hardware_check_inventory_sha256")
             && RELEASE_MD.contains("non-empty file in `artifact_paths`")
             && RELEASE_MD.contains("Full validation: pass")

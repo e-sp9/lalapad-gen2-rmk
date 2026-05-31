@@ -76,9 +76,9 @@ whose hash no longer matches the current hardware validation manifest. Each
 validated note must also mention the per-check evidence artifact types listed by
 `evidence_artifacts`, such as `video`, `scope`, `Vial screenshot`, or
 `key-event log`, and each validated entry must list at least one existing
-non-empty file in `artifact_paths`. Relative evidence artifact paths are
-resolved under `EVIDENCE_ARTIFACT_ROOT` when set, or from the current directory
-otherwise.
+non-empty file in `artifact_paths` with a matching `artifact_path_sha256` entry.
+Relative evidence artifact paths are resolved under `EVIDENCE_ARTIFACT_ROOT`
+when set, or from the current directory otherwise.
 The retained file types must match the required artifact types; a video-only
 check cannot pass final validation with only a text log attached. Every
 retained file must also be named by path or basename in `artifact_or_notes`,
@@ -137,6 +137,7 @@ Before announcing a release to the community:
 - The hardware evidence notes reference the artifact manifest SHA256 values for the flashed central/peripheral files.
 - The hardware evidence notes include every per-check artifact type listed by `evidence_artifacts`.
 - The hardware evidence entries include `artifact_paths` pointing at retained photos, videos, logs, screenshots, or scope traces under the chosen `EVIDENCE_ARTIFACT_ROOT`.
+- The hardware evidence entries include matching `artifact_path_sha256` hashes for every retained evidence file.
 - GitHub Release contains central/peripheral UF2 and DFU zip assets.
 - GitHub Release contains `lalapad-gen2-rmk-artifacts.json`.
 - Web flasher loads the latest release metadata.
