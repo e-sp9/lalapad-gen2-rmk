@@ -362,8 +362,10 @@ hardware-validation-evidence-template-current` fills the template from the
 current tag or commit and refuses to run with tracked or untracked non-ignored
 changes, which avoids recording evidence against a mutable local build.
 `tools/firmware_artifact_manifest.py --require-uf2 --require-reset-uf2`
-records the normal and storage-clear UF2 file sizes and SHA256 hashes so
-`artifact_or_notes` can point to an exact artifact set.
+records the normal and storage-clear UF2 file sizes and SHA256 hashes, and
+rejects files that do not have valid UF2 magic, payload size, block numbering,
+and declared block count, so `artifact_or_notes` can point to an exact artifact
+set.
 `cargo make firmware-artifact-manifest-current` records the same hashes in
 `firmware-artifacts.local.json`, or in `FIRMWARE_ARTIFACT_MANIFEST` when set,
 and requires a clean current tag or commit for its `firmware_ref`.
@@ -384,9 +386,11 @@ When `--firmware-artifact-manifest` is supplied to a migration-status command,
 every validated hardware evidence note must mention that manifest's
 `pair_sha256`, even for partial evidence dashboards. This keeps each counted
 hardware observation tied to the exact normal/reset UF2 files that were
-flashed. Plain report commands render these problems in the error list; use
-`--require-hardware-classified` or the final cargo-make gates when the command
-must fail on stale or incomplete artifact evidence.
+flashed. The dashboard also checks that UF2, Intel HEX, and DFU files have the
+expected artifact format, including Intel HEX checksums and EOF records. Plain
+report commands render these problems in the
+error list; use `--require-hardware-classified` or the final cargo-make gates
+when the command must fail on stale or incomplete artifact evidence.
 For final validation, each validated evidence entry must also list at least one
 non-empty real file in `artifact_paths`; relative paths are resolved under
 `EVIDENCE_ARTIFACT_ROOT` when that environment variable is set, or the current

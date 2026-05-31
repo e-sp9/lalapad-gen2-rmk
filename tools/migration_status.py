@@ -371,6 +371,14 @@ def firmware_artifact_status(
                                     f"firmware artifact manifest {path} file DFU manifest "
                                     f"must be valid{suffix}"
                                 )
+                    if expected_spec is not None:
+                        errors.extend(
+                            f"firmware artifact manifest {path} file content is invalid: {error}"
+                            for error in firmware_artifact_specs.artifact_file_errors(
+                                artifact_path,
+                                expected_spec,
+                            )
+                        )
 
     pair_digest_payload = json.dumps(
         [

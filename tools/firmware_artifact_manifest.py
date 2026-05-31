@@ -129,6 +129,10 @@ def build_manifest(
             if spec.required_group in required_groups:
                 errors.append(f"missing required artifact: {spec.path}")
             continue
+        errors.extend(
+            f"invalid {spec.kind} artifact {spec.path}: {error}"
+            for error in firmware_artifact_specs.artifact_file_errors(root / spec.path, spec)
+        )
         if spec.kind == firmware_artifact_specs.DFU_ARTIFACT_KIND:
             dfu = entry.get("dfu_manifest", {})
             if not isinstance(dfu, dict) or not dfu.get("valid"):

@@ -578,9 +578,10 @@ is supplied, every validated hardware evidence note must mention that
 manifest's `pair_sha256`, so both partial hardware dashboards and final
 hardware claims stay tied to the exact generated normal/reset UF2 artifact hashes. The
 dashboard also re-reads the artifact files under `--artifact-root` (default:
-the current directory) and checks their recorded size and SHA256, so a stale
-`firmware-artifacts.local.json` cannot silently validate a different local UF2
-set. Plain report commands still render these as dashboard errors; add
+the current directory), checks their recorded size and SHA256, and verifies
+that UF2 block metadata, Intel HEX checksums and EOF records, and DFU manifests
+have the expected shape, so a stale or spoofed `firmware-artifacts.local.json`
+cannot silently validate a different local artifact set. Plain report commands still render these as dashboard errors; add
 `--require-hardware-classified` or use the final cargo-make gates when stale or
 incomplete artifact evidence should make the command fail.
 Use `--evidence-template > hardware-validation-evidence.local.toml` to generate

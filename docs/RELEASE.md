@@ -69,7 +69,8 @@ mention the artifact manifest `pair_sha256`, so the observation is bound to the
 exact normal and storage-clear UF2 files that were flashed. It also re-reads the local
 artifact files listed by the manifest under `--artifact-root` (the current
 directory by default) and rejects stale manifests whose size or SHA256 no
-longer matches the current files. The final gate also rejects evidence files
+longer matches the current files, or whose UF2 block metadata, Intel HEX
+checksum and EOF record, or DFU manifest shape is invalid. The final gate also rejects evidence files
 that are missing the generated `metadata.hardware_check_inventory_sha256`, or
 whose hash no longer matches the current hardware validation manifest. Each
 validated note must also mention the per-check evidence artifact types listed by

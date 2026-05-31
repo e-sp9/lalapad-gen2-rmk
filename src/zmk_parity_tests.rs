@@ -92,6 +92,22 @@ fn evidence_artifact_fixture_bytes(extension: &str) -> Vec<u8> {
     }
 }
 
+fn uf2_fixture_bytes(addr: u32, payload: &[u8]) -> Vec<u8> {
+    let mut block = vec![0u8; 512];
+    for (offset, value) in [
+        (0, 0x0A324655u32),
+        (4, 0x9E5D5157u32),
+        (12, addr),
+        (16, payload.len() as u32),
+        (24, 1u32),
+        (508, 0x0AB16F30u32),
+    ] {
+        block[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
+    }
+    block[32..32 + payload.len()].copy_from_slice(payload);
+    block
+}
+
 fn makefile_task_block(task: &str) -> &str {
     let marker = format!("[tasks.{task}]");
     let start = MAKEFILE_TOML
@@ -258,22 +274,26 @@ fn test_firmware_artifact_fixture(
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&root);
+    let central_uf2 = uf2_fixture_bytes(0x26000, b"central uf2");
+    let peripheral_uf2 = uf2_fixture_bytes(0x27000, b"peripheral uf2");
+    let reset_central_uf2 = uf2_fixture_bytes(0x73000, b"reset central uf2");
+    let reset_peripheral_uf2 = uf2_fixture_bytes(0x74000, b"reset peripheral uf2");
     for (path, contents) in [
         (
             "firmware/normal/lalapad-gen2-rmk-central.uf2",
-            b"central uf2".as_slice(),
+            central_uf2.as_slice(),
         ),
         (
             "firmware/normal/lalapad-gen2-rmk-peripheral.uf2",
-            b"peripheral uf2".as_slice(),
+            peripheral_uf2.as_slice(),
         ),
         (
             "firmware/reset/lalapad-gen2-rmk-reset-central.uf2",
-            b"reset central uf2".as_slice(),
+            reset_central_uf2.as_slice(),
         ),
         (
             "firmware/reset/lalapad-gen2-rmk-reset-peripheral.uf2",
-            b"reset peripheral uf2".as_slice(),
+            reset_peripheral_uf2.as_slice(),
         ),
     ] {
         let target = root.join(path);
@@ -2252,6 +2272,82 @@ dst.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
         "invalid DFU file should be reported by migration status"
     );
 
+    let invalid_uf2_manifest_path =
+        artifact_path.with_file_name("invalid-uf2-firmware-artifacts.local.json");
+    let central_uf2_path = artifact_root.join("firmware/normal/lalapad-gen2-rmk-central.uf2");
+    let original_central_uf2 = std::fs::read(&central_uf2_path).unwrap();
+    std::fs::write(&central_uf2_path, b"not really a uf2").unwrap();
+    let rewrite_invalid_uf2 = Command::new("python3")
+        .arg("-c")
+        .arg(
+            r#"
+import hashlib
+import json
+import sys
+from pathlib import Path
+
+src = Path(sys.argv[1])
+dst = Path(sys.argv[2])
+root = Path(sys.argv[3])
+manifest = json.loads(src.read_text())
+for artifact in manifest["artifacts"]:
+    if artifact.get("path") == "firmware/normal/lalapad-gen2-rmk-central.uf2":
+        target = root / artifact["path"]
+        artifact["size"] = target.stat().st_size
+        artifact["sha256"] = hashlib.sha256(target.read_bytes()).hexdigest()
+pair_payload = json.dumps(
+    [
+        {
+            "path": artifact.get("path"),
+            "size": artifact.get("size"),
+            "sha256": artifact.get("sha256"),
+        }
+        for artifact in manifest["artifacts"]
+    ],
+    sort_keys=True,
+    separators=(",", ":"),
+).encode()
+manifest["pair_sha256"] = hashlib.sha256(pair_payload).hexdigest()
+dst.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+"#,
+        )
+        .arg(&artifact_path)
+        .arg(&invalid_uf2_manifest_path)
+        .arg(&artifact_root)
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .output()
+        .unwrap();
+    assert!(
+        rewrite_invalid_uf2.status.success(),
+        "failed to rewrite artifact manifest with invalid UF2 content\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&rewrite_invalid_uf2.stdout),
+        String::from_utf8_lossy(&rewrite_invalid_uf2.stderr)
+    );
+    let invalid_uf2_manifest = run_migration_status(&[
+        "--coverage-baseline",
+        "tools/porting_coverage_baseline.toml",
+        "--hardware-baseline",
+        "tools/hardware_validation_baseline.toml",
+        "--firmware-artifact-manifest",
+        invalid_uf2_manifest_path.to_str().unwrap(),
+        "--artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--require-hardware-classified",
+    ]);
+    let _ = std::fs::remove_file(&invalid_uf2_manifest_path);
+    std::fs::write(&central_uf2_path, original_central_uf2).unwrap();
+    assert!(
+        !invalid_uf2_manifest.status.success(),
+        "migration status accepted an artifact manifest with invalid UF2 content\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&invalid_uf2_manifest.stdout),
+        String::from_utf8_lossy(&invalid_uf2_manifest.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&invalid_uf2_manifest.stdout)
+            .contains("firmware/normal/lalapad-gen2-rmk-central.uf2 file content is invalid"),
+        "invalid UF2 content should be reported by migration status"
+    );
+
     let missing_pair_sha = run_migration_status(&[
         "--coverage-baseline",
         "tools/porting_coverage_baseline.toml",
@@ -2873,13 +2969,39 @@ from pathlib import Path
 
 with tempfile.TemporaryDirectory() as tempdir:
     root = Path(tempdir)
+    def uf2(addr, payload):
+        block = bytearray(512)
+        import struct
+        struct.pack_into(
+            "<IIIIIIII",
+            block,
+            0,
+            0x0A324655,
+            0x9E5D5157,
+            0,
+            addr,
+            len(payload),
+            0,
+            1,
+            0,
+        )
+        block[32:32 + len(payload)] = payload
+        struct.pack_into("<I", block, 508, 0x0AB16F30)
+        return bytes(block)
+    def ihex(data):
+        body = bytes([len(data), 0, 0, 0]) + data
+        checksum = (-sum(body)) & 0xff
+        return b":" + body.hex().upper().encode() + f"{checksum:02X}\n:00000001FF\n".encode()
+
+    central_uf2_bytes = uf2(0x26000, b"central uf2")
+    central_hex_bytes = ihex(b"C")
     files = {
-        "firmware/normal/lalapad-gen2-rmk-central.uf2": b"central uf2",
-        "firmware/normal/lalapad-gen2-rmk-peripheral.uf2": b"peripheral uf2",
-        "firmware/hex/lalapad-gen2-rmk-central.hex": b":central\n",
-        "firmware/hex/lalapad-gen2-rmk-peripheral.hex": b":peripheral\n",
-        "firmware/reset/lalapad-gen2-rmk-reset-central.uf2": b"reset central uf2",
-        "firmware/reset/lalapad-gen2-rmk-reset-peripheral.uf2": b"reset peripheral uf2",
+        "firmware/normal/lalapad-gen2-rmk-central.uf2": central_uf2_bytes,
+        "firmware/normal/lalapad-gen2-rmk-peripheral.uf2": uf2(0x27000, b"peripheral uf2"),
+        "firmware/hex/lalapad-gen2-rmk-central.hex": central_hex_bytes,
+        "firmware/hex/lalapad-gen2-rmk-peripheral.hex": ihex(b"P"),
+        "firmware/reset/lalapad-gen2-rmk-reset-central.uf2": uf2(0x73000, b"reset central uf2"),
+        "firmware/reset/lalapad-gen2-rmk-reset-peripheral.uf2": uf2(0x74000, b"reset peripheral uf2"),
     }
     for path, contents in files.items():
         target = root / path
@@ -2983,6 +3105,54 @@ with tempfile.TemporaryDirectory() as tempdir:
         text=True,
     )
 
+    invalid_uf2 = root / "firmware/normal/lalapad-gen2-rmk-central.uf2"
+    invalid_uf2.write_bytes(b"not really a uf2")
+    invalid_uf2_output = root / "invalid-uf2-firmware-artifacts.local.json"
+    invalid_uf2_output.write_text("stale\n")
+    failed_uf2 = subprocess.run(
+        [
+            sys.executable,
+            "tools/firmware_artifact_manifest.py",
+            "--root",
+            str(root),
+            "--firmware-ref",
+            "v0.3.0",
+            "--require-uf2",
+            "--require-reset-uf2",
+            "--output",
+            str(invalid_uf2_output),
+        ],
+        cwd=Path.cwd(),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    invalid_uf2.write_bytes(central_uf2_bytes)
+
+    invalid_hex = root / "firmware/hex/lalapad-gen2-rmk-central.hex"
+    invalid_hex.write_bytes(b":020001040000F9\n:00000001FF\n")
+    invalid_hex_output = root / "invalid-hex-firmware-artifacts.local.json"
+    invalid_hex_output.write_text("stale\n")
+    failed_hex = subprocess.run(
+        [
+            sys.executable,
+            "tools/firmware_artifact_manifest.py",
+            "--root",
+            str(root),
+            "--firmware-ref",
+            "v0.3.0",
+            "--require-uf2",
+            "--require-reset-uf2",
+            "--output",
+            str(invalid_hex_output),
+        ],
+        cwd=Path.cwd(),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    invalid_hex.write_bytes(central_hex_bytes)
+
     missing = root / "firmware/normal/lalapad-gen2-rmk-peripheral.uf2"
     missing.unlink()
     stale_output = root / "stale-firmware-artifacts.local.json"
@@ -3019,7 +3189,15 @@ print(json.dumps({
     "failed_dfu_stdout": failed_dfu.stdout,
     "failed_dfu_stderr": failed_dfu.stderr,
     "invalid_dfu_output_exists_after_failure": invalid_dfu_output.exists(),
-    "central_uf2_sha256": hashlib.sha256(b"central uf2").hexdigest(),
+    "failed_uf2_code": failed_uf2.returncode,
+    "failed_uf2_stdout": failed_uf2.stdout,
+    "failed_uf2_stderr": failed_uf2.stderr,
+    "invalid_uf2_output_exists_after_failure": invalid_uf2_output.exists(),
+    "failed_hex_code": failed_hex.returncode,
+    "failed_hex_stdout": failed_hex.stdout,
+    "failed_hex_stderr": failed_hex.stderr,
+    "invalid_hex_output_exists_after_failure": invalid_hex_output.exists(),
+    "central_uf2_sha256": hashlib.sha256(central_uf2_bytes).hexdigest(),
     "failed_code": failed.returncode,
     "failed_stdout": failed.stdout,
     "failed_stderr": failed.stderr,
@@ -3059,7 +3237,7 @@ print(json.dumps({
     assert_eq!(central_uf2["role"].as_str(), Some("central"));
     assert_eq!(central_uf2["side"].as_str(), Some("right"));
     assert_eq!(central_uf2["kind"].as_str(), Some("uf2"));
-    assert_eq!(central_uf2["size"].as_i64(), Some(11));
+    assert_eq!(central_uf2["size"].as_i64(), Some(512));
     assert_eq!(
         central_uf2["sha256"].as_str(),
         parsed["central_uf2_sha256"].as_str()
@@ -3107,6 +3285,30 @@ print(json.dumps({
             .as_str()
             .unwrap()
             .contains("manifest.application missing bin_file or dat_file")
+    );
+    assert_ne!(parsed["failed_uf2_code"].as_i64(), Some(0));
+    assert_eq!(parsed["failed_uf2_stdout"].as_str(), Some(""));
+    assert_eq!(
+        parsed["invalid_uf2_output_exists_after_failure"].as_bool(),
+        Some(false)
+    );
+    assert!(
+        parsed["failed_uf2_stderr"]
+            .as_str()
+            .unwrap()
+            .contains("invalid uf2 artifact firmware/normal/lalapad-gen2-rmk-central.uf2")
+    );
+    assert_ne!(parsed["failed_hex_code"].as_i64(), Some(0));
+    assert_eq!(parsed["failed_hex_stdout"].as_str(), Some(""));
+    assert_eq!(
+        parsed["invalid_hex_output_exists_after_failure"].as_bool(),
+        Some(false)
+    );
+    assert!(
+        parsed["failed_hex_stderr"]
+            .as_str()
+            .unwrap()
+            .contains("Intel HEX record type 4 must use address 0000")
     );
     assert_ne!(parsed["failed_code"].as_i64(), Some(0));
     assert_eq!(parsed["failed_stdout"].as_str(), Some(""));
