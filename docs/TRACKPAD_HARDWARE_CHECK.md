@@ -15,6 +15,17 @@ manifest, evidence overlay, checklist, and migration dashboard:
 cargo make hardware-validation-session-current
 ```
 
+If this local build fails before generating the session files, check the
+toolchain setup before changing firmware code:
+
+- `Unable to find libclang`: install system `libclang`, or use the ignored
+  project helper venv with `LIBCLANG_PATH` pointing at
+  `.venv-libclang/lib/python3.12/site-packages/clang/native`.
+- `stdint.h file not found` from bindgen: rerun with
+  `BINDGEN_EXTRA_CLANG_ARGS="-nostdinc -I$PWD/.bindgen-headers"`.
+- `rustc unexpectedly overflowed its stack`: rerun with
+  `RUST_MIN_STACK=16777216`.
+
 This writes ignored local files:
 
 - `firmware-artifacts.local.json`
