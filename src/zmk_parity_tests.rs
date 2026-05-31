@@ -6412,6 +6412,7 @@ fn local_validation_entrypoints_match_ci_gates() {
             && migration_status_final_task.contains("--require-hardware-validated")
             && migration_status_final_task.contains("--require-evidence-inventory")
             && migration_status_final_task.contains("--require-evidence-artifact-paths")
+            && migration_status_final_task.contains("--require-evidence-artifact-hashes")
             && migration_status_final_task
                 .contains("--evidence-artifact-root \"${EVIDENCE_ARTIFACT_ROOT:-.}\"")
             && migration_status_final_task.contains("--require-firmware-ref \"$FIRMWARE_REF\"")
@@ -6445,6 +6446,7 @@ fn local_validation_entrypoints_match_ci_gates() {
             && migration_status_final_current_task.contains("--require-hardware-validated")
             && migration_status_final_current_task.contains("--require-evidence-inventory")
             && migration_status_final_current_task.contains("--require-evidence-artifact-paths")
+            && migration_status_final_current_task.contains("--require-evidence-artifact-hashes")
             && migration_status_final_current_task
                 .contains("--require-firmware-ref \"$firmware_ref\"")
             && migration_status_final_current_task
@@ -10967,6 +10969,49 @@ with tempfile.TemporaryDirectory() as tempdir:
 with tempfile.TemporaryDirectory() as tempdir:
     root = Path(tempdir)
     makefile = Path("Makefile.toml").read_text()
+    before, marker, after = makefile.partition("[tasks.migration-status-final]")
+    assert marker
+    next_task = after.find("\n[tasks.")
+    assert next_task >= 0
+    task_block = marker + after[:next_task]
+    tail = after[next_task:]
+    (root / "Makefile.toml").write_text(
+        before
+        + task_block.replace("--require-evidence-artifact-hashes", "", 1)
+        + tail,
+        encoding="utf-8",
+    )
+    bad_migration_final_artifact_hash_gate = pc.check_makefile_task_invariants(
+        manifest,
+        root,
+    )
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    makefile = Path("Makefile.toml").read_text()
+    before, marker, after = makefile.partition("[tasks.migration-status-final-current]")
+    assert marker
+    next_task = after.find("\n[tasks.")
+    if next_task < 0:
+        task_block = marker + after
+        tail = ""
+    else:
+        task_block = marker + after[:next_task]
+        tail = after[next_task:]
+    (root / "Makefile.toml").write_text(
+        before
+        + task_block.replace("--require-evidence-artifact-hashes", "", 1)
+        + tail,
+        encoding="utf-8",
+    )
+    bad_current_migration_final_artifact_hash_gate = pc.check_makefile_task_invariants(
+        manifest,
+        root,
+    )
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    makefile = Path("Makefile.toml").read_text()
     before, marker, after = makefile.partition("[tasks.hardware-validation-finalize-evidence]")
     assert marker
     next_task = after.find("\n[tasks.")
@@ -11087,6 +11132,8 @@ print(json.dumps({
     "bad_current_final_task": pack(bad_current_final_task),
     "bad_current_final_dependency": pack(bad_current_final_dependency),
     "bad_hardware_hash_task": pack(bad_hardware_hash_task),
+    "bad_migration_final_artifact_hash_gate": pack(bad_migration_final_artifact_hash_gate),
+    "bad_current_migration_final_artifact_hash_gate": pack(bad_current_migration_final_artifact_hash_gate),
     "bad_hardware_finalize_guard": pack(bad_hardware_finalize_guard),
     "bad_hardware_finalize_release_gate": pack(bad_hardware_finalize_release_gate),
     "bad_hardware_finalize_hashed_evidence_binding": pack(bad_hardware_finalize_hashed_evidence_binding),
@@ -11508,6 +11555,40 @@ print(json.dumps({
             .as_str()
             .unwrap()
             .contains("--evidence-with-artifact-hashes")
+    );
+
+    let bad_migration_final_artifact_hash_gate = parsed["bad_migration_final_artifact_hash_gate"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == "makefile_migration_final_checks_firmware_artifacts")
+        .expect("changed final migration artifact hash gate result is missing");
+    assert_eq!(bad_migration_final_artifact_hash_gate["kind"], "build_task");
+    assert_eq!(bad_migration_final_artifact_hash_gate["ok"], false);
+    assert!(
+        bad_migration_final_artifact_hash_gate["message"]
+            .as_str()
+            .unwrap()
+            .contains("--require-evidence-artifact-hashes")
+    );
+
+    let bad_current_migration_final_artifact_hash_gate =
+        parsed["bad_current_migration_final_artifact_hash_gate"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|result| result["id"] == "makefile_current_migration_final_uses_clean_git_ref")
+            .expect("changed current final migration artifact hash gate result is missing");
+    assert_eq!(
+        bad_current_migration_final_artifact_hash_gate["kind"],
+        "build_task"
+    );
+    assert_eq!(bad_current_migration_final_artifact_hash_gate["ok"], false);
+    assert!(
+        bad_current_migration_final_artifact_hash_gate["message"]
+            .as_str()
+            .unwrap()
+            .contains("--require-evidence-artifact-hashes")
     );
 
     let bad_hardware_finalize_guard = parsed["bad_hardware_finalize_guard"]

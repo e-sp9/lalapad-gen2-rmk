@@ -3148,6 +3148,7 @@ script_contains = [
   "--require-zmk-source-commit",
   "--require-evidence-inventory",
   "--require-evidence-artifact-paths",
+  "--require-evidence-artifact-hashes",
   "--require-hardware-validated",
   "--require-firmware-ref \"$FIRMWARE_REF\"",
 ]
@@ -3176,6 +3177,7 @@ script_contains = [
   "--require-hardware-classified",
   "--require-evidence-inventory",
   "--require-evidence-artifact-paths",
+  "--require-evidence-artifact-hashes",
   "--require-hardware-validated",
   "--firmware-artifact-manifest \"${FIRMWARE_ARTIFACT_MANIFEST:-firmware-artifacts.local.json}\"",
   "--evidence-artifact-root \"${EVIDENCE_ARTIFACT_ROOT:-.}\"",
