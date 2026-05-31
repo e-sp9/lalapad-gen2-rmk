@@ -3,7 +3,9 @@
 
 from __future__ import annotations
 
+import json
 import struct
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -108,6 +110,45 @@ def artifact_file_errors(path: Path, spec: ArtifactSpec) -> list[str]:
     if spec.kind == "ihex":
         return ihex_file_errors(path)
     return []
+
+
+def dfu_manifest(path: Path) -> dict[str, object]:
+    try:
+        with zipfile.ZipFile(path) as archive:
+            try:
+                raw = archive.read("manifest.json")
+            except KeyError:
+                return {"valid": False, "error": "manifest.json missing"}
+            try:
+                manifest = json.loads(raw.decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                return {"valid": False, "error": f"manifest.json is invalid JSON: {exc}"}
+    except zipfile.BadZipFile as exc:
+        return {"valid": False, "error": f"invalid zip file: {exc}"}
+    if not isinstance(manifest, dict):
+        return {"valid": False, "error": "manifest.json root must be an object"}
+    app_root = manifest.get("manifest", {})
+    app = app_root.get("application", {}) if isinstance(app_root, dict) else {}
+    if not isinstance(app, dict):
+        return {"valid": False, "error": "manifest.application must be an object"}
+    application = {
+        key: app.get(key)
+        for key in ["bin_file", "dat_file", "init_packet_data", "firmware_size"]
+        if key in app
+    }
+    if not all(
+        isinstance(app.get(key), str) and app.get(key).strip()
+        for key in ["bin_file", "dat_file"]
+    ):
+        return {
+            "valid": False,
+            "error": "manifest.application missing bin_file or dat_file",
+            "application": application,
+        }
+    return {
+        "valid": True,
+        "application": application,
+    }
 
 
 def uf2_file_errors(path: Path) -> list[str]:

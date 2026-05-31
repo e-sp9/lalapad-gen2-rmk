@@ -1423,6 +1423,15 @@ def firmware_artifact_manifest_errors(
                         None,
                     )
                     if expected_spec is not None:
+                        if expected_spec.kind == firmware_artifact_specs.DFU_ARTIFACT_KIND:
+                            actual_dfu = firmware_artifact_specs.dfu_manifest(resolved_path)
+                            if actual_dfu.get("valid") is not True:
+                                reason = str(actual_dfu.get("error", "")).strip()
+                                suffix = f": {reason}" if reason else ""
+                                errors.append(
+                                    f"firmware artifact manifest {path} file DFU manifest "
+                                    f"must be valid{suffix}"
+                                )
                         errors.extend(
                             f"firmware artifact manifest {path} file content is invalid: {error}"
                             for error in firmware_artifact_specs.artifact_file_errors(

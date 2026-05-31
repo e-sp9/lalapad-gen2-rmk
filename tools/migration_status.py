@@ -4,9 +4,7 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
-import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,12 +12,9 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import firmware_artifact_manifest
 import firmware_artifact_specs
 import hardware_validation
 import porting_coverage
-
-SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
 @dataclass
@@ -220,197 +215,44 @@ def firmware_artifact_status(
     if artifact_manifest_path is None:
         return None
 
-    errors: list[str] = []
-    resolved_artifact_root = artifact_root.resolve()
-    try:
-        artifact_manifest = json.loads(artifact_manifest_path.read_text(encoding="utf-8"))
-    except OSError as e:
+    artifact_manifest, errors = hardware_validation.load_firmware_artifact_manifest(
+        artifact_manifest_path
+    )
+    if artifact_manifest is None:
         return {
             "path": str(artifact_manifest_path),
             "firmware_ref": "",
             "artifact_count": 0,
             "pair_sha256": "",
-            "errors": [f"failed to read firmware artifact manifest {artifact_manifest_path}: {e}"],
-        }
-    except json.JSONDecodeError as e:
-        return {
-            "path": str(artifact_manifest_path),
-            "firmware_ref": "",
-            "artifact_count": 0,
-            "pair_sha256": "",
-            "errors": [f"firmware artifact manifest {artifact_manifest_path} is invalid JSON: {e}"],
-        }
-    if not isinstance(artifact_manifest, dict):
-        return {
-            "path": str(artifact_manifest_path),
-            "firmware_ref": "",
-            "artifact_count": 0,
-            "pair_sha256": "",
-            "errors": [f"firmware artifact manifest {artifact_manifest_path} must be a JSON object"],
+            "required_uf2_paths": [
+                spec.path
+                for spec in firmware_artifact_specs.HARDWARE_VALIDATION_REQUIRED_ARTIFACTS
+            ],
+            "errors": errors,
         }
 
+    errors.extend(
+        hardware_validation.firmware_artifact_manifest_errors(
+            artifact_manifest,
+            artifact_root,
+        )
+    )
     firmware_ref = str(artifact_manifest.get("firmware_ref", "")).strip()
-    if not firmware_ref:
-        errors.append("firmware artifact manifest missing firmware_ref")
-    elif hardware_validation.is_mutable_firmware_ref(firmware_ref):
-        errors.append("firmware artifact manifest firmware_ref must be immutable")
     if required_firmware_ref is not None and firmware_ref != required_firmware_ref:
         errors.append(
             "firmware artifact manifest firmware_ref "
             f"{firmware_ref!r} does not match required {required_firmware_ref!r}"
         )
-
     pair_sha256 = str(artifact_manifest.get("pair_sha256", "")).strip()
-    if not SHA256_RE.fullmatch(pair_sha256):
-        errors.append("firmware artifact manifest pair_sha256 must be a SHA256 hex string")
-
     artifacts = artifact_manifest.get("artifacts", [])
+    artifact_count = artifact_manifest.get("artifact_count")
     if not isinstance(artifacts, list):
         artifacts = []
-        errors.append("firmware artifact manifest artifacts must be a list")
-    artifact_count = artifact_manifest.get("artifact_count")
     if not isinstance(artifact_count, int):
-        errors.append("firmware artifact manifest artifact_count must be an integer")
         artifact_count = len(artifacts)
-    elif artifact_count != len(artifacts):
-        errors.append(
-            "firmware artifact manifest artifact_count "
-            f"{artifact_count} does not match artifacts length {len(artifacts)}"
-        )
-    artifacts_by_path = {
-        str(artifact.get("path", "")): artifact
-        for artifact in artifacts
-        if isinstance(artifact, dict)
-    }
-    if len(artifacts_by_path) != len(artifacts):
-        errors.append("firmware artifact manifest artifacts must be objects with unique paths")
-
-    known_specs_by_path = {spec.path: spec for spec in firmware_artifact_specs.ARTIFACTS}
-    for artifact in artifacts:
-        if not isinstance(artifact, dict):
-            continue
-        path = str(artifact.get("path", "")).strip()
-        size = artifact.get("size")
-        sha256 = str(artifact.get("sha256", "")).strip()
-        if not path:
-            errors.append("firmware artifact manifest artifact path must be present")
-        elif path not in firmware_artifact_specs.KNOWN_ARTIFACT_PATHS:
-            errors.append(f"firmware artifact manifest {path} is not a known artifact path")
-        if not isinstance(size, int) or size <= 0:
-            errors.append(f"firmware artifact manifest {path or '<missing path>'} size must be positive")
-        if not SHA256_RE.fullmatch(sha256):
-            errors.append(
-                f"firmware artifact manifest {path or '<missing path>'} sha256 must be a SHA256 hex string"
-            )
-        expected_spec = known_specs_by_path.get(path)
-        if expected_spec is not None:
-            for field, expected_value in [
-                ("role", expected_spec.role),
-                ("side", expected_spec.side),
-                ("kind", expected_spec.kind),
-            ]:
-                if artifact.get(field) != expected_value:
-                    errors.append(
-                        f"firmware artifact manifest {path} {field} must be {expected_value}"
-                    )
-            if expected_spec.kind == firmware_artifact_specs.DFU_ARTIFACT_KIND:
-                dfu = artifact.get("dfu_manifest")
-                if not isinstance(dfu, dict) or dfu.get("valid") is not True:
-                    errors.append(
-                        f"firmware artifact manifest {path} DFU manifest must be valid"
-                    )
-                else:
-                    app = dfu.get("application")
-                    if not isinstance(app, dict) or not all(
-                        isinstance(app.get(field), str) and app.get(field).strip()
-                        for field in ["bin_file", "dat_file"]
-                    ):
-                        errors.append(
-                            f"firmware artifact manifest {path} DFU manifest "
-                            "must include application bin_file and dat_file"
-                        )
-        if path:
-            artifact_path = Path(path)
-            if artifact_path.is_absolute():
-                errors.append(f"firmware artifact manifest {path} path must be relative")
-            else:
-                artifact_path = (resolved_artifact_root / artifact_path).resolve(strict=False)
-                try:
-                    artifact_path.relative_to(resolved_artifact_root)
-                except ValueError:
-                    errors.append(
-                        f"firmware artifact manifest {path} path must stay inside artifact root"
-                    )
-                    continue
-                try:
-                    actual_size = artifact_path.stat().st_size
-                except OSError as e:
-                    errors.append(
-                        f"firmware artifact manifest {path} file is not readable: {e}"
-                    )
-                else:
-                    if isinstance(size, int) and actual_size != size:
-                        errors.append(
-                            f"firmware artifact manifest {path} size {size} "
-                            f"does not match file size {actual_size}"
-                        )
-                    if SHA256_RE.fullmatch(sha256):
-                        actual_sha256 = firmware_artifact_manifest.sha256_file(artifact_path)
-                        if actual_sha256 != sha256:
-                            errors.append(
-                                f"firmware artifact manifest {path} sha256 {sha256!r} "
-                                f"does not match file {actual_sha256!r}"
-                            )
-                        elif (
-                            expected_spec is not None
-                            and expected_spec.kind == firmware_artifact_specs.DFU_ARTIFACT_KIND
-                        ):
-                            actual_dfu = firmware_artifact_manifest.dfu_manifest(artifact_path)
-                            if actual_dfu.get("valid") is not True:
-                                reason = str(actual_dfu.get("error", "")).strip()
-                                suffix = f": {reason}" if reason else ""
-                                errors.append(
-                                    f"firmware artifact manifest {path} file DFU manifest "
-                                    f"must be valid{suffix}"
-                                )
-                    if expected_spec is not None:
-                        errors.extend(
-                            f"firmware artifact manifest {path} file content is invalid: {error}"
-                            for error in firmware_artifact_specs.artifact_file_errors(
-                                artifact_path,
-                                expected_spec,
-                            )
-                        )
-
-    pair_digest_payload = json.dumps(
-        [
-            {
-                "path": artifact.get("path"),
-                "size": artifact.get("size"),
-                "sha256": artifact.get("sha256"),
-            }
-            for artifact in artifacts
-            if isinstance(artifact, dict)
-        ],
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode()
-    expected_pair_sha256 = hashlib.sha256(pair_digest_payload).hexdigest()
-    if pair_sha256 and pair_sha256 != expected_pair_sha256:
-        errors.append(
-            "firmware artifact manifest pair_sha256 "
-            f"{pair_sha256!r} does not match artifact entries {expected_pair_sha256!r}"
-        )
 
     required_artifact_specs = firmware_artifact_specs.HARDWARE_VALIDATION_REQUIRED_ARTIFACTS
     required_uf2_paths = [spec.path for spec in required_artifact_specs]
-    for spec in required_artifact_specs:
-        artifact = artifacts_by_path.get(spec.path)
-        if artifact is None:
-            errors.append(
-                f"firmware artifact manifest missing required {spec.kind} {spec.path}"
-            )
-            continue
 
     return {
         "path": str(artifact_manifest_path),
