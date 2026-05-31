@@ -6991,6 +6991,7 @@ fn local_validation_entrypoints_match_ci_gates() {
         "tools/hardware_validation.py --evidence path/to/evidence.toml --firmware-artifact-manifest firmware-artifacts.local.json --evidence-artifact-root . --require-validated",
         "cargo make reset-uf2 --release",
         "python3 tools/firmware_artifact_manifest.py --require-uf2 --require-reset-uf2 > firmware-artifacts.local.json",
+        "tools/firmware_artifact_specs.py",
         "cargo make firmware-artifact-manifest-current",
         "cargo make rmk-zmk-scenario-tests",
         "cargo make rmk-behavior-tests",

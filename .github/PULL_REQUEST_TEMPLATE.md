@@ -47,6 +47,7 @@
 - [ ] `cargo make uf2 --release`, if release artifacts or flashing changed
 - [ ] `cargo make reset-uf2 --release`, if release artifacts, flashing, or storage reset behavior changed
 - [ ] `python3 tools/firmware_artifact_manifest.py --require-uf2 --require-reset-uf2 > firmware-artifacts.local.json`, if release artifacts or flashed files changed
+- [ ] `tools/firmware_artifact_specs.py` changes keep the firmware CI artifact paths, release assets, manifest generator, and web flasher bundle names aligned
 - [ ] `cargo make firmware-artifact-manifest-current`, if release artifacts or flashed files changed from a clean local commit
 
 ## Hardware Notes
