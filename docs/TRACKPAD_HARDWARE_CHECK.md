@@ -2,10 +2,71 @@
 
 Use this checklist when the IQS9151 trackpad does not move the cursor or when long continuous touches still stall.
 
-The machine-readable hardware validation tracker is
-`tools/hardware_validation_manifest.toml`. After running these checks, update
-the relevant check status and evidence there so the software porting coverage
-gate and real-device validation rate stay separate.
+The machine-readable hardware validation denominator is
+`tools/hardware_validation_manifest.toml`, but do not edit that manifest to
+record a bench run. It defines the stable check inventory. Capture each bench
+run in a local evidence overlay and retained evidence files so the software
+porting coverage gate and real-device validation rate stay separate.
+
+Before testing a clean current build, generate the paired firmware artifact
+manifest, evidence overlay, checklist, and migration dashboard:
+
+```sh
+cargo make hardware-validation-session-current
+```
+
+This writes ignored local files:
+
+- `firmware-artifacts.local.json`
+- `hardware-validation-evidence.local.toml`
+- `hardware-validation-checklist.local.md`
+- `migration-status.local.md`
+
+While running the checks below, store retained photos, videos, logs, Vial
+screenshots, scope captures, and multimeter notes under
+`hardware-evidence/`. For each validated item in
+`hardware-validation-evidence.local.toml`, fill:
+
+- `status = "validated"`
+- `validated_at`
+- `tester`
+- `firmware_ref`
+- `artifact_paths`
+- `artifact_path_sha256`
+- `artifact_or_notes`
+
+Each `artifact_or_notes` entry must name the required observation terms from
+the matching checklist item, mention the retained evidence file, and include
+the generated firmware artifact pair binding such as
+`firmware artifact pair_sha256 <sha256>;`. The generated evidence template
+contains copy-aid comments for these values.
+
+After adding `artifact_paths`, generate a hash-filled overlay. This helper
+prints the updated overlay to stdout; keep the original evidence file as the
+human-edited source and write the hashed copy to a separate ignored file:
+
+```sh
+HARDWARE_EVIDENCE=hardware-validation-evidence.local.toml \
+EVIDENCE_ARTIFACT_ROOT=. \
+cargo make hardware-validation-hash-evidence \
+  > hardware-validation-evidence.hashed.local.toml
+```
+
+When every required item is validated for the current build, run the final
+gate. This command also regenerates
+`hardware-validation-evidence.hashed.local.toml` by default before running the
+final migration gate, so it catches stale `artifact_path_sha256` values:
+
+```sh
+HARDWARE_EVIDENCE=hardware-validation-evidence.local.toml \
+EVIDENCE_ARTIFACT_ROOT=. \
+cargo make hardware-validation-finalize-current
+```
+
+The final gate requires the generated
+`metadata.hardware_check_inventory_sha256`, the firmware artifact manifest,
+the manifest `pair_sha256` in every counted evidence note, and matching
+`artifact_path_sha256` hashes for every retained evidence file.
 
 ## Firmware Baseline
 

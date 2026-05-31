@@ -20,6 +20,7 @@ const PORTING_MD: &str = include_str!("../docs/PORTING.md");
 const PULL_REQUEST_TEMPLATE_MD: &str = include_str!("../.github/PULL_REQUEST_TEMPLATE.md");
 const README_MD: &str = include_str!("../README.md");
 const RELEASE_MD: &str = include_str!("../docs/RELEASE.md");
+const TRACKPAD_HARDWARE_CHECK_MD: &str = include_str!("../docs/TRACKPAD_HARDWARE_CHECK.md");
 const VIAL_JSON: &str = include_str!("../vial.json");
 
 fn keyboard_toml() -> toml::Value {
@@ -7179,6 +7180,25 @@ fn local_validation_entrypoints_match_ci_gates() {
             && RELEASE_MD.contains("Full validation: pass")
             && RELEASE_MD.contains("if the announcement claims complete hardware validation"),
         "release guide should require the final migration status gate before complete hardware-validation claims"
+    );
+    assert!(
+        TRACKPAD_HARDWARE_CHECK_MD.contains("cargo make hardware-validation-session-current")
+            && TRACKPAD_HARDWARE_CHECK_MD.contains("firmware-artifacts.local.json")
+            && TRACKPAD_HARDWARE_CHECK_MD.contains("hardware-validation-evidence.local.toml")
+            && TRACKPAD_HARDWARE_CHECK_MD.contains("hardware-validation-checklist.local.md")
+            && TRACKPAD_HARDWARE_CHECK_MD
+                .contains("hardware-validation-evidence.hashed.local.toml")
+            && TRACKPAD_HARDWARE_CHECK_MD.contains("hardware-evidence/")
+            && TRACKPAD_HARDWARE_CHECK_MD.contains("artifact_paths")
+            && TRACKPAD_HARDWARE_CHECK_MD.contains("artifact_path_sha256")
+            && TRACKPAD_HARDWARE_CHECK_MD.contains("cargo make hardware-validation-hash-evidence")
+            && TRACKPAD_HARDWARE_CHECK_MD
+                .contains("cargo make hardware-validation-finalize-current")
+            && TRACKPAD_HARDWARE_CHECK_MD.contains("metadata.hardware_check_inventory_sha256")
+            && TRACKPAD_HARDWARE_CHECK_MD.contains("firmware artifact pair_sha256")
+            && !TRACKPAD_HARDWARE_CHECK_MD
+                .contains("update the relevant check status and evidence there"),
+        "trackpad hardware checklist should document the evidence-overlay/hash/finalize workflow instead of editing the manifest directly"
     );
 
     let manifest = hardware_validation_manifest_toml();
