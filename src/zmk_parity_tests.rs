@@ -3642,6 +3642,124 @@ checks = "not an array"
 }
 
 #[test]
+fn hardware_validation_require_validated_ties_evidence_to_firmware_artifacts() {
+    let firmware_ref = "hardware-validation-artifact-ref";
+    let (artifact_root, artifact_manifest_path, pair_sha256) =
+        test_firmware_artifact_fixture(firmware_ref);
+    let evidence = complete_hardware_evidence_overlay_with_pair_sha_and_artifact_paths(
+        firmware_ref,
+        &pair_sha256,
+        &artifact_root,
+    );
+    let evidence_path = write_temp_file("hardware-validation-artifact-backed-evidence", &evidence);
+
+    let output = run_hardware_validation(&[
+        "--json",
+        "--evidence",
+        evidence_path.to_str().unwrap(),
+        "--firmware-artifact-manifest",
+        artifact_manifest_path.to_str().unwrap(),
+        "--artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--evidence-artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--require-validated",
+    ]);
+    assert!(
+        output.status.success(),
+        "artifact-backed hardware validation failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(parsed["validated"].as_i64(), Some(12));
+    assert_eq!(parsed["total"].as_i64(), Some(12));
+    assert_eq!(parsed["remaining"].as_array().unwrap().len(), 0);
+
+    let without_manifest = run_hardware_validation(&[
+        "--json",
+        "--evidence",
+        evidence_path.to_str().unwrap(),
+        "--evidence-artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--require-validated",
+    ]);
+    assert!(
+        !without_manifest.status.success(),
+        "hardware validation accepted final evidence without a firmware artifact manifest\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&without_manifest.stdout),
+        String::from_utf8_lossy(&without_manifest.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&without_manifest.stdout)
+            .contains("firmware artifact manifest is required"),
+        "--require-validated should explain that firmware artifacts are required"
+    );
+
+    let evidence_without_pair_sha =
+        complete_hardware_evidence_overlay_with_artifact_paths(firmware_ref, &artifact_root);
+    let evidence_without_pair_sha_path = write_temp_file(
+        "hardware-validation-artifact-missing-pair-sha-evidence",
+        &evidence_without_pair_sha,
+    );
+    let missing_pair = run_hardware_validation(&[
+        "--json",
+        "--evidence",
+        evidence_without_pair_sha_path.to_str().unwrap(),
+        "--firmware-artifact-manifest",
+        artifact_manifest_path.to_str().unwrap(),
+        "--artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--evidence-artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--require-validated",
+    ]);
+    assert!(
+        !missing_pair.status.success(),
+        "hardware validation accepted final evidence that did not mention pair_sha256\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&missing_pair.stdout),
+        String::from_utf8_lossy(&missing_pair.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&missing_pair.stdout).contains(&pair_sha256),
+        "missing pair_sha256 failure should name the required firmware artifact pair hash"
+    );
+
+    let central_uf2 = artifact_root.join("firmware/normal/lalapad-gen2-rmk-central.uf2");
+    std::fs::write(
+        &central_uf2,
+        uf2_fixture_bytes(0x26000, b"changed central uf2"),
+    )
+    .unwrap();
+    let stale_artifact = run_hardware_validation(&[
+        "--json",
+        "--evidence",
+        evidence_path.to_str().unwrap(),
+        "--firmware-artifact-manifest",
+        artifact_manifest_path.to_str().unwrap(),
+        "--artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--evidence-artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--require-validated",
+    ]);
+    assert!(
+        !stale_artifact.status.success(),
+        "hardware validation accepted a firmware artifact manifest whose files changed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&stale_artifact.stdout),
+        String::from_utf8_lossy(&stale_artifact.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&stale_artifact.stdout).contains("does not match file"),
+        "stale artifact failure should explain the firmware file hash mismatch"
+    );
+
+    let _ = std::fs::remove_file(&evidence_path);
+    let _ = std::fs::remove_file(&evidence_without_pair_sha_path);
+    let _ = std::fs::remove_dir_all(&artifact_root);
+}
+
+#[test]
 fn hardware_validation_evidence_overlay_can_validate_individual_checks() {
     let evidence = r#"
 [[evidence]]
@@ -6869,7 +6987,7 @@ fn local_validation_entrypoints_match_ci_gates() {
         "tools/hardware_validation.py --evidence-template --artifact-pair-sha256-template <sha256>",
         "Hardware evidence keeps the generated `metadata.hardware_check_inventory_sha256`",
         "tools/hardware_validation.py --evidence path/to/evidence.toml --markdown",
-        "tools/hardware_validation.py --evidence path/to/evidence.toml --require-validated --require-firmware-ref <tag-or-commit>",
+        "tools/hardware_validation.py --evidence path/to/evidence.toml --firmware-artifact-manifest firmware-artifacts.local.json --evidence-artifact-root . --require-validated",
         "cargo make reset-uf2 --release",
         "python3 tools/firmware_artifact_manifest.py --require-uf2 --require-reset-uf2 > firmware-artifacts.local.json",
         "cargo make firmware-artifact-manifest-current",
@@ -7016,8 +7134,8 @@ fn local_validation_entrypoints_match_ci_gates() {
     );
     assert!(
         HARDWARE_VALIDATION_EVIDENCE_EXAMPLE_TOML
-            .contains("tools/hardware_validation.py --evidence path/to/evidence.toml --require-validated --require-firmware-ref <tag-or-commit>"),
-        "hardware evidence example should document complete validation with both all-check and firmware-ref gates"
+            .contains("tools/hardware_validation.py --evidence path/to/evidence.toml --firmware-artifact-manifest firmware-artifacts.local.json --evidence-artifact-root . --require-validated"),
+        "hardware evidence example should document complete validation with all-check and firmware artifact gates"
     );
     assert!(
         HARDWARE_VALIDATION_EVIDENCE_EXAMPLE_TOML

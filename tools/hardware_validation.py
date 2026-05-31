@@ -1299,8 +1299,12 @@ def load_firmware_artifact_manifest(path: Path) -> tuple[dict[str, Any] | None, 
     return manifest, []
 
 
-def firmware_artifact_manifest_errors(manifest: dict[str, Any]) -> list[str]:
+def firmware_artifact_manifest_errors(
+    manifest: dict[str, Any],
+    artifact_root: Path | None = None,
+) -> list[str]:
     errors: list[str] = []
+    resolved_artifact_root = artifact_root.resolve() if artifact_root is not None else None
     firmware_ref = str(manifest.get("firmware_ref", "")).strip()
     if not firmware_ref:
         errors.append("firmware artifact manifest missing firmware_ref")
@@ -1382,6 +1386,50 @@ def firmware_artifact_manifest_errors(manifest: dict[str, Any]) -> list[str]:
                 errors.append(
                     f"firmware artifact manifest {path} path must stay inside artifact root"
                 )
+            elif resolved_artifact_root is not None:
+                resolved_path = (resolved_artifact_root / artifact_path).resolve(strict=False)
+                try:
+                    resolved_path.relative_to(resolved_artifact_root)
+                except ValueError:
+                    errors.append(
+                        f"firmware artifact manifest {path} path must stay inside artifact root"
+                    )
+                    continue
+                try:
+                    actual_size = resolved_path.stat().st_size
+                except OSError as exc:
+                    errors.append(
+                        f"firmware artifact manifest {path} file is not readable: {exc}"
+                    )
+                else:
+                    if isinstance(size, int) and actual_size != size:
+                        errors.append(
+                            f"firmware artifact manifest {path} size {size} "
+                            f"does not match file size {actual_size}"
+                        )
+                    if SHA256_RE.fullmatch(sha256):
+                        actual_sha256 = sha256_file(resolved_path)
+                        if actual_sha256 != sha256:
+                            errors.append(
+                                f"firmware artifact manifest {path} sha256 {sha256!r} "
+                                f"does not match file {actual_sha256!r}"
+                            )
+                    expected_spec = next(
+                        (
+                            spec
+                            for spec in firmware_artifact_specs.ARTIFACTS
+                            if spec.path == path
+                        ),
+                        None,
+                    )
+                    if expected_spec is not None:
+                        errors.extend(
+                            f"firmware artifact manifest {path} file content is invalid: {error}"
+                            for error in firmware_artifact_specs.artifact_file_errors(
+                                resolved_path,
+                                expected_spec,
+                            )
+                        )
     pair_digest_payload = json.dumps(
         [
             {
@@ -1448,7 +1496,7 @@ def as_evidence_template(
         "# Fill this file after testing real hardware, then run:",
         "#",
         "#   python3 tools/hardware_validation.py --evidence path/to/evidence.toml --markdown",
-        "#   python3 tools/hardware_validation.py --evidence path/to/evidence.toml --require-validated",
+        "#   python3 tools/hardware_validation.py --evidence path/to/evidence.toml --firmware-artifact-manifest firmware-artifacts.local.json --evidence-artifact-root . --require-validated",
         "#   python3 tools/hardware_validation.py --evidence path/to/evidence.toml --require-firmware-ref <tag-or-commit>",
         "#",
         "# Entries are keyed by id from tools/hardware_validation_manifest.toml.",
@@ -1832,6 +1880,22 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--firmware-artifact-manifest",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help=(
+            "validate hardware evidence against a generated firmware artifact "
+            "manifest and require each validated note to mention its pair_sha256"
+        ),
+    )
+    parser.add_argument(
+        "--artifact-root",
+        type=Path,
+        default=Path("."),
+        help="directory used to resolve relative paths in --firmware-artifact-manifest",
+    )
+    parser.add_argument(
         "--evidence-artifact-root",
         type=Path,
         default=Path("."),
@@ -1907,22 +1971,31 @@ def main() -> None:
             "--firmware-artifact-manifest-template can only be used with "
             "--evidence-template or --checklist"
         )
-    firmware_artifact_manifest: dict[str, Any] | None = None
+    if args.firmware_artifact_manifest and (args.evidence_template or args.checklist):
+        parser.error(
+            "--firmware-artifact-manifest cannot be used with "
+            "--evidence-template or --checklist; use "
+            "--firmware-artifact-manifest-template instead"
+        )
+    template_firmware_artifact_manifest: dict[str, Any] | None = None
     if args.firmware_artifact_manifest_template is not None:
-        firmware_artifact_manifest, artifact_manifest_errors = load_firmware_artifact_manifest(
-            args.firmware_artifact_manifest_template
+        (
+            template_firmware_artifact_manifest,
+            artifact_manifest_errors,
+        ) = load_firmware_artifact_manifest(args.firmware_artifact_manifest_template)
+        if artifact_manifest_errors:
+            parser.error("; ".join(artifact_manifest_errors))
+        assert template_firmware_artifact_manifest is not None
+        artifact_manifest_errors = firmware_artifact_manifest_errors(
+            template_firmware_artifact_manifest
         )
         if artifact_manifest_errors:
             parser.error("; ".join(artifact_manifest_errors))
-        assert firmware_artifact_manifest is not None
-        artifact_manifest_errors = firmware_artifact_manifest_errors(firmware_artifact_manifest)
-        if artifact_manifest_errors:
-            parser.error("; ".join(artifact_manifest_errors))
         manifest_firmware_ref = str(
-            firmware_artifact_manifest.get("firmware_ref", "")
+            template_firmware_artifact_manifest.get("firmware_ref", "")
         ).strip()
         manifest_pair_sha256 = str(
-            firmware_artifact_manifest.get("pair_sha256", "")
+            template_firmware_artifact_manifest.get("pair_sha256", "")
         ).strip()
         if args.firmware_ref_template and manifest_firmware_ref:
             if args.firmware_ref_template != manifest_firmware_ref:
@@ -1948,6 +2021,47 @@ def main() -> None:
         args.artifact_pair_sha256_template
     ):
         parser.error("--artifact-pair-sha256-template must be a SHA256 hex string")
+
+    validation_artifact_manifest: dict[str, Any] | None = None
+    validation_artifact_errors: list[str] = []
+    required_firmware_ref = args.require_firmware_ref
+    required_artifact_pair_sha256: str | None = None
+    if args.firmware_artifact_manifest is not None:
+        (
+            validation_artifact_manifest,
+            validation_artifact_errors,
+        ) = load_firmware_artifact_manifest(args.firmware_artifact_manifest)
+        if validation_artifact_manifest is not None:
+            validation_artifact_errors.extend(
+                firmware_artifact_manifest_errors(
+                    validation_artifact_manifest,
+                    args.artifact_root,
+                )
+            )
+            manifest_firmware_ref = str(
+                validation_artifact_manifest.get("firmware_ref", "")
+            ).strip()
+            manifest_pair_sha256 = str(
+                validation_artifact_manifest.get("pair_sha256", "")
+            ).strip()
+            if (
+                required_firmware_ref is not None
+                and manifest_firmware_ref
+                and required_firmware_ref != manifest_firmware_ref
+            ):
+                validation_artifact_errors.append(
+                    "--require-firmware-ref "
+                    f"{required_firmware_ref!r} does not match firmware artifact "
+                    f"manifest firmware_ref {manifest_firmware_ref!r}"
+                )
+            elif required_firmware_ref is None and manifest_firmware_ref:
+                required_firmware_ref = manifest_firmware_ref
+            if SHA256_RE.fullmatch(manifest_pair_sha256):
+                required_artifact_pair_sha256 = manifest_pair_sha256
+    elif args.require_validated:
+        validation_artifact_errors.append(
+            "firmware artifact manifest is required when --require-validated is used"
+        )
 
     manifest_doc = load_toml(args.manifest)
     baseline_failures: list[str] = []
@@ -1982,11 +2096,14 @@ def main() -> None:
     )
     summary = summarize(
         manifest,
-        evidence_load_errors + evidence_errors + baseline_failures,
+        evidence_load_errors
+        + evidence_errors
+        + baseline_failures
+        + validation_artifact_errors,
         Path("."),
         args.evidence_artifact_root,
-        args.require_firmware_ref,
-        None,
+        required_firmware_ref,
+        required_artifact_pair_sha256,
         args.require_evidence_artifact_paths or args.require_validated,
         args.require_evidence_artifact_hashes or args.require_validated,
     )
@@ -2000,7 +2117,7 @@ def main() -> None:
                 manifest,
                 args.firmware_ref_template,
                 args.artifact_pair_sha256_template,
-                firmware_artifact_manifest,
+                template_firmware_artifact_manifest,
             ),
             end="",
         )
@@ -2010,7 +2127,7 @@ def main() -> None:
                 manifest,
                 args.firmware_ref_template,
                 args.artifact_pair_sha256_template,
-                firmware_artifact_manifest,
+                template_firmware_artifact_manifest,
             ),
             end="",
         )

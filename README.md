@@ -342,12 +342,15 @@ marked as validated hardware evidence. `artifact_or_notes` must contain a
 concrete photo, log, probe, Vial observation, or similar measured evidence note,
 and it must mention the check-specific observation terms declared by
 `evidence_needles`. Use
-`--require-firmware-ref <tag-or-commit>` to reject stale validated evidence;
-combine it with `--require-validated` when a release needs all hardware checks
-proven for that exact firmware. `--require-validated` also requires the
-generated `metadata.hardware_check_inventory_sha256` and existing non-empty
-`artifact_paths` files plus matching `artifact_path_sha256` hashes for every
-counted validated entry. The
+`--require-firmware-ref <tag-or-commit>` to reject stale validated evidence.
+When a release needs all hardware checks proven for that exact firmware,
+combine the exact ref with `--require-validated` and
+`--firmware-artifact-manifest firmware-artifacts.local.json`.
+`--require-validated` also requires the generated
+`metadata.hardware_check_inventory_sha256`, a firmware artifact manifest,
+the manifest `pair_sha256` in every counted evidence note, and existing
+non-empty `artifact_paths` files plus matching `artifact_path_sha256` hashes for
+every counted validated entry. The
 `--evidence-template` command generates a complete local overlay file
 containing every current hardware check; pass
 `--firmware-ref-template <tag-or-commit>` with it to pre-fill the flashed

@@ -3,7 +3,7 @@
 #
 #   python3 tools/hardware_validation.py --evidence path/to/evidence.toml --markdown
 #   python3 tools/hardware_validation.py --evidence path/to/evidence.toml --require-firmware-ref <tag-or-commit>
-#   python3 tools/hardware_validation.py --evidence path/to/evidence.toml --require-validated --require-firmware-ref <tag-or-commit>
+#   python3 tools/hardware_validation.py --evidence path/to/evidence.toml --firmware-artifact-manifest firmware-artifacts.local.json --evidence-artifact-root . --require-validated
 # Generate a complete overlay with a pre-filled firmware ref:
 #   python3 tools/hardware_validation.py --evidence-template --firmware-ref-template <tag-or-commit> > hardware-validation-evidence.local.toml
 # Generate an artifact-bound overlay after creating firmware-artifacts.local.json:

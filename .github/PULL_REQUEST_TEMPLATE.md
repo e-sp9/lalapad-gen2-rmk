@@ -38,7 +38,7 @@
 - [ ] `python3 tools/hardware_validation.py --evidence-template --firmware-ref-template <tag-or-commit>`, if preparing hardware evidence for a release
 - [ ] `python3 tools/hardware_validation.py --evidence-template --artifact-pair-sha256-template <sha256>`, if preparing artifact-bound hardware evidence for a release
 - [ ] `python3 tools/hardware_validation.py --evidence path/to/evidence.toml --markdown`, if hardware evidence changed
-- [ ] `python3 tools/hardware_validation.py --evidence path/to/evidence.toml --require-validated --require-firmware-ref <tag-or-commit>`, if claiming complete hardware validation for a release
+- [ ] `python3 tools/hardware_validation.py --evidence path/to/evidence.toml --firmware-artifact-manifest firmware-artifacts.local.json --evidence-artifact-root . --require-validated`, if claiming complete hardware validation for a release
 - [ ] `cargo make rmk-zmk-scenario-tests`, if Space/Enter/system-tri-layer behavior or RMK behavior profiles changed
 - [ ] `cargo make rmk-behavior-tests`
 - [ ] `cargo check --release --bin central`

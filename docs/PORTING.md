@@ -557,7 +557,7 @@ python3 tools/firmware_artifact_manifest.py --require-uf2 --require-reset-uf2 > 
 cargo make firmware-artifact-manifest-current
 python3 tools/hardware_validation.py --evidence-template --firmware-ref-template <tag-or-commit>
 python3 tools/hardware_validation.py --evidence path/to/evidence.toml --markdown
-python3 tools/hardware_validation.py --evidence path/to/evidence.toml --require-validated --require-firmware-ref <tag-or-commit>
+python3 tools/hardware_validation.py --evidence path/to/evidence.toml --firmware-artifact-manifest firmware-artifacts.local.json --evidence-artifact-root . --require-validated
 ```
 
 The command prints the real-hardware validation rate and remaining evidence
@@ -601,12 +601,15 @@ words alone, such as only `right cursor tap vertical scroll horizontal scroll`,
 do not count as concrete evidence unless the note also points to a log, photo,
 probe/scope/multimeter reading, serial/I2C output, Vial observation, or similar
 bench artifact.
-`--require-firmware-ref` only rejects stale validated evidence; combine it with
-`--require-validated` when all checks must be proven for that exact firmware.
+`--require-firmware-ref` only rejects stale validated evidence. When all checks
+must be proven for that exact firmware, combine the exact ref with
+`--require-validated` and
+`--firmware-artifact-manifest firmware-artifacts.local.json`.
 `--require-validated` also requires the generated
-`metadata.hardware_check_inventory_sha256` and existing non-empty
-`artifact_paths` files plus matching `artifact_path_sha256` hashes for every
-counted validated entry.
+`metadata.hardware_check_inventory_sha256`, a firmware artifact manifest,
+the manifest `pair_sha256` in every counted evidence note, and existing
+non-empty `artifact_paths` files plus matching `artifact_path_sha256` hashes for
+every counted validated entry.
 The combined migration gate requires `--firmware-artifact-manifest` whenever
 `--require-hardware-validated` is used. Whenever a firmware artifact manifest
 is supplied, every validated hardware evidence note must mention that
