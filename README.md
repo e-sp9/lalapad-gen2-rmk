@@ -412,6 +412,19 @@ the retained files. The same helper is available as
 `HARDWARE_EVIDENCE=path/to/evidence.toml EVIDENCE_ARTIFACT_ROOT=. cargo make hardware-validation-hash-evidence`.
 Write this output to a separate file and inspect it before replacing the
 original evidence overlay.
+To generate that hashed overlay and immediately run the complete final gate,
+use:
+
+```shell
+HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit FIRMWARE_ARTIFACT_MANIFEST=firmware-artifacts.local.json EVIDENCE_ARTIFACT_ROOT=. cargo make hardware-validation-finalize-evidence
+```
+
+For evidence captured against the current clean commit, use:
+
+```shell
+HARDWARE_EVIDENCE=hardware-validation-evidence.local.toml EVIDENCE_ARTIFACT_ROOT=. cargo make hardware-validation-finalize-current
+```
+
 Media and trace file extensions are also checked against their file signatures,
 so a text file renamed to `.mp4`, `.png`, `.jpg`, `.webp`, `.pcap`, or
 `.pcapng` does not count as retained hardware evidence.
@@ -427,6 +440,13 @@ scenario suite runs before the migration dashboard is evaluated:
 ```shell
 HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit FIRMWARE_ARTIFACT_MANIFEST=firmware-artifacts.local.json cargo make migration-status-final
 ```
+
+`cargo make hardware-validation-finalize-evidence` is the same release path
+with the retained-artifact hash overlay generated first. It writes
+`hardware-validation-evidence.hashed.local.toml` by default, or the path from
+`HASHED_HARDWARE_EVIDENCE`. The source evidence path is refused as the hashed
+output path, so the wrapper cannot overwrite the original overlay before the
+final gate passes.
 
 It must report `Full validation: pass` before claiming source-backed and
 real-device validation are both complete for that firmware. The final gate also
@@ -447,6 +467,9 @@ and then runs the same final gate:
 ```shell
 HARDWARE_EVIDENCE=hardware-validation-evidence.local.toml cargo make migration-status-final-current
 ```
+
+`cargo make hardware-validation-finalize-current` performs the same current-ref
+final gate after generating the hash-populated evidence overlay.
 
 For a local Markdown dashboard matching the CI summary, run:
 

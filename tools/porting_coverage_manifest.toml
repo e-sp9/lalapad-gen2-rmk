@@ -3071,6 +3071,61 @@ script_contains_count = [
 ]
 
 [[makefile_task_invariants]]
+id = "makefile_hardware_evidence_hash_helper_generates_hash_overlay"
+task = "hardware-validation-hash-evidence"
+script_contains = [
+  "HARDWARE_EVIDENCE",
+  "tools/hardware_validation.py",
+  "--evidence \"$HARDWARE_EVIDENCE\"",
+  "--evidence-artifact-root \"${EVIDENCE_ARTIFACT_ROOT:-.}\"",
+  "--evidence-with-artifact-hashes",
+]
+
+[[makefile_task_invariants]]
+id = "makefile_hardware_evidence_finalize_runs_hash_then_final_gate"
+task = "hardware-validation-finalize-evidence"
+script_contains = [
+  "set -e",
+  "HARDWARE_EVIDENCE",
+  "FIRMWARE_REF",
+  "HASHED_HARDWARE_EVIDENCE",
+  "hardware-validation-evidence.hashed.local.toml",
+  "HASHED_HARDWARE_EVIDENCE must not overwrite HARDWARE_EVIDENCE",
+  "tmp_hashed_evidence",
+  "trap 'rm -f \"$tmp_hashed_evidence\"' EXIT",
+  "tools/hardware_validation.py",
+  "--evidence \"$HARDWARE_EVIDENCE\"",
+  "--evidence-with-artifact-hashes",
+  "> \"$tmp_hashed_evidence\"",
+  "mv \"$tmp_hashed_evidence\" \"$hashed_evidence\"",
+  "FIRMWARE_REF=\"$FIRMWARE_REF\"",
+  "FIRMWARE_ARTIFACT_MANIFEST=\"${FIRMWARE_ARTIFACT_MANIFEST:-firmware-artifacts.local.json}\"",
+  "EVIDENCE_ARTIFACT_ROOT=\"${EVIDENCE_ARTIFACT_ROOT:-.}\"",
+  "cargo make migration-status-final",
+]
+
+[[makefile_task_invariants]]
+id = "makefile_current_hardware_evidence_finalize_runs_hash_then_current_final_gate"
+task = "hardware-validation-finalize-current"
+script_contains = [
+  "set -e",
+  "HARDWARE_EVIDENCE",
+  "HASHED_HARDWARE_EVIDENCE",
+  "hardware-validation-evidence.hashed.local.toml",
+  "HASHED_HARDWARE_EVIDENCE must not overwrite HARDWARE_EVIDENCE",
+  "tmp_hashed_evidence",
+  "trap 'rm -f \"$tmp_hashed_evidence\"' EXIT",
+  "tools/hardware_validation.py",
+  "--evidence \"$HARDWARE_EVIDENCE\"",
+  "--evidence-with-artifact-hashes",
+  "> \"$tmp_hashed_evidence\"",
+  "mv \"$tmp_hashed_evidence\" \"$hashed_evidence\"",
+  "FIRMWARE_ARTIFACT_MANIFEST=\"${FIRMWARE_ARTIFACT_MANIFEST:-firmware-artifacts.local.json}\"",
+  "EVIDENCE_ARTIFACT_ROOT=\"${EVIDENCE_ARTIFACT_ROOT:-.}\"",
+  "cargo make migration-status-final-current",
+]
+
+[[makefile_task_invariants]]
 id = "makefile_migration_final_checks_firmware_artifacts"
 task = "migration-status-final"
 dependencies_include = ["rmk-zmk-scenario-tests", "host-parity-tests", "rmk-behavior-tests"]

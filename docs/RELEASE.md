@@ -55,6 +55,13 @@ announced, then run:
 HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit FIRMWARE_ARTIFACT_MANIFEST=firmware-artifacts.local.json cargo make migration-status-final
 ```
 
+If the retained `artifact_paths` are filled but the evidence overlay still
+needs `artifact_path_sha256`, use the finalize wrapper instead:
+
+```sh
+HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit FIRMWARE_ARTIFACT_MANIFEST=firmware-artifacts.local.json EVIDENCE_ARTIFACT_ROOT=. cargo make hardware-validation-finalize-evidence
+```
+
 This wraps the same final migration status gate after running the RMK
 ZMK-derived runtime scenario suite. It resolves `ZMK_KEYMAP` first when it is
 set and otherwise uses the standard upstream checkout path. The final gate also
@@ -133,6 +140,7 @@ Before announcing a release to the community:
 
 - CI firmware workflow is green for the release tag.
 - `cargo make migration-status-final` passes with the release evidence file, matching `FIRMWARE_REF`, and the manifest-pinned clean ZMK source commit, if the announcement claims complete hardware validation.
+- `cargo make hardware-validation-finalize-evidence` passes if the final evidence overlay was generated from retained artifact paths during release validation.
 - The hardware evidence file keeps the generated `metadata.hardware_check_inventory_sha256` for the current validation manifest.
 - The hardware evidence notes reference the artifact manifest SHA256 values for the flashed central/peripheral files.
 - The hardware evidence notes include every per-check artifact type listed by `evidence_artifacts`.

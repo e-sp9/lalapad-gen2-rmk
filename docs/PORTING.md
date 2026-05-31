@@ -426,6 +426,15 @@ evaluated:
 HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit FIRMWARE_ARTIFACT_MANIFEST=firmware-artifacts.local.json cargo make migration-status-final
 ```
 
+If the evidence overlay has `artifact_paths` filled but not
+`artifact_path_sha256`, run the finalize wrapper instead. It generates
+`hardware-validation-evidence.hashed.local.toml` by default, then runs the same
+final gate against the hash-populated overlay:
+
+```sh
+HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit FIRMWARE_ARTIFACT_MANIFEST=firmware-artifacts.local.json EVIDENCE_ARTIFACT_ROOT=. cargo make hardware-validation-finalize-evidence
+```
+
 The final gate adds `--require-zmk-clean-source` and
 `--require-zmk-source-commit`, so the resolved ZMK source keymap must be
 available inside a readable Git repository with no uncommitted changes, and
@@ -455,6 +464,12 @@ run
 `HARDWARE_EVIDENCE=path/to/evidence.toml EVIDENCE_ARTIFACT_ROOT=. cargo make hardware-validation-hash-evidence`.
 Write the generated overlay to a separate file and inspect it before replacing
 the original evidence file.
+The same hash-then-final-gate flow is exposed as
+`cargo make hardware-validation-finalize-evidence`, with
+`HASHED_HARDWARE_EVIDENCE` available when the generated overlay should use a
+different path. The wrapper refuses to use the source evidence path as the
+hashed output path, so a failed final gate cannot overwrite the original
+evidence overlay.
 Media and trace suffixes are checked against lightweight file signatures, so a
 text file renamed to `.mp4`, `.png`, `.jpg`, `.webp`, `.pcap`, or `.pcapng`
 does not satisfy retained hardware evidence.
@@ -473,6 +488,14 @@ the current UF2 artifact hashes rather than a stale local manifest:
 
 ```sh
 HARDWARE_EVIDENCE=hardware-validation-evidence.local.toml cargo make migration-status-final-current
+```
+
+For the current-ref path, `cargo make hardware-validation-finalize-current`
+generates the hash-populated overlay first, then runs
+`migration-status-final-current`:
+
+```sh
+HARDWARE_EVIDENCE=hardware-validation-evidence.local.toml EVIDENCE_ARTIFACT_ROOT=. cargo make hardware-validation-finalize-current
 ```
 
 For the same Markdown dashboard that CI appends to the GitHub Actions summary,

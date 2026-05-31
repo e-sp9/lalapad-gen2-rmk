@@ -187,6 +187,70 @@ python3 tools/hardware_validation.py \
   --evidence-with-artifact-hashes
 '''
 
+[tasks.hardware-validation-finalize-evidence]
+script = '''
+set -e
+: "${HARDWARE_EVIDENCE:?set HARDWARE_EVIDENCE=path/to/evidence.toml}"
+: "${FIRMWARE_REF:?set FIRMWARE_REF=<tag-or-commit>}"
+hashed_evidence="${HASHED_HARDWARE_EVIDENCE:-hardware-validation-evidence.hashed.local.toml}"
+python3 - "$HARDWARE_EVIDENCE" "$hashed_evidence" <<'PY'
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).resolve()
+target = Path(sys.argv[2]).resolve()
+if source == target:
+    raise SystemExit("HASHED_HARDWARE_EVIDENCE must not overwrite HARDWARE_EVIDENCE")
+PY
+tmp_hashed_evidence="${hashed_evidence}.tmp.$$"
+trap 'rm -f "$tmp_hashed_evidence"' EXIT
+
+python3 tools/hardware_validation.py \
+  --evidence "$HARDWARE_EVIDENCE" \
+  --evidence-artifact-root "${EVIDENCE_ARTIFACT_ROOT:-.}" \
+  --evidence-with-artifact-hashes \
+  > "$tmp_hashed_evidence"
+mv "$tmp_hashed_evidence" "$hashed_evidence"
+trap - EXIT
+
+HARDWARE_EVIDENCE="$hashed_evidence" \
+FIRMWARE_REF="$FIRMWARE_REF" \
+FIRMWARE_ARTIFACT_MANIFEST="${FIRMWARE_ARTIFACT_MANIFEST:-firmware-artifacts.local.json}" \
+EVIDENCE_ARTIFACT_ROOT="${EVIDENCE_ARTIFACT_ROOT:-.}" \
+cargo make migration-status-final
+'''
+
+[tasks.hardware-validation-finalize-current]
+script = '''
+set -e
+: "${HARDWARE_EVIDENCE:?set HARDWARE_EVIDENCE=path/to/evidence.toml}"
+hashed_evidence="${HASHED_HARDWARE_EVIDENCE:-hardware-validation-evidence.hashed.local.toml}"
+python3 - "$HARDWARE_EVIDENCE" "$hashed_evidence" <<'PY'
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).resolve()
+target = Path(sys.argv[2]).resolve()
+if source == target:
+    raise SystemExit("HASHED_HARDWARE_EVIDENCE must not overwrite HARDWARE_EVIDENCE")
+PY
+tmp_hashed_evidence="${hashed_evidence}.tmp.$$"
+trap 'rm -f "$tmp_hashed_evidence"' EXIT
+
+python3 tools/hardware_validation.py \
+  --evidence "$HARDWARE_EVIDENCE" \
+  --evidence-artifact-root "${EVIDENCE_ARTIFACT_ROOT:-.}" \
+  --evidence-with-artifact-hashes \
+  > "$tmp_hashed_evidence"
+mv "$tmp_hashed_evidence" "$hashed_evidence"
+trap - EXIT
+
+HARDWARE_EVIDENCE="$hashed_evidence" \
+FIRMWARE_ARTIFACT_MANIFEST="${FIRMWARE_ARTIFACT_MANIFEST:-firmware-artifacts.local.json}" \
+EVIDENCE_ARTIFACT_ROOT="${EVIDENCE_ARTIFACT_ROOT:-.}" \
+cargo make migration-status-final-current
+'''
+
 [tasks.migration-status]
 command = "python3"
 args = [

@@ -6227,6 +6227,10 @@ fn local_validation_entrypoints_match_ci_gates() {
     let hardware_validation_report_task = makefile_task_block("hardware-validation-report");
     let hardware_validation_checklist_task = makefile_task_block("hardware-validation-checklist");
     let hardware_validation_hash_task = makefile_task_block("hardware-validation-hash-evidence");
+    let hardware_validation_finalize_task =
+        makefile_task_block("hardware-validation-finalize-evidence");
+    let hardware_validation_finalize_current_task =
+        makefile_task_block("hardware-validation-finalize-current");
     let hardware_validation_template_task =
         makefile_task_block("hardware-validation-evidence-template");
     let hardware_validation_current_template_task =
@@ -6494,6 +6498,49 @@ fn local_validation_entrypoints_match_ci_gates() {
         "Makefile.toml should expose a retained hardware evidence hash helper"
     );
     assert!(
+        hardware_validation_finalize_task.contains("HARDWARE_EVIDENCE")
+            && hardware_validation_finalize_task.contains("FIRMWARE_REF")
+            && hardware_validation_finalize_task.contains("HASHED_HARDWARE_EVIDENCE")
+            && hardware_validation_finalize_task
+                .contains("hardware-validation-evidence.hashed.local.toml")
+            && hardware_validation_finalize_task.contains("set -e")
+            && hardware_validation_finalize_task
+                .contains("HASHED_HARDWARE_EVIDENCE must not overwrite HARDWARE_EVIDENCE")
+            && hardware_validation_finalize_task.contains("tmp_hashed_evidence")
+            && hardware_validation_finalize_task.contains("trap 'rm -f \"$tmp_hashed_evidence\"' EXIT")
+            && hardware_validation_finalize_task.contains("--evidence-with-artifact-hashes")
+            && hardware_validation_finalize_task.contains("> \"$tmp_hashed_evidence\"")
+            && hardware_validation_finalize_task.contains("mv \"$tmp_hashed_evidence\" \"$hashed_evidence\"")
+            && hardware_validation_finalize_task.contains("FIRMWARE_REF=\"$FIRMWARE_REF\"")
+            && hardware_validation_finalize_task
+                .contains("FIRMWARE_ARTIFACT_MANIFEST=\"${FIRMWARE_ARTIFACT_MANIFEST:-firmware-artifacts.local.json}\"")
+            && hardware_validation_finalize_task
+                .contains("EVIDENCE_ARTIFACT_ROOT=\"${EVIDENCE_ARTIFACT_ROOT:-.}\"")
+            && hardware_validation_finalize_task.contains("cargo make migration-status-final"),
+        "Makefile.toml should expose a release evidence hash-then-final-gate helper"
+    );
+    assert!(
+        hardware_validation_finalize_current_task.contains("HARDWARE_EVIDENCE")
+            && hardware_validation_finalize_current_task.contains("HASHED_HARDWARE_EVIDENCE")
+            && hardware_validation_finalize_current_task
+                .contains("hardware-validation-evidence.hashed.local.toml")
+            && hardware_validation_finalize_current_task.contains("set -e")
+            && hardware_validation_finalize_current_task
+                .contains("HASHED_HARDWARE_EVIDENCE must not overwrite HARDWARE_EVIDENCE")
+            && hardware_validation_finalize_current_task.contains("tmp_hashed_evidence")
+            && hardware_validation_finalize_current_task.contains("trap 'rm -f \"$tmp_hashed_evidence\"' EXIT")
+            && hardware_validation_finalize_current_task.contains("--evidence-with-artifact-hashes")
+            && hardware_validation_finalize_current_task.contains("> \"$tmp_hashed_evidence\"")
+            && hardware_validation_finalize_current_task.contains("mv \"$tmp_hashed_evidence\" \"$hashed_evidence\"")
+            && hardware_validation_finalize_current_task
+                .contains("FIRMWARE_ARTIFACT_MANIFEST=\"${FIRMWARE_ARTIFACT_MANIFEST:-firmware-artifacts.local.json}\"")
+            && hardware_validation_finalize_current_task
+                .contains("EVIDENCE_ARTIFACT_ROOT=\"${EVIDENCE_ARTIFACT_ROOT:-.}\"")
+            && hardware_validation_finalize_current_task
+                .contains("cargo make migration-status-final-current"),
+        "Makefile.toml should expose a current-ref evidence hash-then-final-gate helper"
+    );
+    assert!(
         hardware_validation_template_task.contains("tools/hardware_validation.py")
             && hardware_validation_template_task.contains("--evidence-template"),
         "Makefile.toml should expose a full hardware evidence template generator"
@@ -6569,6 +6616,8 @@ fn local_validation_entrypoints_match_ci_gates() {
         "tools/hardware_validation.py --hardware-baseline tools/hardware_validation_baseline.toml --require-classified",
         "Hardware evidence records `artifact_path_sha256` for every retained `artifact_paths` file",
         "HARDWARE_EVIDENCE=path/to/evidence.toml EVIDENCE_ARTIFACT_ROOT=. cargo make hardware-validation-hash-evidence",
+        "HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit FIRMWARE_ARTIFACT_MANIFEST=firmware-artifacts.local.json EVIDENCE_ARTIFACT_ROOT=. cargo make hardware-validation-finalize-evidence",
+        "HARDWARE_EVIDENCE=hardware-validation-evidence.local.toml EVIDENCE_ARTIFACT_ROOT=. cargo make hardware-validation-finalize-current",
         "tools/hardware_validation.py --markdown",
         "tools/hardware_validation.py --checklist",
         "tools/hardware_validation.py --evidence-template",
@@ -6645,6 +6694,9 @@ fn local_validation_entrypoints_match_ci_gates() {
             && README_MD.contains("cargo make firmware-artifact-manifest-current")
             && README_MD.contains("cargo make hardware-validation-evidence-template-current")
             && README_MD.contains("cargo make hardware-validation-session-current")
+            && README_MD.contains("cargo make hardware-validation-finalize-evidence")
+            && README_MD.contains("cargo make hardware-validation-finalize-current")
+            && README_MD.contains("HASHED_HARDWARE_EVIDENCE")
             && README_MD.contains("--artifact-pair-sha256-template <sha256>")
             && README_MD.contains("requires the resolved ZMK source checkout")
             && README_MD.contains("manifest-pinned `metadata.source_commit`")
@@ -6667,6 +6719,9 @@ fn local_validation_entrypoints_match_ci_gates() {
             && PORTING_MD.contains("cargo make firmware-artifact-manifest-current")
             && PORTING_MD.contains("cargo make hardware-validation-evidence-template-current")
             && PORTING_MD.contains("cargo make hardware-validation-session-current")
+            && PORTING_MD.contains("cargo make hardware-validation-finalize-evidence")
+            && PORTING_MD.contains("cargo make hardware-validation-finalize-current")
+            && PORTING_MD.contains("HASHED_HARDWARE_EVIDENCE")
             && PORTING_MD.contains("--artifact-pair-sha256-template <sha256>")
             && PORTING_MD.contains("--require-zmk-clean-source")
             && PORTING_MD.contains("--require-zmk-source-commit")
@@ -6753,6 +6808,7 @@ fn local_validation_entrypoints_match_ci_gates() {
             && RELEASE_MD.contains("EVIDENCE_ARTIFACT_ROOT")
             && RELEASE_MD.contains("artifact_paths")
             && RELEASE_MD.contains("artifact_path_sha256")
+            && RELEASE_MD.contains("cargo make hardware-validation-finalize-evidence")
             && RELEASE_MD.contains("metadata.hardware_check_inventory_sha256")
             && RELEASE_MD.contains("non-empty file in `artifact_paths`")
             && RELEASE_MD.contains("Full validation: pass")
@@ -10869,19 +10925,19 @@ print(json.dumps({
 
     let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     let ok = parsed["ok"].as_array().unwrap();
-    assert_eq!(ok.len(), 29);
+    assert_eq!(ok.len(), 32);
     assert!(ok.iter().all(|result| result["kind"] == "build_task"));
     assert_eq!(
         ok.iter()
             .map(|result| result["passed"].as_i64().unwrap())
             .sum::<i64>(),
-        100
+        106
     );
     assert_eq!(
         ok.iter()
             .map(|result| result["total"].as_i64().unwrap())
             .sum::<i64>(),
-        100
+        106
     );
 
     let bad_rmk_config_schema_task = parsed["bad_rmk_config_schema_task"]
