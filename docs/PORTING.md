@@ -448,6 +448,13 @@ reported as invalid evidence rather than a second artifact.
 Each retained evidence file must also be listed in `artifact_path_sha256` with
 the file's SHA256, so changing a captured video, log, photo, screenshot, or
 scope trace after the evidence overlay is written breaks the final gate.
+After filling `artifact_paths`, use
+`python3 tools/hardware_validation.py --evidence path/to/evidence.toml --evidence-artifact-root . --evidence-with-artifact-hashes`
+to regenerate the overlay with hashes computed from those retained files, or
+run
+`HARDWARE_EVIDENCE=path/to/evidence.toml EVIDENCE_ARTIFACT_ROOT=. cargo make hardware-validation-hash-evidence`.
+Write the generated overlay to a separate file and inspect it before replacing
+the original evidence file.
 Media and trace suffixes are checked against lightweight file signatures, so a
 text file renamed to `.mp4`, `.png`, `.jpg`, `.webp`, `.pcap`, or `.pcapng`
 does not satisfy retained hardware evidence.

@@ -15,7 +15,13 @@
 # fill artifact_paths with non-empty real evidence files under the chosen
 # EVIDENCE_ARTIFACT_ROOT, such as captured videos, logs, photos, screenshots, or
 # scope traces, and fill artifact_path_sha256 with the SHA256 for every retained
-# artifact_paths entry.
+# artifact_paths entry. After filling artifact_paths, you can generate those
+# hashes with:
+#
+#   python3 tools/hardware_validation.py --evidence path/to/evidence.toml --evidence-artifact-root . --evidence-with-artifact-hashes
+#
+# Write the generated overlay to a separate file and inspect it before
+# replacing the original evidence file.
 #
 # Evidence entries are overlays keyed by check id from
 # tools/hardware_validation_manifest.toml. Start from the generated template

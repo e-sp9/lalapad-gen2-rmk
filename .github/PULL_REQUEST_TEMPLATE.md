@@ -26,6 +26,7 @@
 - [ ] `HARDWARE_EVIDENCE=hardware-validation-evidence.local.toml cargo make migration-status-final-current`, if claiming complete migration validation for the current clean commit
 - [ ] Hardware evidence keeps the generated `metadata.hardware_check_inventory_sha256`, if claiming complete hardware validation
 - [ ] Hardware evidence records `artifact_path_sha256` for every retained `artifact_paths` file, if claiming complete hardware validation
+- [ ] `HARDWARE_EVIDENCE=path/to/evidence.toml EVIDENCE_ARTIFACT_ROOT=. cargo make hardware-validation-hash-evidence`, after filling retained `artifact_paths`
 - [ ] `python3 tools/hardware_validation.py --hardware-baseline tools/hardware_validation_baseline.toml --require-classified`
 - [ ] `python3 tools/hardware_validation.py --markdown`
 - [ ] `python3 tools/hardware_validation.py --checklist`

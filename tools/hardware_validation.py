@@ -1044,6 +1044,150 @@ def toml_string_array(values: list[str]) -> str:
     return "[" + ", ".join(toml_string(value) for value in values) + "]"
 
 
+def toml_inline_string_table(values: dict[str, str]) -> str:
+    if not values:
+        return "{}"
+    return (
+        "{ "
+        + ", ".join(
+            f"{toml_string(key)} = {toml_string(value)}"
+            for key, value in sorted(values.items())
+        )
+        + " }"
+    )
+
+
+def toml_evidence_scalar(value: Any) -> str | None:
+    if isinstance(value, str):
+        return toml_string(value)
+    if isinstance(value, datetime.date):
+        return toml_string(value.isoformat())
+    return None
+
+
+def hash_evidence_artifact_paths(
+    check_id: str,
+    artifact_paths: Any,
+    artifact_root: Path,
+) -> tuple[dict[str, str], list[str]]:
+    errors: list[str] = []
+    hashes: dict[str, str] = {}
+    if artifact_paths is None:
+        return hashes, errors
+    if not isinstance(artifact_paths, list):
+        return hashes, [f"{check_id}: artifact_paths must be a string array"]
+
+    root = artifact_root.resolve()
+    for index, artifact_path in enumerate(artifact_paths):
+        if not isinstance(artifact_path, str) or not artifact_path.strip():
+            errors.append(f"{check_id}: artifact_paths[{index}] must be a non-empty path string")
+            continue
+        if is_placeholder_value(artifact_path):
+            errors.append(f"{check_id}: artifact_paths[{index}] must not be a placeholder")
+            continue
+        raw_path = Path(artifact_path)
+        resolved_path = (raw_path if raw_path.is_absolute() else root / raw_path).resolve()
+        try:
+            resolved_path.relative_to(root)
+        except ValueError:
+            errors.append(
+                f"{check_id}: artifact_paths[{index}] must stay inside {artifact_root}"
+            )
+            continue
+        if not resolved_path.is_file():
+            errors.append(
+                f"{check_id}: artifact_paths[{index}] file does not exist: {artifact_path}"
+            )
+            continue
+        try:
+            artifact_size = resolved_path.stat().st_size
+        except OSError as exc:
+            errors.append(
+                f"{check_id}: artifact_paths[{index}] file is not readable: "
+                f"{artifact_path}: {exc}"
+            )
+            continue
+        if artifact_size <= 0:
+            errors.append(
+                f"{check_id}: artifact_paths[{index}] file is empty: {artifact_path}"
+            )
+            continue
+        try:
+            hashes[artifact_path] = sha256_file(resolved_path)
+        except OSError as exc:
+            errors.append(
+                f"{check_id}: artifact_paths[{index}] file is not readable: "
+                f"{artifact_path}: {exc}"
+            )
+    return hashes, errors
+
+
+def as_hashed_evidence_overlay(
+    evidence_doc: dict[str, Any],
+    artifact_root: Path,
+) -> tuple[str, list[str]]:
+    errors: list[str] = []
+    lines = [
+        "# Hardware validation evidence overlay with generated artifact_path_sha256 values.",
+        "# Review the output before replacing the original evidence file.",
+        "",
+    ]
+
+    metadata = evidence_doc.get("metadata", {})
+    if isinstance(metadata, dict) and metadata:
+        lines.append("[metadata]")
+        for key, value in metadata.items():
+            if isinstance(value, str):
+                lines.append(f"{key} = {toml_string(value)}")
+            elif isinstance(value, bool):
+                lines.append(f"{key} = {str(value).lower()}")
+            elif isinstance(value, int):
+                lines.append(f"{key} = {value}")
+            else:
+                errors.append(f"metadata.{key}: unsupported value for hashed evidence output")
+        lines.append("")
+    elif metadata:
+        errors.append("metadata must be a table")
+
+    evidence_entries = evidence_doc.get("evidence", [])
+    if not isinstance(evidence_entries, list):
+        return "\n".join(lines), errors + ["evidence must be an array"]
+
+    for index, entry in enumerate(evidence_entries):
+        if not isinstance(entry, dict):
+            errors.append(f"evidence #{index + 1} must be a table")
+            continue
+        check_id = str(entry.get("id", f"#{index + 1}"))
+        artifact_hashes, hash_errors = hash_evidence_artifact_paths(
+            check_id,
+            entry.get("artifact_paths"),
+            artifact_root,
+        )
+        errors.extend(hash_errors)
+
+        lines.append("[[evidence]]")
+        lines.append(f"id = {toml_string(check_id)}")
+        for field in EVIDENCE_UPDATE_FIELDS:
+            if field == "id":
+                continue
+            if field == "artifact_path_sha256":
+                lines.append(f"{field} = {toml_inline_string_table(artifact_hashes)}")
+                continue
+            if field not in entry:
+                continue
+            value = entry[field]
+            scalar = toml_evidence_scalar(value)
+            if scalar is not None:
+                lines.append(f"{field} = {scalar}")
+            elif isinstance(value, list) and all(isinstance(item, str) for item in value):
+                lines.append(f"{field} = {toml_string_array(value)}")
+            else:
+                errors.append(f"{check_id}: {field} has unsupported value for hashed evidence output")
+        lines.append("")
+
+    return "\n".join(lines), errors
+
+
 def artifact_or_notes_copy_hint(check: dict[str, Any], artifact_prefix: str = "") -> str:
     required_observations = evidence_needles_text(check)
     required_artifacts = evidence_artifacts_text(check)
@@ -1577,6 +1721,14 @@ def main() -> None:
         help="print a human checklist for collecting real-hardware evidence",
     )
     parser.add_argument(
+        "--evidence-with-artifact-hashes",
+        action="store_true",
+        help=(
+            "print the supplied evidence overlay with artifact_path_sha256 "
+            "generated from artifact_paths"
+        ),
+    )
+    parser.add_argument(
         "--firmware-ref-template",
         default="",
         metavar="REF",
@@ -1647,12 +1799,21 @@ def main() -> None:
 
     output_modes = sum(
         bool(mode)
-        for mode in [args.json, args.markdown, args.evidence_template, args.checklist]
+        for mode in [
+            args.json,
+            args.markdown,
+            args.evidence_template,
+            args.checklist,
+            args.evidence_with_artifact_hashes,
+        ]
     )
     if output_modes > 1:
         parser.error(
-            "--json, --markdown, --evidence-template, and --checklist are mutually exclusive"
+            "--json, --markdown, --evidence-template, --checklist, and "
+            "--evidence-with-artifact-hashes are mutually exclusive"
         )
+    if args.evidence_with_artifact_hashes and len(args.evidence) != 1:
+        parser.error("--evidence-with-artifact-hashes requires exactly one --evidence file")
     if args.firmware_ref_template and not (args.evidence_template or args.checklist):
         parser.error(
             "--firmware-ref-template can only be used with --evidence-template or --checklist"
@@ -1721,6 +1882,21 @@ def main() -> None:
             baseline_failures = hardware_baseline_errors(baseline, manifest_doc)
 
     evidence_docs, evidence_load_errors = load_evidence_docs(args.evidence)
+    if args.evidence_with_artifact_hashes:
+        if evidence_load_errors:
+            parser.error("; ".join(evidence_load_errors))
+        hashed_overlay, hash_errors = as_hashed_evidence_overlay(
+            evidence_docs[0],
+            args.evidence_artifact_root,
+        )
+        if hash_errors:
+            print("Hardware evidence hash errors:", file=sys.stderr)
+            for error in hash_errors:
+                print(f"- {error}", file=sys.stderr)
+            raise SystemExit(1)
+        print(hashed_overlay, end="")
+        return
+
     manifest, evidence_errors = merge_evidence(
         manifest_doc,
         evidence_docs,

@@ -405,6 +405,13 @@ listing the same resolved file path twice does not count as separate evidence.
 Each retained file must also have a matching `artifact_path_sha256` entry, so a
 later file replacement at the same path invalidates the evidence instead of
 silently preserving a 100% validation claim.
+After copying captured evidence files into `artifact_paths`, run
+`python3 tools/hardware_validation.py --evidence path/to/evidence.toml --evidence-artifact-root . --evidence-with-artifact-hashes`
+to print the same evidence overlay with `artifact_path_sha256` populated from
+the retained files. The same helper is available as
+`HARDWARE_EVIDENCE=path/to/evidence.toml EVIDENCE_ARTIFACT_ROOT=. cargo make hardware-validation-hash-evidence`.
+Write this output to a separate file and inspect it before replacing the
+original evidence overlay.
 Media and trace file extensions are also checked against their file signatures,
 so a text file renamed to `.mp4`, `.png`, `.jpg`, `.webp`, `.pcap`, or
 `.pcapng` does not count as retained hardware evidence.

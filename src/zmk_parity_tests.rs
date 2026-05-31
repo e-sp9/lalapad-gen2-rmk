@@ -3707,6 +3707,60 @@ artifact_or_notes = "log: /tmp/right-i2c.log; right P0_04 SDA and P0_05 SCL show
     assert!(stdout.contains("hardware-evidence/right-i2c.log"));
 
     let artifact_sha256 = sha256_file(&artifact_path);
+    let hash_overlay = run_hardware_validation(&[
+        "--evidence",
+        path.to_str().unwrap(),
+        "--evidence-artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--evidence-with-artifact-hashes",
+    ]);
+    assert!(
+        hash_overlay.status.success(),
+        "hardware validation should generate artifact_path_sha256 overlay from retained artifact_paths\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&hash_overlay.stdout),
+        String::from_utf8_lossy(&hash_overlay.stderr)
+    );
+    let hash_overlay_stdout = String::from_utf8_lossy(&hash_overlay.stdout);
+    assert!(
+        hash_overlay_stdout.contains(&format!(
+            "artifact_path_sha256 = {{ \"hardware-evidence/right-i2c.log\" = \"{artifact_sha256}\" }}"
+        )),
+        "generated hash overlay should bind the retained artifact path to its SHA256: {hash_overlay_stdout}"
+    );
+    let parsed_hash_overlay: toml::Value = toml::from_str(&hash_overlay_stdout).unwrap();
+    assert_eq!(
+        parsed_hash_overlay["evidence"][0]["artifact_path_sha256"]
+            ["hardware-evidence/right-i2c.log"]
+            .as_str(),
+        Some(artifact_sha256.as_str())
+    );
+    let date_literal_evidence = evidence.replace(
+        "validated_at = \"2026-05-29\"",
+        "validated_at = 2026-05-29",
+    );
+    let date_literal_path = write_temp_file(
+        "hardware-validation-evidence-paths-date-literal",
+        &date_literal_evidence,
+    );
+    let date_literal_hash_overlay = run_hardware_validation(&[
+        "--evidence",
+        date_literal_path.to_str().unwrap(),
+        "--evidence-artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--evidence-with-artifact-hashes",
+    ]);
+    assert!(
+        date_literal_hash_overlay.status.success(),
+        "hardware validation hash overlay should accept TOML date literals that normal validation accepts\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&date_literal_hash_overlay.stdout),
+        String::from_utf8_lossy(&date_literal_hash_overlay.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&date_literal_hash_overlay.stdout)
+            .contains("validated_at = \"2026-05-29\""),
+        "hash overlay should serialize TOML date literals back to explicit string dates"
+    );
+
     let hashed_evidence = evidence.replace(
         "artifact_paths = [\"hardware-evidence/right-i2c.log\"]",
         &format!(
@@ -3812,6 +3866,28 @@ artifact_or_notes = "files: hardware-evidence/iqs9151-right-i2c-identity-log.log
     let missing_path = write_temp_file(
         "hardware-validation-evidence-paths-missing",
         &missing_evidence,
+    );
+    let missing_hash_overlay = run_hardware_validation(&[
+        "--evidence",
+        missing_path.to_str().unwrap(),
+        "--evidence-artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--evidence-with-artifact-hashes",
+    ]);
+    assert!(
+        !missing_hash_overlay.status.success(),
+        "hardware validation hash overlay unexpectedly accepted a missing artifact path\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&missing_hash_overlay.stdout),
+        String::from_utf8_lossy(&missing_hash_overlay.stderr)
+    );
+    assert!(
+        missing_hash_overlay.stdout.is_empty(),
+        "failed hash overlay generation should not emit a partial TOML overlay to stdout"
+    );
+    assert!(
+        String::from_utf8_lossy(&missing_hash_overlay.stderr)
+            .contains("artifact_paths[0] file does not exist"),
+        "failed hash overlay generation should explain the missing artifact path"
     );
     let missing_markdown = run_hardware_validation(&[
         "--evidence",
@@ -4231,6 +4307,7 @@ artifact_or_notes = "photo and multimeter: hardware-evidence/charge.jpg; right P
     assert_eq!(charge_complete_parsed["validated"].as_i64(), Some(1));
 
     let _ = std::fs::remove_file(&path);
+    let _ = std::fs::remove_file(&date_literal_path);
     let _ = std::fs::remove_file(&hashed_path);
     let _ = std::fs::remove_file(&mismatched_hash_path);
     let _ = std::fs::remove_file(&verbatim_copy_aid_path);
@@ -6149,6 +6226,7 @@ fn local_validation_entrypoints_match_ci_gates() {
     let hardware_validation_task = makefile_task_block("hardware-validation");
     let hardware_validation_report_task = makefile_task_block("hardware-validation-report");
     let hardware_validation_checklist_task = makefile_task_block("hardware-validation-checklist");
+    let hardware_validation_hash_task = makefile_task_block("hardware-validation-hash-evidence");
     let hardware_validation_template_task =
         makefile_task_block("hardware-validation-evidence-template");
     let hardware_validation_current_template_task =
@@ -6407,6 +6485,15 @@ fn local_validation_entrypoints_match_ci_gates() {
         "Makefile.toml should expose a hardware validation bench checklist"
     );
     assert!(
+        hardware_validation_hash_task.contains("HARDWARE_EVIDENCE")
+            && hardware_validation_hash_task.contains("tools/hardware_validation.py")
+            && hardware_validation_hash_task.contains("--evidence \"$HARDWARE_EVIDENCE\"")
+            && hardware_validation_hash_task
+                .contains("--evidence-artifact-root \"${EVIDENCE_ARTIFACT_ROOT:-.}\"")
+            && hardware_validation_hash_task.contains("--evidence-with-artifact-hashes"),
+        "Makefile.toml should expose a retained hardware evidence hash helper"
+    );
+    assert!(
         hardware_validation_template_task.contains("tools/hardware_validation.py")
             && hardware_validation_template_task.contains("--evidence-template"),
         "Makefile.toml should expose a full hardware evidence template generator"
@@ -6481,6 +6568,7 @@ fn local_validation_entrypoints_match_ci_gates() {
         "HARDWARE_EVIDENCE=hardware-validation-evidence.local.toml cargo make migration-status-final-current",
         "tools/hardware_validation.py --hardware-baseline tools/hardware_validation_baseline.toml --require-classified",
         "Hardware evidence records `artifact_path_sha256` for every retained `artifact_paths` file",
+        "HARDWARE_EVIDENCE=path/to/evidence.toml EVIDENCE_ARTIFACT_ROOT=. cargo make hardware-validation-hash-evidence",
         "tools/hardware_validation.py --markdown",
         "tools/hardware_validation.py --checklist",
         "tools/hardware_validation.py --evidence-template",
@@ -6566,6 +6654,7 @@ fn local_validation_entrypoints_match_ci_gates() {
             && README_MD.contains("EVIDENCE_ARTIFACT_ROOT")
             && README_MD.contains("artifact_paths")
             && README_MD.contains("artifact_path_sha256")
+            && README_MD.contains("--evidence-with-artifact-hashes")
             && README_MD.contains("non-empty real file in `artifact_paths`")
             && README_MD.contains("`--require-validated` also requires the")
             && README_MD.contains("HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit cargo make migration-status-report")
@@ -6586,6 +6675,7 @@ fn local_validation_entrypoints_match_ci_gates() {
             && PORTING_MD.contains("EVIDENCE_ARTIFACT_ROOT")
             && PORTING_MD.contains("artifact_paths")
             && PORTING_MD.contains("artifact_path_sha256")
+            && PORTING_MD.contains("--evidence-with-artifact-hashes")
             && PORTING_MD.contains("existing non-empty `artifact_paths` file")
             && PORTING_MD.contains("`--require-validated` also requires the")
             && PORTING_MD.contains("HARDWARE_EVIDENCE=hardware-validation-evidence.local.toml cargo make migration-status-final-current"),
@@ -6648,6 +6738,10 @@ fn local_validation_entrypoints_match_ci_gates() {
     assert!(
         HARDWARE_VALIDATION_EVIDENCE_EXAMPLE_TOML.contains("artifact_path_sha256"),
         "hardware evidence example should document retained artifact hash binding"
+    );
+    assert!(
+        HARDWARE_VALIDATION_EVIDENCE_EXAMPLE_TOML.contains("--evidence-with-artifact-hashes"),
+        "hardware evidence example should document the retained artifact hash helper"
     );
     assert!(
         RELEASE_MD.contains("HARDWARE_EVIDENCE=path/to/evidence.toml FIRMWARE_REF=tag-or-commit FIRMWARE_ARTIFACT_MANIFEST=firmware-artifacts.local.json cargo make migration-status-final")

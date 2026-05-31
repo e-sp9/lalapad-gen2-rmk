@@ -178,6 +178,15 @@ python3 "$@" > migration-status.local.md
 command = "python3"
 args = ["tools/hardware_validation.py", "--checklist"]
 
+[tasks.hardware-validation-hash-evidence]
+script = '''
+: "${HARDWARE_EVIDENCE:?set HARDWARE_EVIDENCE=path/to/evidence.toml}"
+python3 tools/hardware_validation.py \
+  --evidence "$HARDWARE_EVIDENCE" \
+  --evidence-artifact-root "${EVIDENCE_ARTIFACT_ROOT:-.}" \
+  --evidence-with-artifact-hashes
+'''
+
 [tasks.migration-status]
 command = "python3"
 args = [
