@@ -24,6 +24,7 @@ on:
       - 'tools/hardware_validation_evidence.example.toml'
       - 'tools/hardware_validation_manifest.toml'
       - 'tools/firmware_artifact_manifest.py'
+      - 'tools/firmware_artifact_specs.py'
       - 'tools/migration_status.py'
       - 'tools/porting_coverage.py'
       - 'tools/porting_coverage_baseline.toml'

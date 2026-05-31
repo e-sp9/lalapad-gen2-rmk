@@ -3230,6 +3230,7 @@ needles = [
   "--application firmware/hex/lalapad-gen2-rmk-peripheral.hex",
   "firmware/lalapad-gen2-rmk-peripheral-dfu.zip",
   "tools/firmware_artifact_manifest.py",
+  "tools/firmware_artifact_specs.py",
   "--require-uf2",
   "--require-reset-uf2",
   "--require-dfu",

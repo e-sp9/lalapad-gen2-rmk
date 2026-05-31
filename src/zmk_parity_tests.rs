@@ -7014,6 +7014,10 @@ fn local_validation_entrypoints_match_ci_gates() {
         "firmware CI path filters should include the firmware artifact manifest generator"
     );
     assert!(
+        FIRMWARE_WORKFLOW_YAML.contains("tools/firmware_artifact_specs.py"),
+        "firmware CI path filters should include shared firmware artifact specs"
+    );
+    assert!(
         FIRMWARE_WORKFLOW_YAML.contains("tools/porting_coverage_baseline.toml"),
         "firmware CI path filters should include the porting coverage denominator baseline"
     );
@@ -12242,13 +12246,13 @@ print(json.dumps({
         ok.iter()
             .map(|result| result["passed"].as_i64().unwrap())
             .sum::<i64>(),
-        57
+        58
     );
     assert_eq!(
         ok.iter()
             .map(|result| result["total"].as_i64().unwrap())
             .sum::<i64>(),
-        57
+        58
     );
 
     let bad_migration_gate = parsed["bad_migration_gate"]
