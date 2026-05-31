@@ -147,6 +147,14 @@ fn makefile_task_block(task: &str) -> &str {
     &MAKEFILE_TOML[start..end]
 }
 
+fn makefile_task_script(task: &str) -> String {
+    let parsed: toml::Value = toml::from_str(MAKEFILE_TOML).unwrap();
+    parsed["tasks"][task]["script"]
+        .as_str()
+        .unwrap_or_else(|| panic!("Makefile.toml [tasks.{task}] is missing script"))
+        .to_string()
+}
+
 fn assert_task_prefers_sibling_zmk_checkout(task: &str, block: &str) {
     let sibling = "../zmk-config-LalaPadGen2/config/lalapadgen2.keymap";
     let local = "zmk-config-LalaPadGen2/config/lalapadgen2.keymap";
@@ -6202,6 +6210,51 @@ fn hardware_validation_and_migration_status_report_missing_evidence_files() {
 }
 
 #[test]
+fn hardware_validation_finalize_tasks_refuse_source_evidence_path() {
+    let evidence_path = write_temp_file(
+        "hardware-validation-finalize-same-path",
+        "# source evidence must not be overwritten by finalize helpers\n",
+    );
+    let original = std::fs::read_to_string(&evidence_path).unwrap();
+
+    for task in [
+        "hardware-validation-finalize-evidence",
+        "hardware-validation-finalize-current",
+    ] {
+        let output = Command::new("sh")
+            .arg("-c")
+            .arg(makefile_task_script(task))
+            .current_dir(env!("CARGO_MANIFEST_DIR"))
+            .env("HARDWARE_EVIDENCE", &evidence_path)
+            .env("HASHED_HARDWARE_EVIDENCE", &evidence_path)
+            .env("FIRMWARE_REF", "35b3f1f")
+            .output()
+            .unwrap_or_else(|error| panic!("failed to run Makefile task {task}: {error}"));
+
+        assert!(
+            !output.status.success(),
+            "{task} accepted HASHED_HARDWARE_EVIDENCE equal to HARDWARE_EVIDENCE\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(
+            String::from_utf8_lossy(&output.stderr)
+                .contains("HASHED_HARDWARE_EVIDENCE must not overwrite HARDWARE_EVIDENCE"),
+            "{task} should fail at the same-path guard before hashing or running final gates\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(
+            std::fs::read_to_string(&evidence_path).unwrap(),
+            original,
+            "{task} must not modify the source evidence file when the hashed output path is the same"
+        );
+    }
+
+    let _ = std::fs::remove_file(&evidence_path);
+}
+
+#[test]
 fn local_validation_entrypoints_match_ci_gates() {
     let clean_current_git_ref_task = makefile_task_block("clean-current-git-ref");
     let porting_coverage_task = makefile_task_block("porting-coverage");
@@ -6504,6 +6557,9 @@ fn local_validation_entrypoints_match_ci_gates() {
             && hardware_validation_finalize_task
                 .contains("hardware-validation-evidence.hashed.local.toml")
             && hardware_validation_finalize_task.contains("set -e")
+            && hardware_validation_finalize_task.contains("source = Path(sys.argv[1]).resolve()")
+            && hardware_validation_finalize_task.contains("target = Path(sys.argv[2]).resolve()")
+            && hardware_validation_finalize_task.contains("if source == target:")
             && hardware_validation_finalize_task
                 .contains("HASHED_HARDWARE_EVIDENCE must not overwrite HARDWARE_EVIDENCE")
             && hardware_validation_finalize_task.contains("tmp_hashed_evidence")
@@ -6525,6 +6581,11 @@ fn local_validation_entrypoints_match_ci_gates() {
             && hardware_validation_finalize_current_task
                 .contains("hardware-validation-evidence.hashed.local.toml")
             && hardware_validation_finalize_current_task.contains("set -e")
+            && hardware_validation_finalize_current_task
+                .contains("source = Path(sys.argv[1]).resolve()")
+            && hardware_validation_finalize_current_task
+                .contains("target = Path(sys.argv[2]).resolve()")
+            && hardware_validation_finalize_current_task.contains("if source == target:")
             && hardware_validation_finalize_current_task
                 .contains("HASHED_HARDWARE_EVIDENCE must not overwrite HARDWARE_EVIDENCE")
             && hardware_validation_finalize_current_task.contains("tmp_hashed_evidence")
@@ -10885,6 +10946,79 @@ with tempfile.TemporaryDirectory() as tempdir:
     )
     bad_current_final_dependency = pc.check_makefile_task_invariants(manifest, root)
 
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    makefile = Path("Makefile.toml").read_text()
+    before, marker, after = makefile.partition("[tasks.hardware-validation-hash-evidence]")
+    assert marker
+    next_task = after.find("\n[tasks.")
+    assert next_task >= 0
+    task_block = marker + after[:next_task]
+    tail = after[next_task:]
+    (root / "Makefile.toml").write_text(
+        before + task_block.replace("--evidence-with-artifact-hashes", "--markdown", 1) + tail,
+        encoding="utf-8",
+    )
+    bad_hardware_hash_task = pc.check_makefile_task_invariants(manifest, root)
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    makefile = Path("Makefile.toml").read_text()
+    before, marker, after = makefile.partition("[tasks.hardware-validation-finalize-evidence]")
+    assert marker
+    next_task = after.find("\n[tasks.")
+    assert next_task >= 0
+    task_block = marker + after[:next_task]
+    tail = after[next_task:]
+    (root / "Makefile.toml").write_text(
+        before
+        + task_block.replace(
+            "HASHED_HARDWARE_EVIDENCE must not overwrite HARDWARE_EVIDENCE",
+            "hardware evidence output path checked",
+            1,
+        )
+        + tail,
+        encoding="utf-8",
+    )
+    bad_hardware_finalize_guard = pc.check_makefile_task_invariants(manifest, root)
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    makefile = Path("Makefile.toml").read_text()
+    before, marker, after = makefile.partition("[tasks.hardware-validation-finalize-evidence]")
+    assert marker
+    next_task = after.find("\n[tasks.")
+    assert next_task >= 0
+    task_block = marker + after[:next_task]
+    tail = after[next_task:]
+    (root / "Makefile.toml").write_text(
+        before
+        + task_block.replace("cargo make migration-status-final", "cargo make migration-status-release-ready", 1)
+        + tail,
+        encoding="utf-8",
+    )
+    bad_hardware_finalize_release_gate = pc.check_makefile_task_invariants(manifest, root)
+
+with tempfile.TemporaryDirectory() as tempdir:
+    root = Path(tempdir)
+    makefile = Path("Makefile.toml").read_text()
+    before, marker, after = makefile.partition("[tasks.hardware-validation-finalize-current]")
+    assert marker
+    next_task = after.find("\n[tasks.")
+    if next_task < 0:
+        task_block = marker + after
+        tail = ""
+    else:
+        task_block = marker + after[:next_task]
+        tail = after[next_task:]
+    (root / "Makefile.toml").write_text(
+        before
+        + task_block.replace("cargo make migration-status-final-current", "cargo make migration-status-final", 1)
+        + tail,
+        encoding="utf-8",
+    )
+    bad_hardware_finalize_current_gate = pc.check_makefile_task_invariants(manifest, root)
+
 def pack(results):
     return [result.__dict__ | {"ok": result.ok} for result in results]
 
@@ -10912,6 +11046,10 @@ print(json.dumps({
     "bad_current_hardware_session_dependency_order": pack(bad_current_hardware_session_dependency_order),
     "bad_current_final_task": pack(bad_current_final_task),
     "bad_current_final_dependency": pack(bad_current_final_dependency),
+    "bad_hardware_hash_task": pack(bad_hardware_hash_task),
+    "bad_hardware_finalize_guard": pack(bad_hardware_finalize_guard),
+    "bad_hardware_finalize_release_gate": pack(bad_hardware_finalize_release_gate),
+    "bad_hardware_finalize_current_gate": pack(bad_hardware_finalize_current_gate),
 }))
 "#,
     );
@@ -11311,6 +11449,75 @@ print(json.dumps({
             .as_str()
             .unwrap()
             .contains("tasks.migration-status-final-current.dependencies expected ['clean-current-git-ref', 'firmware-artifact-manifest-current', 'rmk-zmk-scenario-tests', 'host-parity-tests', 'rmk-behavior-tests']")
+    );
+
+    let bad_hardware_hash_task = parsed["bad_hardware_hash_task"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| {
+            result["id"] == "makefile_hardware_evidence_hash_helper_generates_hash_overlay"
+        })
+        .expect("changed hardware evidence hash task result is missing");
+    assert_eq!(bad_hardware_hash_task["kind"], "build_task");
+    assert_eq!(bad_hardware_hash_task["ok"], false);
+    assert!(
+        bad_hardware_hash_task["message"]
+            .as_str()
+            .unwrap()
+            .contains("--evidence-with-artifact-hashes")
+    );
+
+    let bad_hardware_finalize_guard = parsed["bad_hardware_finalize_guard"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| {
+            result["id"] == "makefile_hardware_evidence_finalize_runs_hash_then_final_gate"
+        })
+        .expect("changed hardware evidence finalize guard result is missing");
+    assert_eq!(bad_hardware_finalize_guard["kind"], "build_task");
+    assert_eq!(bad_hardware_finalize_guard["ok"], false);
+    assert!(
+        bad_hardware_finalize_guard["message"]
+            .as_str()
+            .unwrap()
+            .contains("HASHED_HARDWARE_EVIDENCE must not overwrite HARDWARE_EVIDENCE")
+    );
+
+    let bad_hardware_finalize_release_gate = parsed["bad_hardware_finalize_release_gate"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| {
+            result["id"] == "makefile_hardware_evidence_finalize_runs_hash_then_final_gate"
+        })
+        .expect("changed hardware evidence finalize release gate result is missing");
+    assert_eq!(bad_hardware_finalize_release_gate["kind"], "build_task");
+    assert_eq!(bad_hardware_finalize_release_gate["ok"], false);
+    assert!(
+        bad_hardware_finalize_release_gate["message"]
+            .as_str()
+            .unwrap()
+            .contains("cargo make migration-status-final")
+    );
+
+    let bad_hardware_finalize_current_gate = parsed["bad_hardware_finalize_current_gate"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| {
+            result["id"]
+                == "makefile_current_hardware_evidence_finalize_runs_hash_then_current_final_gate"
+        })
+        .expect("changed current hardware evidence finalize gate result is missing");
+    assert_eq!(bad_hardware_finalize_current_gate["kind"], "build_task");
+    assert_eq!(bad_hardware_finalize_current_gate["ok"], false);
+    assert!(
+        bad_hardware_finalize_current_gate["message"]
+            .as_str()
+            .unwrap()
+            .contains("cargo make migration-status-final-current")
     );
 }
 
