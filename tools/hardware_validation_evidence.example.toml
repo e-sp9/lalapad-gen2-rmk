@@ -12,11 +12,11 @@
 # each check. Keep the generated pair_sha256 prefix when present, then replace
 # the path/reading placeholder with real bench evidence and leave every
 # required observation term in the completed note. For final validation, also
-# fill artifact_paths with non-empty real evidence files under the chosen
-# EVIDENCE_ARTIFACT_ROOT, such as captured videos, logs, photos, screenshots, or
-# scope traces, and fill artifact_path_sha256 with the SHA256 for every retained
-# artifact_paths entry. After filling artifact_paths, you can generate those
-# hashes with:
+# fill artifact_paths with non-empty real evidence files under
+# EVIDENCE_ARTIFACT_ROOT/hardware-evidence/, such as captured videos, logs,
+# photos, screenshots, or scope traces, and fill artifact_path_sha256 with the
+# SHA256 for every retained artifact_paths entry. After filling artifact_paths,
+# you can generate those hashes with:
 #
 #   python3 tools/hardware_validation.py --evidence path/to/evidence.toml --evidence-artifact-root . --evidence-with-artifact-hashes
 #
@@ -46,6 +46,6 @@
 # validated_at = "2026-05-29"
 # tester = "hardware bench"
 # firmware_ref = "v0.2.65"
-# artifact_paths = []
+# artifact_paths = ["hardware-evidence/iqs9151-right-i2c-identity-log.log"]
 # artifact_path_sha256 = {}
-# artifact_or_notes = "log: /tmp/right-i2c.log; right P0_04 SDA and P0_05 SCL showed I2C activity from scan, address 0x56 ACKed, and product-number register 0x1000 read 0x09bc."
+# artifact_or_notes = "log: hardware-evidence/iqs9151-right-i2c-identity-log.log; right P0_04 SDA and P0_05 SCL showed I2C activity from scan, address 0x56 ACKed, and product-number register 0x1000 read 0x09bc."

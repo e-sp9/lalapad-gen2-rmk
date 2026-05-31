@@ -9,6 +9,7 @@ hardware-validation-checklist*.md
 migration-status*.md
 firmware-artifacts*.json
 firmware-artifacts*.md
+hardware-evidence/
 
 *.bin
 *.elf

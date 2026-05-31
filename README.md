@@ -393,7 +393,8 @@ report commands render these problems in the
 error list; use `--require-hardware-classified` or the final cargo-make gates
 when the command must fail on stale or incomplete artifact evidence.
 For final validation, each validated evidence entry must also list at least one
-non-empty real file in `artifact_paths`; relative paths are resolved under
+non-empty real file in `artifact_paths`. These retained evidence paths must be
+relative paths under `hardware-evidence/`, resolved from
 `EVIDENCE_ARTIFACT_ROOT` when that environment variable is set, or the current
 directory otherwise. Use those files for the captured videos, photos, logs, or
 scope traces referenced by `artifact_or_notes`; the path types must also match

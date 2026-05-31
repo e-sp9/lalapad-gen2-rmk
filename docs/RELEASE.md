@@ -84,8 +84,9 @@ validated note must also mention the per-check evidence artifact types listed by
 `evidence_artifacts`, such as `video`, `scope`, `Vial screenshot`, or
 `key-event log`, and each validated entry must list at least one existing
 non-empty file in `artifact_paths` with a matching `artifact_path_sha256` entry.
-Relative evidence artifact paths are resolved under `EVIDENCE_ARTIFACT_ROOT`
-when set, or from the current directory otherwise.
+Retained evidence paths must be relative paths under `hardware-evidence/`, and
+are resolved under `EVIDENCE_ARTIFACT_ROOT` when set, or from the current
+directory otherwise.
 The retained file types must match the required artifact types; a video-only
 check cannot pass final validation with only a text log attached. Every
 retained file must also be named by path or basename in `artifact_or_notes`,
@@ -95,9 +96,9 @@ Media and trace file suffixes are checked against lightweight signatures, so
 renaming text to `.mp4`, `.png`, `.jpg`, `.webp`, `.pcap`, or `.pcapng` is not
 accepted as retained evidence.
 Use the generated `hardware-evidence/<check-id>-<artifact-type>.<ext>` path
-suggestions in the evidence template/checklist unless the bench uses an
-equivalent retained path that is also named in `artifact_or_notes`; the
-generated suggestions assume the default `EVIDENCE_ARTIFACT_ROOT=.`. The
+suggestions in the evidence template/checklist, or another relative path under
+`hardware-evidence/` that is also named in `artifact_or_notes`; the generated
+suggestions assume the default `EVIDENCE_ARTIFACT_ROOT=.`. The
 generated observation placeholder must be replaced with real bench output
 before an evidence entry can count as validated.
 Simulated, synthetic, mock, or host-only output is not valid hardware evidence.

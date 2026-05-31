@@ -445,7 +445,8 @@ It also rejects hardware evidence overlays missing the generated
 current hardware validation manifest, so stale overlays cannot silently claim a
 smaller or different hardware-check inventory.
 It also requires each validated hardware evidence entry to include at least one
-existing non-empty `artifact_paths` file. Relative paths are resolved from
+existing non-empty `artifact_paths` file. Retained evidence paths must be
+relative paths under `hardware-evidence/`, resolved from
 `EVIDENCE_ARTIFACT_ROOT` when set, otherwise from the current directory, so the
 pass condition is tied to actual captured videos, logs, photos, screenshots, or
 scope traces rather than text notes alone. The file type must also match the

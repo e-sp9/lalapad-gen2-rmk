@@ -139,6 +139,7 @@ ARTIFACT_PATH_TEMPLATE_EXTENSIONS = {
     "vial screenshot": "png",
     "video": "mp4",
 }
+RETAINED_EVIDENCE_DIR = "hardware-evidence"
 
 
 def artifact_file_signature_error(
@@ -189,6 +190,44 @@ def artifact_file_signature_error(
         return (
             f"{check_id}: artifact_paths[{index}] {suffix} file has invalid "
             f"{label} signature: {artifact_path}"
+        )
+    return None
+
+
+def artifact_path_retention_error(
+    check_id: str,
+    index: int,
+    artifact_path: str,
+    raw_path: Path,
+) -> str | None:
+    if raw_path.is_absolute():
+        return (
+            f"{check_id}: artifact_paths[{index}] must be a relative path under "
+            f"{RETAINED_EVIDENCE_DIR}/"
+        )
+    path_parts = raw_path.parts
+    if not path_parts or path_parts[0] != RETAINED_EVIDENCE_DIR:
+        return (
+            f"{check_id}: artifact_paths[{index}] must be under "
+            f"{RETAINED_EVIDENCE_DIR}/"
+        )
+    if ".." in path_parts:
+        return f"{check_id}: artifact_paths[{index}] must not contain '..'"
+    return None
+
+
+def resolved_artifact_path_retention_error(
+    check_id: str,
+    index: int,
+    resolved_path: Path,
+    retained_root: Path,
+) -> str | None:
+    try:
+        resolved_path.relative_to(retained_root)
+    except ValueError:
+        return (
+            f"{check_id}: artifact_paths[{index}] must resolve inside "
+            f"{RETAINED_EVIDENCE_DIR}/"
         )
     return None
 
@@ -519,6 +558,7 @@ def validate_evidence_artifact_paths(
                 )
 
     root = artifact_root.resolve()
+    retained_root = (root / RETAINED_EVIDENCE_DIR).resolve()
     resolved_paths: list[tuple[str, Path]] = []
     seen_resolved_paths: dict[Path, int] = {}
     artifact_or_notes = str(check.get("artifact_or_notes", "")).strip()
@@ -530,6 +570,15 @@ def validate_evidence_artifact_paths(
             errors.append(f"{check_id}: artifact_paths[{index}] must not be a placeholder")
             continue
         raw_path = Path(artifact_path)
+        retention_error = artifact_path_retention_error(
+            check_id,
+            index,
+            artifact_path,
+            raw_path,
+        )
+        if retention_error is not None:
+            errors.append(retention_error)
+            continue
         resolved_path = (raw_path if raw_path.is_absolute() else root / raw_path).resolve()
         try:
             resolved_path.relative_to(root)
@@ -537,6 +586,15 @@ def validate_evidence_artifact_paths(
             errors.append(
                 f"{check_id}: artifact_paths[{index}] must stay inside {artifact_root}"
             )
+            continue
+        retention_error = resolved_artifact_path_retention_error(
+            check_id,
+            index,
+            resolved_path,
+            retained_root,
+        )
+        if retention_error is not None:
+            errors.append(retention_error)
             continue
         if not resolved_path.is_file():
             errors.append(
@@ -1078,6 +1136,7 @@ def hash_evidence_artifact_paths(
         return hashes, [f"{check_id}: artifact_paths must be a string array"]
 
     root = artifact_root.resolve()
+    retained_root = (root / RETAINED_EVIDENCE_DIR).resolve()
     for index, artifact_path in enumerate(artifact_paths):
         if not isinstance(artifact_path, str) or not artifact_path.strip():
             errors.append(f"{check_id}: artifact_paths[{index}] must be a non-empty path string")
@@ -1086,6 +1145,15 @@ def hash_evidence_artifact_paths(
             errors.append(f"{check_id}: artifact_paths[{index}] must not be a placeholder")
             continue
         raw_path = Path(artifact_path)
+        retention_error = artifact_path_retention_error(
+            check_id,
+            index,
+            artifact_path,
+            raw_path,
+        )
+        if retention_error is not None:
+            errors.append(retention_error)
+            continue
         resolved_path = (raw_path if raw_path.is_absolute() else root / raw_path).resolve()
         try:
             resolved_path.relative_to(root)
@@ -1093,6 +1161,15 @@ def hash_evidence_artifact_paths(
             errors.append(
                 f"{check_id}: artifact_paths[{index}] must stay inside {artifact_root}"
             )
+            continue
+        retention_error = resolved_artifact_path_retention_error(
+            check_id,
+            index,
+            resolved_path,
+            retained_root,
+        )
+        if retention_error is not None:
+            errors.append(retention_error)
             continue
         if not resolved_path.is_file():
             errors.append(
@@ -1378,6 +1455,7 @@ def as_evidence_template(
         "# The metadata hash binds this evidence file to the current hardware validation manifest.",
         "# Change status to \"validated\" only when validated_at, tester, firmware_ref, and artifact_or_notes are filled.",
         "# Final validation also requires artifact_paths to list non-empty real evidence files under the evidence artifact root.",
+        "# Retained artifact_paths must be relative paths under hardware-evidence/.",
         "# Each artifact_paths entry must be named in artifact_or_notes and match a required evidence artifact type.",
         "# Final validation also requires artifact_path_sha256 to bind each artifact_paths entry to its retained file hash.",
         "# If artifact_or_notes is prefilled with firmware artifact pair_sha256, keep it and append the observed evidence after it.",

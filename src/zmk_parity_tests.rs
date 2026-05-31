@@ -3824,6 +3824,152 @@ artifact_or_notes = "log: /tmp/right-i2c.log; right P0_04 SDA and P0_05 SCL show
         "mismatched artifact_path_sha256 should explain the file hash mismatch"
     );
 
+    let unretained_artifact = artifact_root.join("right-i2c.log");
+    std::fs::write(
+        &unretained_artifact,
+        "right i2c hardware log outside retention dir\n",
+    )
+    .unwrap();
+    let unretained_evidence = evidence.replace("hardware-evidence/right-i2c.log", "right-i2c.log");
+    let unretained_path = write_temp_file(
+        "hardware-validation-evidence-paths-unretained",
+        &unretained_evidence,
+    );
+    let unretained_json = run_hardware_validation(&[
+        "--evidence",
+        unretained_path.to_str().unwrap(),
+        "--evidence-artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--json",
+    ]);
+    assert!(
+        unretained_json.status.success(),
+        "plain hardware validation report should not hard-fail for unretained artifact paths without require flags\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&unretained_json.stdout),
+        String::from_utf8_lossy(&unretained_json.stderr)
+    );
+    let unretained_parsed: serde_json::Value =
+        serde_json::from_slice(&unretained_json.stdout).unwrap();
+    assert_eq!(unretained_parsed["validated"].as_i64(), Some(0));
+    assert!(
+        unretained_parsed["errors"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|error| error
+                .as_str()
+                .unwrap()
+                .contains("artifact_paths[0] must be under hardware-evidence/")),
+        "validated hardware evidence should be rejected unless retained under hardware-evidence/"
+    );
+    let unretained_hash_overlay = run_hardware_validation(&[
+        "--evidence",
+        unretained_path.to_str().unwrap(),
+        "--evidence-artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--evidence-with-artifact-hashes",
+    ]);
+    assert!(
+        !unretained_hash_overlay.status.success(),
+        "hardware validation hash helper unexpectedly accepted artifact paths outside hardware-evidence/\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&unretained_hash_overlay.stdout),
+        String::from_utf8_lossy(&unretained_hash_overlay.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&unretained_hash_overlay.stderr)
+            .contains("artifact_paths[0] must be under hardware-evidence/"),
+        "hash helper should explain the retained evidence directory requirement"
+    );
+
+    let escaped_retention_evidence = evidence.replace(
+        "hardware-evidence/right-i2c.log",
+        "hardware-evidence/../right-i2c.log",
+    );
+    let escaped_retention_path = write_temp_file(
+        "hardware-validation-evidence-paths-escaped-retention",
+        &escaped_retention_evidence,
+    );
+    let escaped_retention_json = run_hardware_validation(&[
+        "--evidence",
+        escaped_retention_path.to_str().unwrap(),
+        "--evidence-artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--json",
+    ]);
+    assert!(
+        escaped_retention_json.status.success(),
+        "plain hardware validation report should not hard-fail for escaped retained artifact paths without require flags\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&escaped_retention_json.stdout),
+        String::from_utf8_lossy(&escaped_retention_json.stderr)
+    );
+    let escaped_retention_parsed: serde_json::Value =
+        serde_json::from_slice(&escaped_retention_json.stdout).unwrap();
+    assert_eq!(escaped_retention_parsed["validated"].as_i64(), Some(0));
+    assert!(
+        escaped_retention_parsed["errors"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|error| error
+                .as_str()
+                .unwrap()
+                .contains("artifact_paths[0] must not contain '..'")),
+        "validated hardware evidence should be rejected when artifact_paths escape hardware-evidence/"
+    );
+    let escaped_retention_hash_overlay = run_hardware_validation(&[
+        "--evidence",
+        escaped_retention_path.to_str().unwrap(),
+        "--evidence-artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--evidence-with-artifact-hashes",
+    ]);
+    assert!(
+        !escaped_retention_hash_overlay.status.success(),
+        "hardware validation hash helper unexpectedly accepted artifact paths escaping hardware-evidence/\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&escaped_retention_hash_overlay.stdout),
+        String::from_utf8_lossy(&escaped_retention_hash_overlay.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&escaped_retention_hash_overlay.stderr)
+            .contains("artifact_paths[0] must not contain '..'"),
+        "hash helper should reject retained evidence paths containing '..'"
+    );
+
+    let absolute_evidence = evidence.replace(
+        "hardware-evidence/right-i2c.log",
+        artifact_path.to_str().unwrap(),
+    );
+    let absolute_path = write_temp_file(
+        "hardware-validation-evidence-paths-absolute",
+        &absolute_evidence,
+    );
+    let absolute_json = run_hardware_validation(&[
+        "--evidence",
+        absolute_path.to_str().unwrap(),
+        "--evidence-artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--json",
+    ]);
+    assert!(
+        absolute_json.status.success(),
+        "plain hardware validation report should not hard-fail for absolute artifact paths without require flags\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&absolute_json.stdout),
+        String::from_utf8_lossy(&absolute_json.stderr)
+    );
+    let absolute_parsed: serde_json::Value = serde_json::from_slice(&absolute_json.stdout).unwrap();
+    assert_eq!(absolute_parsed["validated"].as_i64(), Some(0));
+    assert!(
+        absolute_parsed["errors"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|error| error
+                .as_str()
+                .unwrap()
+                .contains("artifact_paths[0] must be a relative path under hardware-evidence/")),
+        "validated hardware evidence should be rejected when artifact_paths are absolute"
+    );
+
     let copy_aid_artifact =
         artifact_root.join("hardware-evidence/iqs9151-right-i2c-identity-log.log");
     std::fs::write(&copy_aid_artifact, "dummy right i2c hardware log\n").unwrap();
@@ -4320,6 +4466,9 @@ artifact_or_notes = "photo and multimeter: hardware-evidence/charge.jpg; right P
     let _ = std::fs::remove_file(&date_literal_path);
     let _ = std::fs::remove_file(&hashed_path);
     let _ = std::fs::remove_file(&mismatched_hash_path);
+    let _ = std::fs::remove_file(&unretained_path);
+    let _ = std::fs::remove_file(&escaped_retention_path);
+    let _ = std::fs::remove_file(&absolute_path);
     let _ = std::fs::remove_file(&verbatim_copy_aid_path);
     let _ = std::fs::remove_file(&missing_path);
     let _ = std::fs::remove_file(&empty_path);
@@ -4350,9 +4499,24 @@ fn hardware_validation_evidence_example_contains_valid_copyable_entry() {
         "hardware validation evidence example should include a commented evidence entry"
     );
 
+    let artifact_root = std::env::temp_dir().join(format!(
+        "lalapad-hardware-evidence-example-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&artifact_root);
+    let artifact_path = artifact_root.join("hardware-evidence/iqs9151-right-i2c-identity-log.log");
+    std::fs::create_dir_all(artifact_path.parent().unwrap()).unwrap();
+    std::fs::write(&artifact_path, "right i2c hardware log\n").unwrap();
     let path = write_temp_file("hardware-validation-evidence-example", &example_entry);
-    let output = run_hardware_validation(&["--evidence", path.to_str().unwrap(), "--json"]);
+    let output = run_hardware_validation(&[
+        "--evidence",
+        path.to_str().unwrap(),
+        "--evidence-artifact-root",
+        artifact_root.to_str().unwrap(),
+        "--json",
+    ]);
     let _ = std::fs::remove_file(&path);
+    let _ = std::fs::remove_dir_all(&artifact_root);
 
     assert!(
         output.status.success(),
@@ -4963,6 +5127,11 @@ fn hardware_validation_can_generate_complete_evidence_template() {
             "# Final validation also requires artifact_paths to list non-empty real evidence files"
         ),
         "evidence template should explain that retained artifact_paths files must be non-empty"
+    );
+    assert!(
+        stdout
+            .contains("# Retained artifact_paths must be relative paths under hardware-evidence/"),
+        "evidence template should explain that retained artifact_paths stay under hardware-evidence/"
     );
     assert!(
         stdout.contains(
@@ -6673,6 +6842,7 @@ fn local_validation_entrypoints_match_ci_gates() {
             && include_str!("../.gitignore").contains("migration-status*.md")
             && include_str!("../.gitignore").contains("firmware-artifacts*.json")
             && include_str!("../.gitignore").contains("firmware-artifacts*.md")
+            && include_str!("../.gitignore").contains("hardware-evidence/")
             && include_str!("../.gitignore").contains("__pycache__/")
             && include_str!("../.gitignore").contains("*.py[cod]"),
         "local generated hardware evidence overlays, checklists, and firmware artifact manifests should be ignored by default"
@@ -6779,6 +6949,7 @@ fn local_validation_entrypoints_match_ci_gates() {
             && README_MD.contains("EVIDENCE_ARTIFACT_ROOT")
             && README_MD.contains("artifact_paths")
             && README_MD.contains("artifact_path_sha256")
+            && README_MD.contains("relative paths under `hardware-evidence/`")
             && README_MD.contains("--evidence-with-artifact-hashes")
             && README_MD.contains("non-empty real file in `artifact_paths`")
             && README_MD.contains("`--require-validated` also requires the")
@@ -6803,6 +6974,7 @@ fn local_validation_entrypoints_match_ci_gates() {
             && PORTING_MD.contains("EVIDENCE_ARTIFACT_ROOT")
             && PORTING_MD.contains("artifact_paths")
             && PORTING_MD.contains("artifact_path_sha256")
+            && PORTING_MD.contains("relative paths under `hardware-evidence/`")
             && PORTING_MD.contains("--evidence-with-artifact-hashes")
             && PORTING_MD.contains("existing non-empty `artifact_paths` file")
             && PORTING_MD.contains("`--require-validated` also requires the")
@@ -6859,8 +7031,9 @@ fn local_validation_entrypoints_match_ci_gates() {
         "hardware evidence example should steer final validation toward generated inventory metadata"
     );
     assert!(
-        HARDWARE_VALIDATION_EVIDENCE_EXAMPLE_TOML
-            .contains("non-empty real evidence files under the chosen"),
+        HARDWARE_VALIDATION_EVIDENCE_EXAMPLE_TOML.contains("non-empty real evidence files under")
+            && HARDWARE_VALIDATION_EVIDENCE_EXAMPLE_TOML
+                .contains("EVIDENCE_ARTIFACT_ROOT/hardware-evidence/"),
         "hardware evidence example should document that retained artifact_paths files must be non-empty"
     );
     assert!(
@@ -6881,6 +7054,7 @@ fn local_validation_entrypoints_match_ci_gates() {
             && RELEASE_MD.contains("EVIDENCE_ARTIFACT_ROOT")
             && RELEASE_MD.contains("artifact_paths")
             && RELEASE_MD.contains("artifact_path_sha256")
+            && RELEASE_MD.contains("relative paths under `hardware-evidence/`")
             && RELEASE_MD.contains("cargo make hardware-validation-finalize-evidence")
             && RELEASE_MD.contains("metadata.hardware_check_inventory_sha256")
             && RELEASE_MD.contains("non-empty file in `artifact_paths`")
