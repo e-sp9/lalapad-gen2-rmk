@@ -16,7 +16,7 @@ keymap = [
     [
         ["Q",              "W",     "E",     "R",        "T",     "No",     "No",        "Y",     "U",        "I",         "O",         "P"],
         ["A",              "S",     "D",     "F",        "G",     "No",     "No",        "H",     "J",        "K",         "L",         "TH(Minus, Equal)"],
-        ["MT(Z, LShift)",  "X",     "C",     "V",        "B",     "No",     "No",        "N",     "M",        "Comma",     "Dot",       "Slash"],
+        ["Z",              "X",     "C",     "V",        "B",     "No",     "No",        "N",     "M",        "Comma",     "Dot",       "Slash"],
         ["LCtrl",          "LGui",  "LAlt",  "LCtrl",    "LT(1, Space, FAST_LAYER)", "LShift", "Backspace", "LT(2, Enter, FAST_LAYER)", "MO(2)", "Language2", "Language1", "Backslash"],
         ["No",             "No",    "Right", "Down",     "Left",  "Up",     "Up",        "Left",  "Down",     "Right",     "No",        "No"],
         ["MouseBtn1",      "MouseBtn2", "MouseBtn3", "No", "No", "No", "No", "No", "No", "MouseBtn1", "MouseBtn2", "MouseBtn3"],

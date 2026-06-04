@@ -681,6 +681,15 @@ col = 11
 action = "LCtrl"
 
 [[source_deltas]]
+id = "delta_base_z_mod_tap_to_plain_z"
+layer = 0
+row = 2
+col = 0
+source_expected = "MT(Z, LShift)"
+target_expected = "Z"
+reason = "RMK target uses plain Z to keep Japanese IME za/zi/zu/ze/zo input independent of tap-hold timing and Vial's global Morse hold settings."
+
+[[source_deltas]]
 id = "delta_base_mo1_to_left_ctrl"
 layer = 0
 row = 3
@@ -866,7 +875,7 @@ id = "layer0_row2"
 layer = 0
 row = 2
 source = "ZMK DEFAULT_LAYER row 2"
-expected = ["MT(Z, LShift)", "X", "C", "V", "B", "No", "No", "N", "M", "Comma", "Dot", "Slash"]
+expected = ["Z", "X", "C", "V", "B", "No", "No", "N", "M", "Comma", "Dot", "Slash"]
 
 [[keymap_rows]]
 id = "layer0_row3"

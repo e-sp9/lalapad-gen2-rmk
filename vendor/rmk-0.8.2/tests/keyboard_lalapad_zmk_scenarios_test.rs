@@ -10,7 +10,7 @@ use rmk::keyboard::Keyboard;
 use rmk::types::action::{Action, KeyAction};
 use rmk::types::keycode::KeyCode;
 use rmk::types::modifier::ModifierCombination;
-use rmk::{a, k, layer, mo, mt, shifted, th, wm};
+use rmk::{a, k, layer, mo, shifted, th, wm};
 use rmk_types::action::{MorseMode, MorseProfile};
 use rusty_fork::rusty_fork_test;
 
@@ -35,7 +35,7 @@ fn lalapad_keymap() -> [[[KeyAction; 12]; 7]; 4] {
         layer!([
             [k!(Q), k!(W), k!(E), k!(R), k!(T), a!(No), a!(No), k!(Y), k!(U), k!(I), k!(O), k!(P)],
             [k!(A), k!(S), k!(D), k!(F), k!(G), a!(No), a!(No), k!(H), k!(J), k!(K), k!(L), th!(Minus, Equal)],
-            [mt!(Z, ModifierCombination::LSHIFT), k!(X), k!(C), k!(V), k!(B), a!(No), a!(No), k!(N), k!(M), k!(Comma), k!(Dot), k!(Slash)],
+            [k!(Z), k!(X), k!(C), k!(V), k!(B), a!(No), a!(No), k!(N), k!(M), k!(Comma), k!(Dot), k!(Slash)],
             [k!(LCtrl), k!(LGui), k!(LAlt), k!(LCtrl), lt(1, KeyCode::Space), k!(LShift), k!(Backspace), lt(2, KeyCode::Enter), mo!(2), k!(Language2), k!(Language1), k!(Backslash)],
             [a!(No), a!(No), k!(Right), k!(Down), k!(Left), k!(Up), k!(Up), k!(Left), k!(Down), k!(Right), a!(No), a!(No)],
             [k!(MouseBtn1), k!(MouseBtn2), k!(MouseBtn3), a!(No), a!(No), a!(No), a!(No), a!(No), a!(No), k!(MouseBtn1), k!(MouseBtn2), k!(MouseBtn3)],

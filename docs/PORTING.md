@@ -149,6 +149,11 @@ The base keymap is translated from `config/lalapadgen2.keymap`, but some ZMK-spe
 - ZMK conditional layer `1 + 2 => 3` is mapped to RMK tri-layer. RMK layers
   `0..3` now mirror the upstream Default, Secondary, Tertiary, and System
   layers.
+- The upstream left pinky `Z` home-row-mod style binding is intentionally
+  flattened to a plain `Z`. Keeping it as `MT(Z, LShift)` made Japanese IME
+  `za`/`zi`/`zu`/`ze`/`zo` input sensitive to tap-hold timing and Vial's global
+  Morse hold settings, so this port favors reliable romaji input over that
+  modifier shortcut.
 - ZMK Bluetooth controls are mapped to RMK user keys for four BLE profiles:
   `User0..User3` select profiles, `User4`/`User5` move next/previous, `User6`
   clears the current profile, `User7` toggles output, and the local RMK patch
